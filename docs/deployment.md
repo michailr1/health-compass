@@ -30,9 +30,12 @@ HOME=/root gh repo clone michailr1/health-compass /tmp/health-compass-repo
 
 ```bash
 cd /tmp/health-compass-repo
-npm install
+npm ci
 npm run build
 ```
+
+> **Важно:** Для production-сборки используется `npm ci`, а не `npm install`.
+> `npm ci` гарантирует точное воспроизведение зависимостей из `package-lock.json`.
 
 ### 4. Скопировать на VPS
 
@@ -85,7 +88,16 @@ Alias /health /opt/health-compass/current
 
 ## Требования к окружению
 
-- Node.js ≥ 18 (на машине сборки)
-- npm ≥ 9
+- Node.js ≥ 20 (на машине сборки)
+- npm ≥ 10
 - Apache 2.4 (на VPS)
 - Ubuntu 20.04 (focal)
+
+## Политика управления зависимостями
+
+- **npm** является основным package manager для production deployment.
+- **`package-lock.json`** является authoritative lockfile для сборки.
+- **`bun.lock`** пока сохранён для совместимости с Lovable (генератор исходного кода).
+- Не следует обновлять оба lockfile независимо — это приведёт к расхождению зависимостей.
+- При изменении зависимостей `package-lock.json` должен обновляться через `npm install <package>`.
+- Для воспроизводимой сборки всегда используйте `npm ci` (не `npm install`).
