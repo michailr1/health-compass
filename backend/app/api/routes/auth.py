@@ -22,8 +22,10 @@ STATE_COOKIE = "hc_oidc_state"
 NONCE_COOKIE = "hc_oidc_nonce"
 
 
-def _redirect_uri(request: Request) -> str:
-    return str(request.url_for("auth_callback"))
+def _redirect_uri() -> str:
+    if not settings.oidc_redirect_uri:
+        raise RuntimeError("OIDC_REDIRECT_URI is not configured")
+    return settings.oidc_redirect_uri
 
 
 def _set_short_cookie(response: RedirectResponse, name: str, value: str) -> None:
@@ -39,18 +41,18 @@ def _set_short_cookie(response: RedirectResponse, name: str, value: str) -> None
 
 
 @router.get("/login")
-async def login(request: Request) -> RedirectResponse:
+async def login() -> RedirectResponse:
     discovery = await get_discovery()
     state = secrets.token_urlsafe(32)
     nonce = secrets.token_urlsafe(32)
-    location = build_authorization_url(discovery, _redirect_uri(request), state, nonce)
+    location = build_authorization_url(discovery, _redirect_uri(), state, nonce)
     response = RedirectResponse(location)
     _set_short_cookie(response, STATE_COOKIE, state)
     _set_short_cookie(response, NONCE_COOKIE, nonce)
     return response
 
 
-@router.get("/callback", name="auth_callback")
+@router.get("/callback")
 async def callback(
     request: Request,
     code: str = Query(...),
@@ -63,7 +65,7 @@ async def callback(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OIDC state")
 
     discovery = await get_discovery()
-    token_response = await exchange_code(discovery, code, _redirect_uri(request))
+    token_response = await exchange_code(discovery, code, _redirect_uri())
     id_token = token_response.get("id_token")
     if not id_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC id_token missing")
