@@ -20,6 +20,7 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan — startup and shutdown."""
     configure_logging()
+    settings.validate_production()
     logger.info(
         "Starting %s v%s (%s)",
         settings.service_name,
