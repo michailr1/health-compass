@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 from functools import lru_cache
 from urllib.parse import urlencode
 
@@ -25,7 +27,18 @@ async def get_discovery() -> dict:
         return response.json()
 
 
-def build_authorization_url(discovery: dict, redirect_uri: str, state: str, nonce: str) -> str:
+def code_challenge(verifier: str) -> str:
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
+def build_authorization_url(
+    discovery: dict,
+    redirect_uri: str,
+    state: str,
+    nonce: str,
+    code_verifier: str,
+) -> str:
     query = urlencode(
         {
             "client_id": settings.oidc_client_id,
@@ -34,12 +47,14 @@ def build_authorization_url(discovery: dict, redirect_uri: str, state: str, nonc
             "scope": "openid email profile",
             "state": state,
             "nonce": nonce,
+            "code_challenge": code_challenge(code_verifier),
+            "code_challenge_method": "S256",
         }
     )
     return f"{discovery['authorization_endpoint']}?{query}"
 
 
-async def exchange_code(discovery: dict, code: str, redirect_uri: str) -> dict:
+async def exchange_code(discovery: dict, code: str, redirect_uri: str, code_verifier: str) -> dict:
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.post(
             discovery["token_endpoint"],
@@ -49,6 +64,7 @@ async def exchange_code(discovery: dict, code: str, redirect_uri: str) -> dict:
                 "redirect_uri": redirect_uri,
                 "client_id": settings.oidc_client_id,
                 "client_secret": settings.oidc_client_secret,
+                "code_verifier": code_verifier,
             },
             headers={"Accept": "application/json"},
         )
