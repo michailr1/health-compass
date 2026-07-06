@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     oidc_client_id: str | None = None
     oidc_audience: str | None = None
 
+    # Temporary integration-test auth. Must stay disabled in production.
+    allow_dev_auth: bool = False
+
     # CORS — only if needed
     cors_origins: list[str] = ["https://funti.cc"]
 
@@ -58,6 +61,8 @@ class Settings(BaseSettings):
         """Raise on dangerous production misconfiguration."""
         if not self.is_production:
             return
+        if self.allow_dev_auth:
+            raise ValueError("ALLOW_DEV_AUTH must be false in production")
         if not self.database_url:
             raise ValueError("DATABASE_URL is required in production")
         if "changeme" in self.database_url.lower():
