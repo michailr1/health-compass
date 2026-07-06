@@ -16,6 +16,7 @@ from app.core.session_tokens import hash_token, new_session_token
 from app.db.rls import apply_user_context
 from app.db.session import get_session
 from app.models.user import AuthSession, User, UserIdentity
+from app.services.bootstrap import ensure_personal_workspace
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 STATE_COOKIE = "hc_oidc_state"
@@ -105,6 +106,8 @@ async def callback(
         user.display_name = claims.get("name") or user.display_name
         identity.claims = claims
         identity.last_seen_at = datetime.datetime.now(datetime.UTC)
+
+    await ensure_personal_workspace(session, user)
 
     token = new_session_token()
     session.add(
