@@ -33,10 +33,17 @@ class Settings(BaseSettings):
     # Build commit — injected at deploy time, avoids subprocess per request
     build_commit: str = ""
 
-    # Future OIDC (not yet active)
+    # OIDC
     oidc_issuer: str | None = None
     oidc_client_id: str | None = None
+    oidc_client_secret: str | None = None
     oidc_audience: str | None = None
+    oidc_redirect_path: str = "/auth/callback"
+
+    # Server-side session cookie
+    session_cookie_name: str = "hc_session"
+    session_ttl_seconds: int = 60 * 60 * 12
+    frontend_url: str = "https://funti.cc/health/"
 
     # Temporary integration-test auth. Must stay disabled in production.
     allow_dev_auth: bool = False
@@ -71,6 +78,8 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_MIGRATOR_URL is required in production")
         if "changeme" in self.database_migrator_url.lower():
             raise ValueError("DATABASE_MIGRATOR_URL contains placeholder 'changeme'")
+        if not self.oidc_issuer or not self.oidc_client_id or not self.oidc_client_secret:
+            raise ValueError("OIDC settings are required in production")
 
 
 settings = Settings()
