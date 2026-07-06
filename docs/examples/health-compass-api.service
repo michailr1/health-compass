@@ -1,0 +1,45 @@
+[Unit]
+Description=Health Compass API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=health-compass
+Group=health-compass
+WorkingDirectory=/opt/health-compass/repo/backend
+
+# Environment
+EnvironmentFile=/etc/health-compass/backend.env
+
+# ExecStart with explicit Python path
+ExecStart=/opt/health-compass/repo/backend/.venv/bin/uvicorn app.main:app \
+  --host 127.0.0.1 \
+  --port 8100 \
+  --root-path /health/api \
+  --log-level info
+
+# Restart
+Restart=on-failure
+RestartSec=5
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/health-compass/repo/backend
+
+# File descriptors
+LimitNOFILE=65536
+
+# Capabilities
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Network
+PrivateNetwork=false
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
