@@ -1,6 +1,8 @@
-import { dashboardSummary, priorities } from "@/data/demo";
-import { Activity, Bed, CalendarClock, Dna, Gauge, AlertTriangle, ArrowRight, Info } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Activity, Bed, CalendarClock, Dna, Gauge, AlertTriangle, ArrowRight, Info, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
+
+import { apiGet, type DashboardSnapshot, type HealthProfile } from "@/lib/api";
 
 const fmt = new Intl.NumberFormat("ru-RU");
 
@@ -29,21 +31,57 @@ const priorityIcon: Record<string, React.ComponentType<{ className?: string }>> 
   high: AlertTriangle, medium: AlertTriangle, info: Info,
 };
 
+async function loadDashboard() {
+  const profiles = await apiGet<HealthProfile[]>("/profiles");
+  const profile = profiles[0];
+  if (!profile) return { profile: null, dashboard: null };
+  const dashboard = await apiGet<DashboardSnapshot>(`/profiles/${profile.id}/dashboard`);
+  return { profile, dashboard };
+}
+
 export default function Dashboard() {
-  const s = dashboardSummary;
+  const { data, isLoading, error } = useQuery({ queryKey: ["dashboard"], queryFn: loadDashboard });
+
+  if (isLoading) {
+    return (
+      <div className="hm-card grid min-h-64 place-items-center p-8 text-sm text-muted-foreground">
+        <div className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Загружаю данные…</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="hm-card border-destructive/40 bg-destructive/10 p-6 text-sm text-destructive">
+        Не удалось загрузить дашборд: {error instanceof Error ? error.message : "неизвестная ошибка"}
+      </div>
+    );
+  }
+
+  if (!data?.profile || !data.dashboard) {
+    return (
+      <div className="hm-card p-6">
+        <h1 className="font-display text-2xl font-semibold tracking-tight">Дашборд</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Профиль здоровья пока не создан.</p>
+      </div>
+    );
+  }
+
+  const s = data.dashboard.summary;
+  const priorities = data.dashboard.priorities;
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">Дашборд</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Интегральная картина: физиология + генетика. Индекс наблюдения — сводная метрика полноты данных и активности.
+            Профиль: {data.profile.display_name}. Данные загружены через backend API с серверной сессией.
           </p>
         </div>
         <div className="hm-chip"><span className="h-1.5 w-1.5 rounded-full bg-success" /> Данные актуальны</div>
       </header>
 
-      {/* Hero index */}
       <div className="hm-card relative overflow-hidden p-6 md:p-8">
         <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
         <div className="relative grid gap-6 md:grid-cols-[auto,1fr] md:items-center">
@@ -69,15 +107,13 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Stat icon={Bed} label="Средний сон" value={`${s.avgSleep.hours} ч ${s.avgSleep.minutes} мин`} hint="за последние 288 дней" />
+        <Stat icon={Bed} label="Средний сон" value={`${s.avgSleep.hours} ч ${s.avgSleep.minutes} мин`} hint="из snapshot профиля" />
         <Stat icon={Gauge} label="Ночей < 7 часов" value={`${s.shortNightsPct}%`} hint="цель — стабильные 7 ч 30 мин" />
         <Stat icon={CalendarClock} label="Дней активности" value={fmt.format(s.activeDays)} hint="с носимым устройством" />
         <Stat icon={Dna} label="Генетических позиций" value={fmt.format(s.geneticPositions)} hint="после QC" />
       </div>
 
-      {/* Priorities */}
       <section className="hm-card p-5 md:p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-display text-lg font-semibold tracking-tight">Ключевые приоритеты</h2>
