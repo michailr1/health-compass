@@ -3,7 +3,6 @@ import {
   Activity, Dna, LayoutDashboard, ListChecks, Database, History, LogOut, HeartPulse,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { DemoBanner } from "./DemoBanner";
 
 const nav = [
   { to: "/app", label: "Дашборд", icon: LayoutDashboard, end: true },
@@ -17,6 +16,12 @@ const nav = [
 export default function AppLayout() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const displayName = user?.display_name || user?.email || "Пользователь";
+
+  async function onLogout() {
+    await signOut();
+    navigate("/login", { replace: true });
+  }
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
@@ -28,8 +33,8 @@ export default function AppLayout() {
               <HeartPulse className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
-              <div className="font-display text-base font-semibold tracking-tight">HealthMonitor</div>
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">demo portal</div>
+              <div className="font-display text-base font-semibold tracking-tight">Health Compass</div>
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">private portal</div>
             </div>
           </div>
 
@@ -56,10 +61,10 @@ export default function AppLayout() {
 
           <div className="border-t border-sidebar-border p-3">
             <div className="rounded-xl bg-sidebar-accent/60 px-3 py-2.5">
-              <div className="truncate text-sm font-medium">{user?.displayName}</div>
+              <div className="truncate text-sm font-medium">{displayName}</div>
               <div className="truncate text-xs text-muted-foreground">{user?.email}</div>
               <button
-                onClick={() => { signOut(); navigate("/login"); }}
+                onClick={onLogout}
                 className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
               >
                 <LogOut className="h-3.5 w-3.5" /> Выйти
@@ -76,10 +81,10 @@ export default function AppLayout() {
               <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-primary">
                 <HeartPulse className="h-4 w-4 text-primary-foreground" />
               </div>
-              <span className="font-display text-sm font-semibold">HealthMonitor</span>
+              <span className="font-display text-sm font-semibold">Health Compass</span>
             </div>
             <button
-              onClick={() => { signOut(); navigate("/login"); }}
+              onClick={onLogout}
               className="text-xs text-muted-foreground"
             >
               Выйти
@@ -87,7 +92,6 @@ export default function AppLayout() {
           </header>
 
           <div className="mx-auto w-full max-w-6xl flex-1 space-y-5 px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">
-            <DemoBanner />
             <Outlet />
           </div>
         </main>
