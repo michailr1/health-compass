@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
-from app.core.request_id import REQUEST_ID_HEADER, RequestIDMiddleware
+from app.core.request_id import RequestIDMiddleware
 from app.schemas.errors import ErrorDetail, ErrorResponse
 
 logger = get_logger(__name__)

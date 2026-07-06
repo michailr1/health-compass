@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
-from alembic.script import ScriptDirectory
 from alembic.runtime.environment import EnvironmentContext
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 
 # Load .env file if present

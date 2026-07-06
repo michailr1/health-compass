@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
-from app.main import app
 from app.core.request_id import REQUEST_ID_HEADER
+from app.main import app
 
 
 @pytest.mark.asyncio

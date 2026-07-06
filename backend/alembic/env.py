@@ -6,21 +6,22 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
+
+from alembic import context
 
 # Ensure the backend directory is on sys.path so 'app' can be imported
 _backend_dir = str(Path(__file__).resolve().parent.parent)
 if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
-from app.core.config import settings
-from app.db.base import Base
+import app.models.audit_event  # noqa: E402, F401
+import app.models.processing_job  # noqa: E402, F401
 
 # Import all models so Alembic can detect them
-import app.models.service_metadata  # noqa: F401
-import app.models.audit_event  # noqa: F401
-import app.models.processing_job  # noqa: F401
+import app.models.service_metadata  # noqa: E402, F401
+from app.core.config import settings  # noqa: E402
+from app.db.base import Base  # noqa: E402
 
 config = context.config
 

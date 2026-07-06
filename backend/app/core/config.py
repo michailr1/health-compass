@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,13 +24,14 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8100
 
-    # Database — application connection
-    database_url: str = (
-        "postgresql+psycopg://health_compass_app:changeme@127.0.0.1:5433/health_compass"
-    )
+    # Database — application connection (REQUIRED in production)
+    database_url: str = ""
 
-    # Database — migrator connection (Alembic, schema changes)
-    database_migrator_url: str | None = None
+    # Database — migrator connection (REQUIRED for Alembic)
+    database_migrator_url: str = ""
+
+    # Build commit — injected at deploy time, avoids subprocess per request
+    build_commit: str = ""
 
     # Future OIDC (not yet active)
     oidc_issuer: str | None = None
@@ -48,7 +47,25 @@ class Settings(BaseSettings):
 
     @property
     def migrator_url(self) -> str:
-        return self.database_migrator_url or self.database_url
+        """Return the migrator database URL.
+
+        Must be explicitly set via DATABASE_MIGRATOR_URL.
+        Never falls back to database_url to prevent accidental DDL on app schema.
+        """
+        return self.database_migrator_url
+
+    def validate_production(self) -> None:
+        """Raise on dangerous production misconfiguration."""
+        if not self.is_production:
+            return
+        if not self.database_url:
+            raise ValueError("DATABASE_URL is required in production")
+        if "changeme" in self.database_url.lower():
+            raise ValueError("DATABASE_URL contains placeholder 'changeme'")
+        if not self.database_migrator_url:
+            raise ValueError("DATABASE_MIGRATOR_URL is required in production")
+        if "changeme" in self.database_migrator_url.lower():
+            raise ValueError("DATABASE_MIGRATOR_URL contains placeholder 'changeme'")
 
 
 settings = Settings()
