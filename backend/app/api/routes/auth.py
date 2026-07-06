@@ -21,6 +21,7 @@ from app.services.bootstrap import ensure_personal_workspace
 router = APIRouter(prefix="/auth", tags=["auth"])
 STATE_COOKIE = "hc_oidc_state"
 NONCE_COOKIE = "hc_oidc_nonce"
+VERIFIER_COOKIE = "hc_oidc_verifier"
 
 
 def _redirect_uri() -> str:
@@ -41,32 +42,49 @@ def _set_short_cookie(response: RedirectResponse, name: str, value: str) -> None
     )
 
 
+def _delete_oidc_cookies(response: RedirectResponse) -> None:
+    response.delete_cookie(STATE_COOKIE, path="/health/api/auth")
+    response.delete_cookie(NONCE_COOKIE, path="/health/api/auth")
+    response.delete_cookie(VERIFIER_COOKIE, path="/health/api/auth")
+
+
 @router.get("/login")
 async def login() -> RedirectResponse:
     discovery = await get_discovery()
     state = secrets.token_urlsafe(32)
     nonce = secrets.token_urlsafe(32)
-    location = build_authorization_url(discovery, _redirect_uri(), state, nonce)
+    code_verifier = secrets.token_urlsafe(64)
+    location = build_authorization_url(discovery, _redirect_uri(), state, nonce, code_verifier)
     response = RedirectResponse(location)
     _set_short_cookie(response, STATE_COOKIE, state)
     _set_short_cookie(response, NONCE_COOKIE, nonce)
+    _set_short_cookie(response, VERIFIER_COOKIE, code_verifier)
     return response
 
 
 @router.get("/callback")
 async def callback(
     request: Request,
-    code: str = Query(...),
-    state: str = Query(...),
+    code: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    error_description: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> RedirectResponse:
+    if error:
+        detail = error_description or error
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"OIDC error: {detail}")
+    if not code or not state:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OIDC code or state missing")
+
     expected_state = request.cookies.get(STATE_COOKIE)
     nonce = request.cookies.get(NONCE_COOKIE)
-    if not expected_state or not nonce or not secrets.compare_digest(expected_state, state):
+    code_verifier = request.cookies.get(VERIFIER_COOKIE)
+    if not expected_state or not nonce or not code_verifier or not secrets.compare_digest(expected_state, state):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OIDC state")
 
     discovery = await get_discovery()
-    token_response = await exchange_code(discovery, code, _redirect_uri())
+    token_response = await exchange_code(discovery, code, _redirect_uri(), code_verifier)
     id_token = token_response.get("id_token")
     if not id_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC id_token missing")
@@ -122,8 +140,7 @@ async def callback(
     )
 
     response = RedirectResponse(settings.frontend_url)
-    response.delete_cookie(STATE_COOKIE, path="/health/api/auth")
-    response.delete_cookie(NONCE_COOKIE, path="/health/api/auth")
+    _delete_oidc_cookies(response)
     response.set_cookie(
         settings.session_cookie_name,
         token,
