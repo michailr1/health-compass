@@ -1,3 +1,4 @@
+import { FormEvent, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { HeartPulse, Mail, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -15,12 +16,38 @@ function GoogleIcon() {
 }
 
 export default function Login() {
-  const { user, loading, signIn } = useAuth();
+  const { user, loading } = useAuth();
+  const [email, setEmail] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailMessage, setEmailMessage] = useState("");
+  const [emailError, setEmailError] = useState("");
 
   if (!loading && user) return <Navigate to="/app" replace />;
 
   function signInWithGoogle() {
     window.location.assign("/health/api/auth/provider/google");
+  }
+
+  async function requestEmailLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setEmailBusy(true);
+    setEmailMessage("");
+    setEmailError("");
+
+    try {
+      const response = await fetch("/health/api/auth/email/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ email }),
+      });
+      if (!response.ok) throw new Error("request failed");
+      setEmailMessage("Ссылка для входа отправлена. Проверьте почту и папку «Спам».");
+    } catch {
+      setEmailError("Не удалось отправить ссылку. Попробуйте позже.");
+    } finally {
+      setEmailBusy(false);
+    }
   }
 
   return (
@@ -37,15 +64,15 @@ export default function Login() {
         </div>
 
         <div className="hm-card p-6 md:p-7">
-          <h1 className="font-display text-2xl font-semibold tracking-tight">Вход в кабинет</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight">Вход и регистрация</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Войдите через Google или используйте резервный вход Authentik.
+            Используйте Google или получите одноразовую ссылку на email.
           </p>
 
-          <div className="mt-6 space-y-3">
+          <div className="mt-6 space-y-4">
             <Button
               type="button"
-              disabled={loading}
+              disabled={loading || emailBusy}
               onClick={signInWithGoogle}
               className="w-full bg-white text-slate-900 hover:bg-white/90"
             >
@@ -53,29 +80,57 @@ export default function Login() {
               <span className="ml-2">Продолжить с Google</span>
             </Button>
 
-            <Button
-              type="button"
-              disabled={loading}
-              onClick={signIn}
-              variant="outline"
-              className="w-full"
-            >
-              <Mail className="h-4 w-4" />
-              <span className="ml-2">Войти через Authentik</span>
-            </Button>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <div className="h-px flex-1 bg-border" />
+              <span>или</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+
+            <form onSubmit={requestEmailLink} className="space-y-3">
+              <label className="block text-sm font-medium" htmlFor="email">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="name@example.com"
+                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              />
+              <Button type="submit" variant="outline" className="w-full" disabled={loading || emailBusy}>
+                <Mail className="h-4 w-4" />
+                <span className="ml-2">{emailBusy ? "Отправляем…" : "Получить ссылку для входа"}</span>
+              </Button>
+            </form>
+
+            {emailMessage && (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700">
+                {emailMessage}
+              </div>
+            )}
+            {emailError && (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                {emailError}
+              </div>
+            )}
           </div>
 
           <div className="mt-6 flex items-start gap-2 rounded-xl border border-primary/30 bg-primary/10 p-3 text-xs text-primary">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
-              Health Compass использует серверную сессию и HttpOnly cookie. Пароль не хранится в приложении.
+              Health Compass использует серверную сессию и HttpOnly cookie. Пароль в приложении не хранится.
             </div>
           </div>
+
+          <p className="mt-4 text-xs text-muted-foreground">
+            Медицинские показатели в текущей версии являются демонстрационными до подключения загрузки анализов и устройств.
+          </p>
         </div>
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          © Health Compass
-        </p>
+        <p className="mt-6 text-center text-xs text-muted-foreground">© Health Compass</p>
       </div>
     </div>
   );
