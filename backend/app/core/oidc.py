@@ -1,11 +1,12 @@
-"""OIDC helper functions for Authentik integration."""
+"""Helpers for direct Google OpenID Connect authentication."""
 
 from __future__ import annotations
 
 import base64
 import hashlib
+import secrets
 from functools import lru_cache
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import httpx
 from authlib.jose import JsonWebKey, jwt
@@ -20,11 +21,28 @@ def discovery_url() -> str:
     return settings.oidc_issuer.rstrip("/") + "/.well-known/openid-configuration"
 
 
+def _require_https_endpoint(discovery: dict, name: str) -> str:
+    value = discovery.get(name)
+    if not isinstance(value, str) or urlparse(value).scheme != "https":
+        raise ValueError(f"OIDC discovery contains invalid {name}")
+    return value
+
+
 async def get_discovery() -> dict:
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
         response = await client.get(discovery_url())
         response.raise_for_status()
-        return response.json()
+        discovery = response.json()
+
+    configured_issuer = (settings.oidc_issuer or "").rstrip("/")
+    discovered_issuer = str(discovery.get("issuer") or "").rstrip("/")
+    if not configured_issuer or discovered_issuer != configured_issuer:
+        raise ValueError("OIDC discovery issuer mismatch")
+
+    _require_https_endpoint(discovery, "authorization_endpoint")
+    _require_https_endpoint(discovery, "token_endpoint")
+    _require_https_endpoint(discovery, "jwks_uri")
+    return discovery
 
 
 def code_challenge(verifier: str) -> str:
@@ -51,13 +69,13 @@ def build_authorization_url(
             "code_challenge_method": "S256",
         }
     )
-    return f"{discovery['authorization_endpoint']}?{query}"
+    return f"{_require_https_endpoint(discovery, 'authorization_endpoint')}?{query}"
 
 
 async def exchange_code(discovery: dict, code: str, redirect_uri: str, code_verifier: str) -> dict:
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
         response = await client.post(
-            discovery["token_endpoint"],
+            _require_https_endpoint(discovery, "token_endpoint"),
             data={
                 "grant_type": "authorization_code",
                 "code": code,
@@ -73,22 +91,36 @@ async def exchange_code(discovery: dict, code: str, redirect_uri: str, code_veri
 
 
 async def validate_id_token(discovery: dict, id_token: str, nonce: str) -> dict:
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        jwks_response = await client.get(discovery["jwks_uri"])
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+        jwks_response = await client.get(_require_https_endpoint(discovery, "jwks_uri"))
         jwks_response.raise_for_status()
     key_set = JsonWebKey.import_key_set(jwks_response.json())
     claims = jwt.decode(id_token, key_set)
     claims.validate()
-    if claims.get("iss") != settings.oidc_issuer:
+
+    configured_issuer = (settings.oidc_issuer or "").rstrip("/")
+    token_issuer = str(claims.get("iss") or "").rstrip("/")
+    if not configured_issuer or token_issuer != configured_issuer:
         raise ValueError("Invalid issuer")
+
     expected_audience = settings.oidc_audience or settings.oidc_client_id
+    if not expected_audience:
+        raise RuntimeError("OIDC audience is not configured")
+
     aud = claims.get("aud")
     if isinstance(aud, str):
-        valid_audience = aud == expected_audience
+        audiences = [aud]
+    elif isinstance(aud, list) and all(isinstance(item, str) for item in aud):
+        audiences = aud
     else:
-        valid_audience = expected_audience in (aud or [])
-    if not valid_audience:
+        raise ValueError("Invalid audience claim")
+
+    if expected_audience not in audiences:
         raise ValueError("Invalid audience")
-    if claims.get("nonce") != nonce:
+    if len(audiences) > 1 and claims.get("azp") != expected_audience:
+        raise ValueError("Invalid authorized party")
+
+    token_nonce = claims.get("nonce")
+    if not isinstance(token_nonce, str) or not secrets.compare_digest(token_nonce, nonce):
         raise ValueError("Invalid nonce")
     return dict(claims)
