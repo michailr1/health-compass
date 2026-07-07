@@ -21,6 +21,7 @@ S = "health_compass"
 
 def upgrade() -> None:
     op.execute(f"DROP POLICY IF EXISTS users_oidc_insert ON {S}.users")
+    op.execute(f"DROP POLICY IF EXISTS users_insert_self ON {S}.users")
     op.execute(
         f"CREATE POLICY users_insert_self ON {S}.users "
         f"FOR INSERT WITH CHECK (id = {S}.app_current_user_id())"
