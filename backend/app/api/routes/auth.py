@@ -1,4 +1,4 @@
-"""OIDC authentication routes."""
+"""Direct Google OIDC authentication routes."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 STATE_COOKIE = "hc_oidc_state"
 NONCE_COOKIE = "hc_oidc_nonce"
 VERIFIER_COOKIE = "hc_oidc_verifier"
+GOOGLE_PROVIDER = "google"
 
 
 def _redirect_uri() -> str:
@@ -49,8 +50,7 @@ def _delete_oidc_cookies(response: RedirectResponse) -> None:
     response.delete_cookie(VERIFIER_COOKIE, path="/health/api/auth")
 
 
-@router.get("/login")
-async def login() -> RedirectResponse:
+async def _start_google_login() -> RedirectResponse:
     discovery = await get_discovery()
     state = secrets.token_urlsafe(32)
     nonce = secrets.token_urlsafe(32)
@@ -61,6 +61,16 @@ async def login() -> RedirectResponse:
     _set_short_cookie(response, NONCE_COOKIE, nonce)
     _set_short_cookie(response, VERIFIER_COOKIE, code_verifier)
     return response
+
+
+@router.get("/login")
+async def login() -> RedirectResponse:
+    return await _start_google_login()
+
+
+@router.get("/provider/google")
+async def login_google() -> RedirectResponse:
+    return await _start_google_login()
 
 
 @router.get("/callback")
@@ -95,9 +105,11 @@ async def callback(
     email = str(claims.get("email") or "")
     if not subject or not email:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC subject or email missing")
+    if claims.get("email_verified") is not True:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC email is not verified")
 
     identity_result = await session.execute(
-        select(UserIdentity).where(UserIdentity.provider == "authentik", UserIdentity.subject == subject)
+        select(UserIdentity).where(UserIdentity.provider == GOOGLE_PROVIDER, UserIdentity.subject == subject)
     )
     identity = identity_result.scalar_one_or_none()
     if identity is None:
@@ -113,7 +125,7 @@ async def callback(
         await session.flush()
         identity = UserIdentity(
             user_id=user.id,
-            provider="authentik",
+            provider=GOOGLE_PROVIDER,
             subject=subject,
             issuer=settings.oidc_issuer or "",
             claims=claims,
@@ -157,8 +169,7 @@ async def callback(
     return response
 
 
-@router.post("/logout")
-async def logout(request: Request, session: AsyncSession = Depends(get_session)) -> RedirectResponse:
+async def _logout_response(request: Request, session: AsyncSession) -> RedirectResponse:
     token = request.cookies.get(settings.session_cookie_name)
     if token:
         await session.execute(
@@ -168,4 +179,15 @@ async def logout(request: Request, session: AsyncSession = Depends(get_session))
         )
     response = RedirectResponse(settings.frontend_url, status_code=status.HTTP_303_SEE_OTHER)
     response.delete_cookie(settings.session_cookie_name, path="/health/api")
+    _delete_oidc_cookies(response)
     return response
+
+
+@router.get("/logout")
+async def logout_get(request: Request, session: AsyncSession = Depends(get_session)) -> RedirectResponse:
+    return await _logout_response(request, session)
+
+
+@router.post("/logout")
+async def logout_post(request: Request, session: AsyncSession = Depends(get_session)) -> RedirectResponse:
+    return await _logout_response(request, session)
