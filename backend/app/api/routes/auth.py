@@ -176,10 +176,12 @@ async def callback(
     await ensure_personal_workspace(session, user)
 
     token = new_session_token()
+    token_hash = hash_token(token)
+    await apply_session_context(session, token_hash)
     session.add(
         AuthSession(
             user_id=user.id,
-            session_token_hash=hash_token(token),
+            session_token_hash=token_hash,
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
             expires_at=datetime.datetime.now(datetime.UTC)
