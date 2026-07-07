@@ -20,7 +20,7 @@ export default function Login() {
   if (!loading && user) return <Navigate to="/app" replace />;
 
   function signInWithGoogle() {
-    window.location.assign("/auth/source/oauth/login/google/");
+    window.location.assign("/health/api/auth/provider/google");
   }
 
   return (
