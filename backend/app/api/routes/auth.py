@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import secrets
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
@@ -100,7 +101,10 @@ async def callback(
     )
     identity = identity_result.scalar_one_or_none()
     if identity is None:
+        user_id = uuid.uuid4()
+        await apply_user_context(session, user_id)
         user = User(
+            id=user_id,
             email=email.lower(),
             display_name=claims.get("name") or claims.get("preferred_username") or email,
             status="active",
