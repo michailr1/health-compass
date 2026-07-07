@@ -48,7 +48,7 @@ def upgrade() -> None:
       login_expires_at timestamptz,
       login_ip text,
       login_user_agent text
-    ) RETURNS void
+    ) RETURNS boolean
     LANGUAGE plpgsql
     SECURITY DEFINER
     SET search_path = {S}, pg_temp
@@ -58,14 +58,14 @@ def upgrade() -> None:
         SELECT count(*) FROM {S}.email_login_tokens
         WHERE email = login_email AND created_at > now() - interval '15 minutes'
       ) >= 5 THEN
-        RETURN;
+        RETURN false;
       END IF;
 
       IF login_ip IS NOT NULL AND (
         SELECT count(*) FROM {S}.email_login_tokens
         WHERE requested_ip = login_ip AND created_at > now() - interval '15 minutes'
       ) >= 20 THEN
-        RETURN;
+        RETURN false;
       END IF;
 
       INSERT INTO {S}.email_login_tokens(
@@ -73,6 +73,7 @@ def upgrade() -> None:
       ) VALUES (
         login_email, login_token_hash, login_ip, login_user_agent, login_expires_at
       );
+      RETURN true;
     END
     $$
     """)
