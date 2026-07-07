@@ -13,7 +13,12 @@ from app.db.session import get_session
 from app.models.profile import DashboardSnapshot, HealthProfile
 from app.models.user import User
 from app.models.workspace import Workspace
-from app.schemas.identity import DashboardSnapshotResponse, ProfileResponse, UserResponse, WorkspaceResponse
+from app.schemas.identity import (
+    DashboardSnapshotResponse,
+    ProfileResponse,
+    UserResponse,
+    WorkspaceResponse,
+)
 
 router = APIRouter(tags=["identity"])
 
