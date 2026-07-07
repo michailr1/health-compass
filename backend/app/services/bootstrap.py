@@ -54,6 +54,7 @@ async def ensure_personal_workspace(session: AsyncSession, user: User) -> None:
     if existing.scalar_one_or_none() is not None:
         return
 
+    await apply_user_context(session, user.id)
     workspace = Workspace(
         name=f"{user.display_name or user.email} — Health Compass",
         slug=f"{_slug_from_email(user.email)}-{str(user.id)[:8]}",
@@ -62,8 +63,11 @@ async def ensure_personal_workspace(session: AsyncSession, user: User) -> None:
     session.add(workspace)
     await session.flush()
 
+    await apply_user_context(session, user.id)
     session.add(WorkspaceAccess(workspace_id=workspace.id, user_id=user.id, access_level="owner"))
+    await session.flush()
 
+    await apply_user_context(session, user.id)
     profile = HealthProfile(
         workspace_id=workspace.id,
         owner_user_id=user.id,
@@ -72,7 +76,11 @@ async def ensure_personal_workspace(session: AsyncSession, user: User) -> None:
     session.add(profile)
     await session.flush()
 
+    await apply_user_context(session, user.id)
     session.add(ProfileAccess(profile_id=profile.id, user_id=user.id, access_level="owner"))
+    await session.flush()
+
+    await apply_user_context(session, user.id)
     session.add(
         DashboardSnapshot(
             profile_id=profile.id,
