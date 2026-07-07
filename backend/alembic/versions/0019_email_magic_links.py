@@ -38,7 +38,6 @@ def upgrade() -> None:
     )
     op.create_index("ix_email_login_tokens_email_created", "email_login_tokens", ["email", "created_at"], schema=S)
     op.execute(f"ALTER TABLE {S}.email_login_tokens ENABLE ROW LEVEL SECURITY")
-    op.execute(f"ALTER TABLE {S}.email_login_tokens FORCE ROW LEVEL SECURITY")
     op.execute(f"REVOKE ALL ON {S}.email_login_tokens FROM health_compass_app")
 
     op.execute(f"""
