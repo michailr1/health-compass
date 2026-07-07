@@ -53,11 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.location.assign("/health/api/auth/login");
       },
       async signOut() {
-        await fetch("/health/api/auth/logout", {
-          method: "POST",
-          credentials: "include",
-        }).catch(() => undefined);
         setUser(null);
+        window.location.assign("/health/api/auth/logout");
       },
     }),
     [user, loading, refresh]
