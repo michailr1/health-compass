@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.oidc import build_authorization_url, exchange_code, get_discovery, validate_id_token
 from app.core.session_tokens import hash_token, new_session_token
-from app.db.rls import apply_user_context
+from app.db.rls import apply_session_context, apply_user_context
 from app.db.session import get_session
 from app.models.user import AuthSession, User, UserIdentity
 from app.services.bootstrap import ensure_personal_workspace
@@ -185,9 +185,11 @@ async def callback(
 async def _logout_response(request: Request, session: AsyncSession) -> RedirectResponse:
     token = request.cookies.get(settings.session_cookie_name)
     if token:
+        token_hash = hash_token(token)
+        await apply_session_context(session, token_hash)
         await session.execute(
             update(AuthSession)
-            .where(AuthSession.session_token_hash == hash_token(token))
+            .where(AuthSession.session_token_hash == token_hash)
             .values(revoked_at=datetime.datetime.now(datetime.UTC))
         )
     response = RedirectResponse(settings.frontend_url, status_code=status.HTTP_303_SEE_OTHER)
