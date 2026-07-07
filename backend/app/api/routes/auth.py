@@ -8,7 +8,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -63,6 +63,18 @@ async def _start_google_login() -> RedirectResponse:
     return response
 
 
+async def _lookup_identity_user_id(
+    session: AsyncSession,
+    provider: str,
+    subject: str,
+) -> uuid.UUID | None:
+    result = await session.execute(
+        text("select health_compass.app_lookup_identity_user_id(:provider, :subject)"),
+        {"provider": provider, "subject": subject},
+    )
+    return result.scalar_one_or_none()
+
+
 @router.get("/login")
 async def login() -> RedirectResponse:
     return await _start_google_login()
@@ -108,11 +120,8 @@ async def callback(
     if claims.get("email_verified") is not True:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC email is not verified")
 
-    identity_result = await session.execute(
-        select(UserIdentity).where(UserIdentity.provider == GOOGLE_PROVIDER, UserIdentity.subject == subject)
-    )
-    identity = identity_result.scalar_one_or_none()
-    if identity is None:
+    identity_user_id = await _lookup_identity_user_id(session, GOOGLE_PROVIDER, subject)
+    if identity_user_id is None:
         user_id = uuid.uuid4()
         await apply_user_context(session, user_id)
         user = User(
@@ -133,9 +142,13 @@ async def callback(
         )
         session.add(identity)
     else:
-        await apply_user_context(session, identity.user_id)
-        user_result = await session.execute(select(User).where(User.id == identity.user_id))
+        await apply_user_context(session, identity_user_id)
+        user_result = await session.execute(select(User).where(User.id == identity_user_id))
         user = user_result.scalar_one()
+        identity_result = await session.execute(
+            select(UserIdentity).where(UserIdentity.provider == GOOGLE_PROVIDER, UserIdentity.subject == subject)
+        )
+        identity = identity_result.scalar_one()
         user.email = email.lower()
         user.display_name = claims.get("name") or user.display_name
         identity.claims = claims
