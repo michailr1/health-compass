@@ -12,14 +12,9 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.magic_links import (
-    hash_magic_token,
-    new_magic_token,
-    normalize_email,
-    send_magic_link,
-)
+from app.core.magic_links import hash_magic_token, new_magic_token, normalize_email, send_magic_link
 from app.core.session_tokens import hash_token, new_session_token
-from app.db.rls import apply_user_context
+from app.db.rls import apply_session_context, apply_user_context
 from app.db.session import get_session
 from app.models.user import AuthSession, User, UserIdentity
 from app.services.bootstrap import ensure_personal_workspace
@@ -61,17 +56,12 @@ def _set_session_cookie(response: RedirectResponse, token: str) -> None:
     )
 
 
-@router.post(
-    "/request",
-    response_model=MagicLinkAccepted,
-    status_code=status.HTTP_202_ACCEPTED,
-)
+@router.post("/request", response_model=MagicLinkAccepted, status_code=status.HTTP_202_ACCEPTED)
 async def request_magic_link(
     payload: MagicLinkRequest,
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> MagicLinkAccepted:
-    """Create and email a one-time login link without revealing account state."""
     if not settings.email_auth_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
@@ -93,8 +83,7 @@ async def request_magic_link(
             "user_agent": request.headers.get("user-agent"),
         },
     )
-    issued = bool(result.scalar_one())
-    if issued:
+    if bool(result.scalar_one()):
         try:
             await send_magic_link(email, token)
         except Exception as exc:
@@ -114,7 +103,6 @@ async def consume_magic_link(
     token: str = Query(min_length=32, max_length=256),
     session: AsyncSession = Depends(get_session),
 ) -> RedirectResponse:
-    """Atomically consume a magic link and create a local server-side session."""
     if not settings.email_auth_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
@@ -168,10 +156,12 @@ async def consume_magic_link(
     await ensure_personal_workspace(session, user)
 
     session_token = new_session_token()
+    session_token_hash = hash_token(session_token)
+    await apply_session_context(session, session_token_hash)
     session.add(
         AuthSession(
             user_id=user.id,
-            session_token_hash=hash_token(session_token),
+            session_token_hash=session_token_hash,
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
             expires_at=datetime.datetime.now(datetime.UTC)
