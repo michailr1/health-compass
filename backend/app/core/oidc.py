@@ -67,6 +67,7 @@ def build_authorization_url(
             "nonce": nonce,
             "code_challenge": code_challenge(code_verifier),
             "code_challenge_method": "S256",
+            "prompt": "select_account",
         }
     )
     return f"{_require_https_endpoint(discovery, 'authorization_endpoint')}?{query}"
