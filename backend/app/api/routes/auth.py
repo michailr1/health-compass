@@ -6,6 +6,7 @@ import datetime
 import secrets
 import uuid
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select, text, update
@@ -51,11 +52,18 @@ def _delete_oidc_cookies(response: RedirectResponse) -> None:
 
 
 async def _start_google_login() -> RedirectResponse:
-    discovery = await get_discovery()
-    state = secrets.token_urlsafe(32)
-    nonce = secrets.token_urlsafe(32)
-    code_verifier = secrets.token_urlsafe(64)
-    location = build_authorization_url(discovery, _redirect_uri(), state, nonce, code_verifier)
+    try:
+        discovery = await get_discovery()
+        state = secrets.token_urlsafe(32)
+        nonce = secrets.token_urlsafe(32)
+        code_verifier = secrets.token_urlsafe(64)
+        location = build_authorization_url(discovery, _redirect_uri(), state, nonce, code_verifier)
+    except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google authentication is temporarily unavailable",
+        ) from exc
+
     response = RedirectResponse(location)
     _set_short_cookie(response, STATE_COOKIE, state)
     _set_short_cookie(response, NONCE_COOKIE, nonce)
@@ -106,12 +114,23 @@ async def callback(
     if not expected_state or not nonce or not code_verifier or not secrets.compare_digest(expected_state, state):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OIDC state")
 
-    discovery = await get_discovery()
-    token_response = await exchange_code(discovery, code, _redirect_uri(), code_verifier)
-    id_token = token_response.get("id_token")
-    if not id_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC id_token missing")
-    claims = await validate_id_token(discovery, id_token, nonce)
+    try:
+        discovery = await get_discovery()
+        token_response = await exchange_code(discovery, code, _redirect_uri(), code_verifier)
+        id_token = token_response.get("id_token")
+        if not id_token:
+            raise ValueError("OIDC id_token missing")
+        claims = await validate_id_token(discovery, id_token, nonce)
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google authentication response is invalid",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Google authentication provider request failed",
+        ) from exc
 
     subject = str(claims.get("sub") or "")
     email = str(claims.get("email") or "")
@@ -126,7 +145,7 @@ async def callback(
         await apply_user_context(session, user_id)
         user = User(
             id=user_id,
-            email=email.lower(),
+            email=email.strip().lower(),
             display_name=claims.get("name") or claims.get("preferred_username") or email,
             status="active",
         )
@@ -149,7 +168,7 @@ async def callback(
             select(UserIdentity).where(UserIdentity.provider == GOOGLE_PROVIDER, UserIdentity.subject == subject)
         )
         identity = identity_result.scalar_one()
-        user.email = email.lower()
+        user.email = email.strip().lower()
         user.display_name = claims.get("name") or user.display_name
         identity.claims = claims
         identity.last_seen_at = datetime.datetime.now(datetime.UTC)
