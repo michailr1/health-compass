@@ -28,13 +28,13 @@ async_session_factory = async_sessionmaker(
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """Yield an async database session."""
+    """Yield one database transaction for the complete request.
+
+    RLS context is installed with PostgreSQL ``set_config(..., true)`` and is
+    therefore transaction-local. Keeping a single explicit transaction around
+    the request makes that lifetime visible and prevents later statements from
+    silently running after an intermediate commit has cleared the context.
+    """
     async with async_session_factory() as session:
-        try:
+        async with session.begin():
             yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
