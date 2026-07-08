@@ -22,6 +22,7 @@ Production URL: `https://health.funti.cc`
 - Два реальных пользователя входят через Google на прежнем production flow.
 - Email-регистрация и повторный вход работают на прежнем production flow.
 - Новый поддомен `health.funti.cc` развёрнут с HTTPS, Apache VirtualHost и root-path frontend/API.
+- Ручной Google login на `https://health.funti.cc/login` подтверждён владельцем.
 
 ## Развёртывание health.funti.cc
 
@@ -66,6 +67,21 @@ https://funti.cc/health/api/auth/callback
 
 Сообщение VPS-агента о необходимости добавить новый URI является устаревшим чек-листом, а не открытой задачей.
 
+## Ручная приёмка нового домена
+
+Подтверждено владельцем:
+
+- ссылка `https://health.funti.cc` открывается;
+- Google login работает на новом поддомене.
+
+Остаётся проверить:
+
+1. Logout и повторный вход.
+2. Email Magic Link request/consume на новом поддомене.
+3. Одноразовость magic link.
+4. Dashboard и маркировку демонстрационных данных.
+5. Двухпользовательскую изоляцию на новом URL.
+
 ## Последние security-исправления
 
 - миграция `0020`: устранение RLS-рекурсии и tenant escalation;
@@ -91,23 +107,11 @@ https://funti.cc/health/api/auth/callback
 
 Это целевой дизайн, а не реализованный функционал. Он не должен отображаться как current state без кода, API и тестов.
 
-## Текущая задача
-
-Завершить ручную приёмку нового production URL:
-
-1. Google login на `https://health.funti.cc/login`.
-2. Проверка выбора Google-аккаунта.
-3. Logout и повторный вход.
-4. Email Magic Link request/consume на новом поддомене.
-5. Проверка одноразовости ссылки.
-6. Проверка dashboard и маркировки демонстрационных данных.
-7. Проверка двух пользователей и отсутствия cross-user доступа.
-
 ## Следующие действия
 
 1. Исправить или корректно изолировать 4 pytest failures.
-2. После ручной auth-приёмки включить redirect со старого `/health`.
-3. Обновить production deployment до актуального docs HEAD только при необходимости; продуктовый код уже соответствует deployed SHA.
+2. Завершить оставшиеся ручные auth/security проверки.
+3. После ручной приёмки включить redirect со старого `/health`.
 4. Создать PR `feat/direct-google-and-email-auth → main`.
 5. Выпустить тег `v0.1.0-auth-mvp`.
 6. Начать PHASE-03 с утверждения API contracts для первого Human-first vertical slice.
