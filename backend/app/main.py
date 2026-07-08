@@ -35,7 +35,6 @@ app = FastAPI(
     title="Health Compass API",
     version=settings.version,
     description="Backend API for the Health Compass personal health portal",
-    root_path="/health/api",
     lifespan=lifespan,
     docs_url="/docs" if not settings.is_production else None,
     redoc_url="/redoc" if not settings.is_production else None,
