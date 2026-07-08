@@ -36,6 +36,8 @@ feat/identity-and-profile-access
 - [Текущее состояние](docs/CURRENT-STATE.md)
 - [История разработки и инцидентов](docs/DEVELOPMENT-HISTORY.md)
 - [Security invariants](docs/SECURITY-INVARIANTS.md)
+- [Product & UX baseline](docs/PRODUCT-UX-BASELINE.md)
+- [AI product and safety](docs/AI-PRODUCT-SAFETY.md)
 - [Production deployment runbook](docs/DEPLOYMENT-RUNBOOK.md)
 - [Рекомендации Fable](docs/reviews/FABLE-RECOMMENDATIONS.md)
 - [Реестр источников](docs/source-index/SOURCE-REGISTER.md)
@@ -127,6 +129,8 @@ https://health.funti.cc/api/auth/email/consume
 ```
 
 После полной проверки старый `/health` будет перенаправляться на новый поддомен. Затем рабочая ветка будет слита в `main`, а production начнёт разворачиваться из `main`.
+
+Продуктовый и UI baseline этапов Fable 3/3.5 зафиксирован в документации как целевой дизайн и не считается реализованным до появления кода, API и тестов.
 
 ## Локальный запуск frontend
 
