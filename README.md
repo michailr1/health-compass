@@ -2,21 +2,47 @@
 
 Health Compass — многопользовательский веб-портал для хранения, обработки и отображения персональных данных о здоровье.
 
-Проект находится в активной разработке. Текущая рабочая ветка:
+## Текущий статус
+
+Рабочая ветка:
 
 ```text
 feat/direct-google-and-email-auth
 ```
 
-Архивная ветка с прежней интеграцией через Authentik:
+Целевой production URL:
+
+```text
+https://health.funti.cc
+```
+
+Текущий старый URL сохраняется только на период перехода:
+
+```text
+https://funti.cc/health
+```
+
+Архивная ветка прежней архитектуры через Authentik:
 
 ```text
 feat/identity-and-profile-access
 ```
 
-Архивную ветку не удалять: она сохраняется только как история предыдущей архитектуры.
+Архивную ветку не удалять.
 
-## Текущая архитектура
+## Каноническая документация
+
+- [Основной план](docs/PROJECT-PLAN.md)
+- [Текущее состояние](docs/CURRENT-STATE.md)
+- [История разработки и инцидентов](docs/DEVELOPMENT-HISTORY.md)
+- [Security invariants](docs/SECURITY-INVARIANTS.md)
+- [Production deployment runbook](docs/DEPLOYMENT-RUNBOOK.md)
+- [Рекомендации Fable](docs/reviews/FABLE-RECOMMENDATIONS.md)
+- [Реестр источников](docs/source-index/SOURCE-REGISTER.md)
+
+При расхождении документации с кодом приоритет имеют код, миграции, тесты и подтверждённое production-состояние. Документация должна быть обновлена после каждого релиза и архитектурного изменения.
+
+## Архитектура
 
 ### Backend
 
@@ -26,7 +52,7 @@ feat/identity-and-profile-access
 - Alembic;
 - PostgreSQL;
 - PostgreSQL Row-Level Security;
-- серверные сессии в PostgreSQL.
+- локальные серверные сессии.
 
 ### Frontend
 
@@ -41,92 +67,77 @@ feat/identity-and-profile-access
 
 ### Аутентификация
 
-Для MVP используется собственная локальная модель пользователей без внешнего IAM:
+Для MVP используется собственная identity/session модель:
 
 - прямой Google OAuth 2.0 / OpenID Connect;
-- Email Magic Links;
-- локальные пользователи и identities;
-- серверные session cookies;
-- собственные роли, workspaces и profiles;
-- PostgreSQL RLS для изоляции данных.
+- PKCE S256, state, nonce и `prompt=select_account`;
+- Email Magic Links через Brevo;
+- локальные users, identities и sessions;
+- собственные workspaces, profiles и permissions;
+- PostgreSQL RLS для tenant isolation.
 
-В проекте не используются:
+В MVP не используются Authentik, Keycloak или внешний IAM.
 
-- Authentik;
-- Keycloak;
-- внешний IAM;
-- mock-аутентификация в production.
-
-Локальный пользователь не определяется по email. Внешняя identity определяется парой:
+Google identity определяется парой:
 
 ```text
 provider + subject
 ```
 
-Для Google используется подтверждённый `sub`. Совпадение email между разными identity не должно автоматически объединять аккаунты.
+Email не является ключом автоматического объединения разных identity.
 
 ## Безопасность
 
-Основные принципы:
+- Security first и fail-closed production configuration.
+- Runtime и migrator роли PostgreSQL разделены.
+- Защищённые таблицы используют `FORCE ROW LEVEL SECURITY`.
+- RLS helper-функции принадлежат выделенной роли `health_compass_rls_definer NOLOGIN BYPASSRLS`.
+- `PUBLIC EXECUTE` для security-definer helpers запрещён.
+- User/session context устанавливается внутри транзакции запроса.
+- Dev auth разрешён только локально.
+- Секреты не хранятся в Git и не выводятся в отчёты.
 
-1. Security first.
-2. Fail-closed конфигурация production.
-3. Разделение runtime- и migrator-доступа к PostgreSQL.
-4. `FORCE ROW LEVEL SECURITY` на защищённых таблицах.
-5. Контекст пользователя и сессии устанавливается внутри транзакции запроса.
-6. Секреты хранятся только на сервере и не попадают в Git.
-7. Dev-auth разрешён только в локальном development-окружении.
-8. Никаких mock-решений в production.
+Подробности: [docs/SECURITY-INVARIANTS.md](docs/SECURITY-INVARIANTS.md).
 
-## Состояние реализации
+## Реализовано
 
-На текущем этапе реализованы или подготовлены:
+- Google OIDC login и локальный logout;
+- Email Magic Link registration/login;
+- PostgreSQL sessions;
+- workspace/profile/dashboard bootstrap;
+- multi-user RLS isolation;
+- устранение рекурсии SQLSTATE `54001`;
+- закрытие self-grant owner и self-add workspace escalation;
+- интеграционный RLS пакет: `22 PASS, 0 FAIL`;
+- отдельные демонстрационные dashboard records для каждого пользователя.
 
-- прямой Google OIDC flow;
-- PKCE S256, `state` и `nonce`;
-- проверка issuer, audience, `azp`, expiry и `email_verified`;
-- локальные PostgreSQL-сессии;
-- локальный logout с отзывом сессии;
-- Email Magic Link backend flow;
-- миграции PostgreSQL до текущего Alembic head;
-- усиленные RLS-политики;
-- unit-тесты конфигурации и OIDC;
-- базовый lint-контур.
+Медицинские показатели пока демонстрационные и должны явно обозначаться как такие до реализации реального импорта.
 
-До первого MVP ещё требуется:
+## Текущий этап
 
-- завершить production deployment прямого Google OIDC;
-- провести реальный end-to-end вход через Google;
-- настроить SMTP и проверить Email Magic Links;
-- провести интеграционный RLS-тест минимум для двух пользователей;
-- удалить оставшиеся упоминания и конфигурацию Authentik;
-- подготовить первого реального пользователя.
+Перенос приложения с подкаталога `/health` на корень поддомена `health.funti.cc`.
 
-## Структура репозитория
+Целевые адреса:
 
 ```text
-backend/
-  app/                 FastAPI-приложение
-  alembic/             миграции PostgreSQL
-  tests/               backend-тесты
-
-src/
-  components/          UI-компоненты
-  context/             frontend context
-  pages/               страницы приложения
-  services/            API-клиенты и frontend-сервисы
+https://health.funti.cc/
+https://health.funti.cc/api/health
+https://health.funti.cc/api/auth/callback
+https://health.funti.cc/api/auth/email/consume
 ```
+
+После полной проверки старый `/health` будет перенаправляться на новый поддомен. Затем рабочая ветка будет слита в `main`, а production начнёт разворачиваться из `main`.
 
 ## Локальный запуск frontend
 
 Требуется Node.js 20–22 и npm 10.
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-Проверки frontend:
+Проверки:
 
 ```bash
 npm run build
@@ -142,16 +153,11 @@ npm test
 cd backend
 python -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
-```
-
-Настройте environment на основе локальной конфигурации проекта, затем:
-
-```bash
 .venv/bin/alembic upgrade head
 .venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8100
 ```
 
-Проверки backend:
+Проверки:
 
 ```bash
 .venv/bin/python -m compileall -q app alembic tests
@@ -163,27 +169,7 @@ python -m venv .venv
 
 ## Production
 
-Текущий целевой сервер Health Compass:
-
-```text
-funti.cc
-```
-
-`de.funti.cc` не является production-сервером Health Compass.
-
-Публичный URL:
-
-```text
-https://funti.cc/health/
-```
-
-Google OAuth callback:
-
-```text
-https://funti.cc/health/api/auth/callback
-```
-
-Backend systemd service:
+Backend service:
 
 ```text
 health-compass-api.service
@@ -195,8 +181,22 @@ Production environment:
 /etc/health-compass/backend.env
 ```
 
-Значения `OIDC_CLIENT_SECRET`, SMTP-паролей, database credentials, session tokens и других секретов запрещено сохранять в репозитории или выводить в логи.
+Target URLs:
+
+```env
+FRONTEND_URL=https://health.funti.cc/app
+OIDC_REDIRECT_URI=https://health.funti.cc/api/auth/callback
+MAGIC_LINK_CONSUME_URL=https://health.funti.cc/api/auth/email/consume
+```
+
+Значения OAuth secrets, SMTP credentials, database credentials, session tokens и иных секретов запрещено сохранять в репозитории или выводить в логи.
+
+## Роли агентов
+
+ChatGPT/coding role отвечает за архитектуру, код, миграции, тесты, ADR и документацию.
+
+VPS-агент отвечает за backup, pull конкретного HEAD, build, migrations, Apache, systemd, Certbot, deployment, smoke tests и rollback. VPS-агент не пишет продуктовый код и не принимает архитектурных решений.
 
 ## Медицинский дисклеймер
 
-Health Compass не является медицинским изделием и не заменяет консультацию врача. Любые выводы и рекомендации должны рассматриваться как информационные материалы, а не как диагноз или назначение лечения.
+Health Compass не является медицинским изделием и не заменяет консультацию врача. Любые выводы и рекомендации являются информационными материалами, а не диагнозом или назначением лечения.
