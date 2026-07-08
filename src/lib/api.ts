@@ -1,7 +1,7 @@
 export async function apiGet<T>(path: string): Promise<T> {
-  const response = await fetch(`/health/api${path}`, { credentials: "include" });
+  const response = await fetch(`/api${path}`, { credentials: "include" });
   if (response.status === 401) {
-    window.location.assign("/health/login");
+    window.location.assign("/login");
     throw new Error("Authentication required");
   }
   if (response.status === 403) throw new Error("Нет доступа к данным");
