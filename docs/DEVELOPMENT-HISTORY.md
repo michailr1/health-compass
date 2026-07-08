@@ -89,3 +89,28 @@ Root cause:
 `https://health.funti.cc`
 
 DNS и новый Google redirect URI добавлены. Код и production deployment ещё должны быть переведены на root-path поддомена. Старый URL сохраняется до успешной проверки и затем переводится на redirect.
+
+## 2026-07 — Fable Stage 3 и 3.5
+
+Получены и приняты как target baseline материалы по продукту, UX, AI safety и детальной карте интерфейса.
+
+Зафиксировано:
+
+- Human-first MVP vertical slice: login → onboarding → upload → OCR review → lab results → metric dynamics → AI evidence → doctor report;
+- отдельный future-ready Pet Health contour;
+- Human/Pet visual and AI separation;
+- desktop и mobile navigation;
+- экранные состояния, action registry и component map;
+- high-fidelity mockups как reference design;
+- AI evidence, consent, prompt-injection и red-flag invariants;
+- дополнительные функции: Attention Inbox, global search, bulk upload, OCR autosave, data freshness, session management, notifications и Offline Emergency Card.
+
+Решения перенесены в:
+
+- `docs/PRODUCT-UX-BASELINE.md`;
+- `docs/AI-PRODUCT-SAFETY.md`;
+- `docs/PROJECT-PLAN.md`;
+- `docs/reviews/FABLE-RECOMMENDATIONS.md`;
+- `docs/source-index/SOURCE-REGISTER.md`.
+
+Эти материалы не считаются реализованным функционалом без кода, API, миграций и тестов.
