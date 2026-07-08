@@ -25,7 +25,7 @@ export default function Login() {
   if (!loading && user) return <Navigate to="/app" replace />;
 
   function signInWithGoogle() {
-    window.location.assign("/health/api/auth/provider/google");
+    window.location.assign("/api/auth/provider/google");
   }
 
   async function requestEmailLink(event: FormEvent<HTMLFormElement>) {
@@ -35,7 +35,7 @@ export default function Login() {
     setEmailError("");
 
     try {
-      const response = await fetch("/health/api/auth/email/request", {
+      const response = await fetch("/api/auth/email/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
