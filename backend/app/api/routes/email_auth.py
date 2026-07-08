@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
@@ -30,6 +31,11 @@ class MagicLinkRequest(BaseModel):
 
 class MagicLinkAccepted(BaseModel):
     message: str
+
+
+def _frontend_url(path: str, query: str = "") -> str:
+    parts = urlsplit(settings.frontend_url)
+    return urlunsplit((parts.scheme, parts.netloc, path, query, ""))
 
 
 async def _lookup_identity_user_id(
@@ -112,9 +118,9 @@ async def consume_magic_link(
     )
     email = result.scalar_one_or_none()
     if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Magic link is invalid or expired",
+        return RedirectResponse(
+            _frontend_url("/auth-link", "status=invalid"),
+            status_code=status.HTTP_303_SEE_OTHER,
         )
 
     user_id = await _lookup_identity_user_id(session, EMAIL_PROVIDER, email)
