@@ -13,7 +13,12 @@ def production_settings(**overrides: object) -> Settings:
         "oidc_issuer": "https://accounts.google.com",
         "oidc_client_id": "client-id",
         "oidc_client_secret": "client-secret",
-        "oidc_redirect_uri": "https://app.example/health/api/auth/callback",
+        "oidc_redirect_uri": "https://health.funti.cc/api/auth/callback",
+        "frontend_url": "https://health.funti.cc/app",
+        "email_auth_enabled": True,
+        "magic_link_consume_url": "https://health.funti.cc/api/auth/email/consume",
+        "smtp_host": "smtp-relay.example",
+        "smtp_from_email": "health@example.com",
         "allow_dev_auth": False,
     }
     values.update(overrides)
@@ -22,6 +27,12 @@ def production_settings(**overrides: object) -> Settings:
 
 def test_production_configuration_is_valid_when_complete() -> None:
     production_settings().validate_production()
+
+
+def test_subdomain_defaults_use_root_paths() -> None:
+    settings = Settings(_env_file=None)
+    assert settings.frontend_url == "https://health.funti.cc/app"
+    assert settings.cors_origins == ["https://health.funti.cc"]
 
 
 def test_production_rejects_dev_auth() -> None:
@@ -37,6 +48,9 @@ def test_production_rejects_dev_auth() -> None:
         ("oidc_client_id", "Google OIDC settings"),
         ("oidc_client_secret", "Google OIDC settings"),
         ("oidc_redirect_uri", "OIDC_REDIRECT_URI"),
+        ("magic_link_consume_url", "MAGIC_LINK_CONSUME_URL"),
+        ("smtp_host", "SMTP_HOST"),
+        ("smtp_from_email", "SMTP_HOST and SMTP_FROM_EMAIL"),
     ],
 )
 def test_production_rejects_missing_required_settings(field: str, message: str) -> None:
