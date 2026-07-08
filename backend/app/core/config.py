@@ -34,7 +34,7 @@ class Settings(BaseSettings):
 
     session_cookie_name: str = "hc_session"
     session_ttl_seconds: int = 60 * 60 * 12
-    frontend_url: str = "https://funti.cc/health/"
+    frontend_url: str = "https://health.funti.cc/app"
 
     email_auth_enabled: bool = True
     magic_link_ttl_seconds: int = 15 * 60
@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     smtp_use_ssl: bool = False
 
     allow_dev_auth: bool = False
-    cors_origins: list[str] = ["https://funti.cc"]
+    cors_origins: list[str] = ["https://health.funti.cc"]
 
     @property
     def is_production(self) -> bool:
