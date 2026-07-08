@@ -1,53 +1,63 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-// DEMO-ONLY mock auth. Do NOT use in production.
-// Real deployment must use server-side auth with a private backend.
-
-interface DemoUser {
+export interface AuthUser {
+  id: string;
   email: string;
-  displayName: string;
+  display_name: string | null;
+  status: string;
 }
 
 interface AuthContextValue {
-  user: DemoUser | null;
+  user: AuthUser | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signOut: () => void;
+  refresh: () => Promise<void>;
+  signIn: () => void;
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-const STORAGE_KEY = "hm.demo.user";
+
+async function fetchMe(): Promise<AuthUser | null> {
+  const response = await fetch("/api/me", { credentials: "include" });
+  if (response.status === 401) return null;
+  if (!response.ok) throw new Error("Не удалось проверить сессию");
+  return response.json();
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<DemoUser | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const refresh = useCallback(async () => {
+    setLoading(true);
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setUser(JSON.parse(raw));
-    } catch {}
-    setLoading(false);
+      setUser(await fetchMe());
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    refresh().catch(() => {
+      setUser(null);
+      setLoading(false);
+    });
+  }, [refresh]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       loading,
-      async signIn(email, password) {
-        // Mock: accept anything non-empty. Do not send anywhere.
-        await new Promise((r) => setTimeout(r, 350));
-        if (!email || !password) throw new Error("Введите email и пароль");
-        const u: DemoUser = { email, displayName: "Демо-пациент" };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
-        setUser(u);
+      refresh,
+      signIn() {
+        window.location.assign("/api/auth/login");
       },
-      signOut() {
-        localStorage.removeItem(STORAGE_KEY);
+      async signOut() {
         setUser(null);
+        window.location.assign("/api/auth/logout");
       },
     }),
-    [user, loading]
+    [user, loading, refresh]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

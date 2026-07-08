@@ -20,6 +20,7 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan — startup and shutdown."""
     configure_logging()
+    settings.validate_production()
     logger.info(
         "Starting %s v%s (%s)",
         settings.service_name,
@@ -34,7 +35,6 @@ app = FastAPI(
     title="Health Compass API",
     version=settings.version,
     description="Backend API for the Health Compass personal health portal",
-    root_path="/health/api",
     lifespan=lifespan,
     docs_url="/docs" if not settings.is_production else None,
     redoc_url="/redoc" if not settings.is_production else None,

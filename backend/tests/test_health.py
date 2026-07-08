@@ -13,10 +13,10 @@ from app.main import app
 
 @pytest.mark.asyncio
 async def test_health_healthy_database(test_session):
-    """GET /health/api/health should return 200 with ok status when DB is up."""
+    """GET /health should return 200 with ok status when DB is up."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/health/api/health")
+        response = await client.get("/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
@@ -61,11 +61,12 @@ async def test_health_db_failure_returns_503():
 
     main_app.dependency_overrides[get_session] = broken_get_session
 
-    transport = ASGITransport(app=main_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/health/api/health")
-
-    main_app.dependency_overrides.clear()
+    try:
+        transport = ASGITransport(app=main_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/health")
+    finally:
+        main_app.dependency_overrides.clear()
 
     assert response.status_code == 503
     data = response.json()

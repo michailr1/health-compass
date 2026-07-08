@@ -8,6 +8,17 @@ import sys
 from app.core.config import settings
 
 
+class ServiceContextFilter(logging.Filter):
+    """Ensure all records have fields required by the JSON formatter."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not hasattr(record, "service"):
+            record.service = settings.service_name
+        if not hasattr(record, "environment"):
+            record.environment = settings.environment
+        return True
+
+
 def configure_logging() -> None:
     """Configure structured JSON logging for the application."""
     log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
@@ -16,13 +27,14 @@ def configure_logging() -> None:
         fmt=(
             '{"time":"%(asctime)s","level":"%(levelname)s",'
             '"service":"%(service)s","environment":"%(environment)s",'
-            '"message":"%(message)s"}'
+            '"logger":"%(name)s","message":"%(message)s"}'
         ),
         datefmt="%Y-%m-%dT%H:%M:%S%z",
     )
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
+    handler.addFilter(ServiceContextFilter())
 
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
@@ -31,8 +43,6 @@ def configure_logging() -> None:
         root_logger.removeHandler(h)
     root_logger.addHandler(handler)
 
-    # Set service-wide extra fields
-    logging.Logger.manager.loggerDict  # ensure loggers are loaded
     for name in logging.root.manager.loggerDict:
         logger = logging.getLogger(name)
         logger.setLevel(log_level)

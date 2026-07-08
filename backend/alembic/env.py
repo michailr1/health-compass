@@ -16,10 +16,13 @@ if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
 import app.models.audit_event  # noqa: E402, F401
+import app.models.invitation  # noqa: E402, F401
 import app.models.processing_job  # noqa: E402, F401
-
-# Import all models so Alembic can detect them
+import app.models.profile  # noqa: E402, F401
 import app.models.service_metadata  # noqa: E402, F401
+import app.models.user  # noqa: E402, F401
+import app.models.workspace  # noqa: E402, F401
+import app.models.workspace_access  # noqa: E402, F401
 from app.core.config import settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
 

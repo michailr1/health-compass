@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
+import MagicLinkStatus from "./pages/MagicLinkStatus";
 import Dashboard from "./pages/Dashboard";
 import Oura from "./pages/Oura";
 import Genetics from "./pages/Genetics";
@@ -23,11 +24,12 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter basename="/health">
+      <BrowserRouter>
         <AuthProvider>
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/auth-link" element={<MagicLinkStatus />} />
             <Route
               path="/app"
               element={
