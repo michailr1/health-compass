@@ -19,10 +19,10 @@ Production URL: `https://health.funti.cc`
 - Workspace/profile/dashboard bootstrap.
 - Демонстрационные данные создаются отдельно для каждого профиля и явно помечаются как демонстрационные.
 - FORCE RLS и tenant isolation.
-- Два реальных пользователя входят через Google на прежнем production flow.
-- Email-регистрация и повторный вход работают на прежнем production flow.
 - Новый поддомен `health.funti.cc` развёрнут с HTTPS, Apache VirtualHost и root-path frontend/API.
-- Ручной Google login на `https://health.funti.cc/login` подтверждён владельцем.
+- Google login на новом поддомене подтверждён владельцем.
+- Email Magic Link request/consume на новом поддомене подтверждён владельцем.
+- Logout и повторный вход на новом поддомене подтверждены владельцем.
 
 ## Развёртывание health.funti.cc
 
@@ -71,16 +71,17 @@ https://funti.cc/health/api/auth/callback
 
 Подтверждено владельцем:
 
-- ссылка `https://health.funti.cc` открывается;
-- Google login работает на новом поддомене.
+- новый production URL открывается;
+- Google login работает;
+- Email Magic Link работает;
+- logout работает;
+- повторный вход работает.
 
-Остаётся проверить:
+Открыты только дополнительные security/acceptance проверки:
 
-1. Logout и повторный вход.
-2. Email Magic Link request/consume на новом поддомене.
-3. Одноразовость magic link.
-4. Dashboard и маркировку демонстрационных данных.
-5. Двухпользовательскую изоляцию на новом URL.
+1. Подтвердить одноразовость уже использованной magic link.
+2. Проверить dashboard и маркировку демонстрационных данных.
+3. Провести двухпользовательскую проверку на новом URL.
 
 ## Последние security-исправления
 
@@ -110,8 +111,8 @@ https://funti.cc/health/api/auth/callback
 ## Следующие действия
 
 1. Исправить или корректно изолировать 4 pytest failures.
-2. Завершить оставшиеся ручные auth/security проверки.
-3. После ручной приёмки включить redirect со старого `/health`.
+2. Завершить три дополнительные acceptance/security проверки.
+3. После этого включить redirect со старого `/health`.
 4. Создать PR `feat/direct-google-and-email-auth → main`.
 5. Выпустить тег `v0.1.0-auth-mvp`.
 6. Начать PHASE-03 с утверждения API contracts для первого Human-first vertical slice.
