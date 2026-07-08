@@ -41,14 +41,14 @@ def _set_short_cookie(response: RedirectResponse, name: str, value: str) -> None
         secure=True,
         httponly=True,
         samesite="lax",
-        path="/health/api/auth",
+        path="/api/auth",
     )
 
 
 def _delete_oidc_cookies(response: RedirectResponse) -> None:
-    response.delete_cookie(STATE_COOKIE, path="/health/api/auth")
-    response.delete_cookie(NONCE_COOKIE, path="/health/api/auth")
-    response.delete_cookie(VERIFIER_COOKIE, path="/health/api/auth")
+    response.delete_cookie(STATE_COOKIE, path="/api/auth")
+    response.delete_cookie(NONCE_COOKIE, path="/api/auth")
+    response.delete_cookie(VERIFIER_COOKIE, path="/api/auth")
 
 
 async def _start_google_login() -> RedirectResponse:
@@ -198,7 +198,7 @@ async def callback(
         secure=True,
         httponly=True,
         samesite="lax",
-        path="/health/api",
+        path="/api",
     )
     return response
 
@@ -214,7 +214,7 @@ async def _logout_response(request: Request, session: AsyncSession) -> RedirectR
             .values(revoked_at=datetime.datetime.now(datetime.UTC))
         )
     response = RedirectResponse(settings.frontend_url, status_code=status.HTTP_303_SEE_OTHER)
-    response.delete_cookie(settings.session_cookie_name, path="/health/api")
+    response.delete_cookie(settings.session_cookie_name, path="/api")
     _delete_oidc_cookies(response)
     return response
 
