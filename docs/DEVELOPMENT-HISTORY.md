@@ -88,7 +88,39 @@ Root cause:
 
 `https://health.funti.cc`
 
-DNS и новый Google redirect URI добавлены. Код и production deployment ещё должны быть переведены на root-path поддомена. Старый URL сохраняется до успешной проверки и затем переводится на redirect.
+DNS и новый Google redirect URI добавлены владельцем.
+
+Production deployment выполнен из commit:
+
+```text
+4e7df2bdeb313cd788165c182b64ef83487720bc
+```
+
+Подтверждено:
+
+- DNS `health.funti.cc → 172.245.108.154`;
+- отдельный Let's Encrypt certificate;
+- Apache VirtualHost и SPA fallback;
+- backend без legacy root path;
+- frontend/API paths от корня поддомена;
+- `/`, `/login`, `/api/health` → 200;
+- Google start endpoint → 307 с новым callback и `prompt=select_account`;
+- SPA routes → 200;
+- старый `/health` пока остаётся доступен;
+- свежие логи без 500/503/54001/Traceback.
+
+Проверки на VPS:
+
+- compileall: OK;
+- Ruff: all checks passed;
+- frontend build: successful;
+- pytest: `14 PASS, 4 FAIL`.
+
+Четыре pytest failures сохранены как release debt: три migration-теста запускались без тестовой PostgreSQL, один health test ожидает старое поведение. Они должны быть закрыты до merge в `main`.
+
+Новый Authorized redirect URI уже был добавлен владельцем до деплоя. Сообщение агента о необходимости его добавить признано устаревшим пунктом чек-листа.
+
+Ручные Google/email login tests на новом домене остаются последним этапом приёмки перед redirect старого URL и merge в `main`.
 
 ## 2026-07 — Fable Stage 3 и 3.5
 
