@@ -120,12 +120,14 @@ Production deployment выполнен из commit:
 
 Новый Authorized redirect URI уже был добавлен владельцем до деплоя. Сообщение агента о необходимости его добавить признано устаревшим пунктом чек-листа.
 
-Ручная проверка владельцем подтвердила:
+Ручная проверка владельцем подтвердила на новом production URL:
 
-- новый production URL открывается;
-- Google login на `health.funti.cc` работает.
+- Google login;
+- Email Magic Link request/consume;
+- logout;
+- повторный вход.
 
-Остаются Email Magic Link, logout/re-login, одноразовость ссылки и двухпользовательская проверка на новом URL перед redirect старого адреса и merge в `main`.
+Открыты только дополнительные acceptance/security проверки: одноразовость использованной magic link, маркировка демонстрационных данных и двухпользовательская изоляция на новом URL.
 
 ## 2026-07 — Fable Stage 3 и 3.5
 
