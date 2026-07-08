@@ -52,7 +52,7 @@ def _set_session_cookie(response: RedirectResponse, token: str) -> None:
         secure=True,
         httponly=True,
         samesite="lax",
-        path="/health/api",
+        path="/api",
     )
 
 
