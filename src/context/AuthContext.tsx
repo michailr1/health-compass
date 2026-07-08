@@ -18,7 +18,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 async function fetchMe(): Promise<AuthUser | null> {
-  const response = await fetch("/health/api/me", { credentials: "include" });
+  const response = await fetch("/api/me", { credentials: "include" });
   if (response.status === 401) return null;
   if (!response.ok) throw new Error("Не удалось проверить сессию");
   return response.json();
@@ -50,11 +50,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       refresh,
       signIn() {
-        window.location.assign("/health/api/auth/login");
+        window.location.assign("/api/auth/login");
       },
       async signOut() {
         setUser(null);
-        window.location.assign("/health/api/auth/logout");
+        window.location.assign("/api/auth/logout");
       },
     }),
     [user, loading, refresh]
