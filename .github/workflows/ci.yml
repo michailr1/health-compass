@@ -115,6 +115,7 @@ jobs:
             tests/test_migrations.py \
             tests/test_basic_health_profile_rls.py \
             tests/test_account_linking_postgres.py \
+            tests/test_identity_removal_postgres.py \
             tests/test_duplicate_resolution_postgres.py \
             > migration-test.log 2>&1 || {
               tail -n 240 migration-test.log > migration-failure-tail.log
