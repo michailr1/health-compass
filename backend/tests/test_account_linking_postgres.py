@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 import psycopg
 import pytest
@@ -103,3 +105,100 @@ def test_security_definer_functions_use_empty_search_path_and_row_security_off()
         assert security_definer is True, name
         assert any(item.startswith("search_path=") for item in config), name
         assert "row_security=off" in config, name
+
+
+def test_concurrent_link_email_completion_creates_one_identity() -> None:
+    app_dsn = require_dsn(APP_DSN, "HC_TEST_DATABASE_APP_DSN")
+    migrator_dsn = require_dsn(MIGRATOR_DSN, "HC_TEST_DATABASE_MIGRATOR_DSN")
+
+    user_id = uuid.uuid4()
+    google_identity_id = uuid.uuid4()
+    intent_id = uuid.uuid4()
+    token_id = uuid.uuid4()
+    email = f"hc-link-{user_id.hex}@example.test"
+    google_subject = f"google-{user_id.hex}"
+    browser_hash = "b" * 64
+    token_hash = "t" * 64
+
+    with psycopg.connect(migrator_dsn) as connection, connection.cursor() as cursor:
+        cursor.execute("SET ROLE health_compass_rls_definer")
+        cursor.execute(
+            """
+            INSERT INTO health_compass.users (id, email, display_name, status)
+            VALUES (%s, %s, %s, 'active')
+            """,
+            (user_id, email, "HC concurrency test"),
+        )
+        cursor.execute(
+            """
+            INSERT INTO health_compass.user_identities (
+              id, user_id, provider, subject, issuer, claims, last_seen_at
+            ) VALUES (
+              %s, %s, 'google', %s, 'https://accounts.google.com',
+              jsonb_build_object('email', %s, 'email_verified', true), now()
+            )
+            """,
+            (google_identity_id, user_id, google_subject, email),
+        )
+        cursor.execute(
+            """
+            INSERT INTO health_compass.account_link_intents (
+              id, flow_type, status, normalized_email, candidate_user_id,
+              initiating_provider, initiating_subject, required_provider,
+              initiating_claims, browser_binding_hash, expires_at
+            ) VALUES (
+              %s, 'settings_add_email', 'pending_confirmation', %s, %s,
+              'google', %s, 'email',
+              jsonb_build_object('email', %s, 'email_verified', true),
+              %s, now() + interval '15 minutes'
+            )
+            """,
+            (intent_id, email, user_id, google_subject, email, browser_hash),
+        )
+        cursor.execute(
+            """
+            INSERT INTO health_compass.account_link_email_tokens (
+              id, intent_id, purpose, token_hash, expires_at
+            ) VALUES (%s, %s, 'link_email', %s, now() + interval '15 minutes')
+            """,
+            (token_id, intent_id, token_hash),
+        )
+
+    def complete() -> dict:
+        with psycopg.connect(app_dsn) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT health_compass.app_consume_link_email_token_result(%s, %s, %s)
+                """,
+                (token_hash, browser_hash, "https://accounts.google.com"),
+            )
+            return cursor.fetchone()[0]
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(lambda _: complete(), range(2)))
+
+        assert all(result["user_id"] == str(user_id) for result in results)
+        assert all(result["intent_id"] == str(intent_id) for result in results)
+        assert sorted(result["replayed"] for result in results) == [False, True]
+
+        with psycopg.connect(migrator_dsn) as connection, connection.cursor() as cursor:
+            cursor.execute("SET ROLE health_compass_rls_definer")
+            cursor.execute(
+                """
+                SELECT count(*)
+                FROM health_compass.user_identities
+                WHERE provider = 'email' AND subject = %s AND user_id = %s
+                """,
+                (email, user_id),
+            )
+            assert cursor.fetchone()[0] == 1
+            cursor.execute(
+                "SELECT status FROM health_compass.account_link_intents WHERE id = %s",
+                (intent_id,),
+            )
+            assert cursor.fetchone()[0] == "completed"
+    finally:
+        with psycopg.connect(migrator_dsn) as connection, connection.cursor() as cursor:
+            cursor.execute("SET ROLE health_compass_rls_definer")
+            cursor.execute("DELETE FROM health_compass.users WHERE id = %s", (user_id,))
