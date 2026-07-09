@@ -7,7 +7,7 @@ import hashlib
 import secrets
 import smtplib
 from email.message import EmailMessage
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 from app.core.config import settings
 
@@ -31,19 +31,21 @@ def build_magic_link(token: str) -> str:
     return f"{base}?{urlencode({'token': token})}"
 
 
-def _send_sync(recipient: str, link: str) -> None:
+def build_link_email_url(token: str) -> str:
+    parts = urlsplit(settings.frontend_url)
+    path = "/api/auth/link/email/consume"
+    return urlunsplit((parts.scheme, parts.netloc, path, urlencode({"token": token}), ""))
+
+
+def _send_sync(recipient: str, subject: str, body: str) -> None:
     if not settings.smtp_host or not settings.smtp_from_email:
         raise RuntimeError("SMTP is not configured")
 
     message = EmailMessage()
-    message["Subject"] = "Вход в Health Compass"
+    message["Subject"] = subject
     message["From"] = settings.smtp_from_email
     message["To"] = recipient
-    message.set_content(
-        "Для входа в Health Compass откройте ссылку:\n\n"
-        f"{link}\n\n"
-        "Ссылка действует 15 минут и может быть использована только один раз."
-    )
+    message.set_content(body)
 
     smtp_class = smtplib.SMTP_SSL if settings.smtp_use_ssl else smtplib.SMTP
     with smtp_class(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
@@ -55,4 +57,26 @@ def _send_sync(recipient: str, link: str) -> None:
 
 
 async def send_magic_link(recipient: str, token: str) -> None:
-    await asyncio.to_thread(_send_sync, recipient, build_magic_link(token))
+    link = build_magic_link(token)
+    await asyncio.to_thread(
+        _send_sync,
+        recipient,
+        "Вход в Health Compass",
+        "Для входа в Health Compass откройте ссылку:\n\n"
+        f"{link}\n\n"
+        "Ссылка действует 15 минут и может быть использована только один раз.",
+    )
+
+
+async def send_account_link_email(recipient: str, token: str) -> None:
+    link = build_link_email_url(token)
+    await asyncio.to_thread(
+        _send_sync,
+        recipient,
+        "Подтверждение способа входа Health Compass",
+        "Вы начали связывание входа через Google с существующим профилем Health Compass.\n\n"
+        "Для подтверждения владения email откройте специальную ссылку:\n\n"
+        f"{link}\n\n"
+        "Эта ссылка имеет назначение link_email, действует ограниченное время и не может использоваться для обычного входа. "
+        "Если вы не начинали связывание, проигнорируйте письмо.",
+    )
