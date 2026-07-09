@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     smtp_starttls: bool = True
     smtp_use_ssl: bool = False
 
+    account_linking_enabled: bool = False
+    account_link_intent_ttl_seconds: int = 10 * 60
+    account_link_cookie_name: str = "hc_account_link"
+
     allow_dev_auth: bool = False
     cors_origins: list[str] = ["https://health.funti.cc"]
 
@@ -65,6 +69,8 @@ class Settings(BaseSettings):
     def validate_production(self) -> None:
         if self.allow_dev_auth and not self.is_development:
             raise ValueError("ALLOW_DEV_AUTH must be false outside development")
+        if self.account_link_intent_ttl_seconds < 60 or self.account_link_intent_ttl_seconds > 1800:
+            raise ValueError("ACCOUNT_LINK_INTENT_TTL_SECONDS must be between 60 and 1800")
         if not self.is_production:
             return
         if not self.database_url:

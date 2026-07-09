@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 import pytest
 from alembic.command import downgrade, upgrade
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 
 TEST_DATABASE_ENV = "TEST_DATABASE_MIGRATOR_URL"
@@ -35,6 +36,13 @@ def _get_alembic_config() -> Config:
     config = Config("alembic.ini")
     config.set_main_option("sqlalchemy.url", _get_migrator_url())
     return config
+
+
+def _current_database_revision(engine) -> str:
+    with engine.connect() as connection:
+        return connection.execute(
+            text("SELECT version_num FROM health_compass.alembic_version")
+        ).scalar_one()
 
 
 def _assert_revision_0022(engine) -> None:
@@ -119,12 +127,15 @@ def _assert_revision_0021(engine) -> None:
         assert helper_exists is None
 
 
-def test_migration_0021_0022_cycle() -> None:
-    """Verify clean upgrade and the required 0021 -> 0022 -> 0021 -> 0022 cycle."""
+def test_migration_0021_0022_cycle_and_current_head() -> None:
+    """Verify the historical 0021↔0022 boundary, then the current full head."""
     config = _get_alembic_config()
     engine = create_engine(_get_migrator_url())
+    expected_head = ScriptDirectory.from_config(config).get_current_head()
+    assert expected_head is not None
+
     try:
-        upgrade(config, "head")
+        upgrade(config, "0022")
         _assert_revision_0022(engine)
 
         downgrade(config, "0021")
@@ -132,5 +143,14 @@ def test_migration_0021_0022_cycle() -> None:
 
         upgrade(config, "0022")
         _assert_revision_0022(engine)
+
+        upgrade(config, "head")
+        assert _current_database_revision(engine) == expected_head
+
+        downgrade(config, "-1")
+        assert _current_database_revision(engine) != expected_head
+
+        upgrade(config, "head")
+        assert _current_database_revision(engine) == expected_head
     finally:
         engine.dispose()

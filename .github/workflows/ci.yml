@@ -34,7 +34,23 @@ jobs:
       - name: Ruff
         run: ruff check app tests alembic
       - name: Unit tests
-        run: pytest -q -m "not integration"
+        id: backend_tests
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest -q -m "not integration" > backend-test.log 2>&1 || {
+            tail -n 200 backend-test.log > backend-failure-tail.log
+            cat backend-failure-tail.log
+            exit 1
+          }
+      - name: Upload backend failure tail
+        if: failure() && steps.backend_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-failure-tail
+          path: backend/backend-failure-tail.log
+          if-no-files-found: error
+          retention-days: 3
 
   migrations:
     name: PostgreSQL migration and RLS cycle
@@ -63,6 +79,9 @@ jobs:
       TEST_DATABASE_URL: postgresql+asyncpg://health_compass_app:test@127.0.0.1:5432/health_compass_test
       DATABASE_URL: postgresql+asyncpg://health_compass_app:test@127.0.0.1:5432/health_compass_test
       DATABASE_MIGRATOR_URL: postgresql+psycopg://health_compass_migrator:test@127.0.0.1:5432/health_compass_test
+      HC_TEST_DATABASE_ADMIN_DSN: postgresql://postgres:postgres@127.0.0.1:5432/health_compass_test
+      HC_TEST_DATABASE_APP_DSN: postgresql://health_compass_app:test@127.0.0.1:5432/health_compass_test
+      HC_TEST_DATABASE_MIGRATOR_DSN: postgresql://health_compass_migrator:test@127.0.0.1:5432/health_compass_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -95,8 +114,11 @@ jobs:
           pytest -q \
             tests/test_migrations.py \
             tests/test_basic_health_profile_rls.py \
+            tests/test_account_linking_postgres.py \
+            tests/test_identity_removal_postgres.py \
+            tests/test_duplicate_resolution_postgres.py \
             > migration-test.log 2>&1 || {
-              tail -n 160 migration-test.log > migration-failure-tail.log
+              tail -n 240 migration-test.log > migration-failure-tail.log
               cat migration-failure-tail.log
               exit 1
             }
@@ -124,6 +146,9 @@ jobs:
         run: >-
           npx eslint
           src/pages/HealthProfile.tsx
+          src/pages/AccountLink.tsx
+          src/pages/SignInMethods.tsx
+          src/pages/SignInMethods.test.ts
           src/lib/api.ts
           src/App.tsx
           src/components/AppLayout.tsx

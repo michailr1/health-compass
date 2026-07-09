@@ -101,37 +101,73 @@ Backup перед deployment Slice 1:
 
 Production DB для автоматических тестов не используется.
 
-## Текущая разработка
+## Активный дефект identity linking
 
-Начат PHASE-02.5 Slice 2 — Clinical Context.
+Один человек при входе через Google и Email Magic Link с одинаковым verified email сейчас может получить два разных `user_id`, workspace и health profile.
+
+Причина: identity определяется по `(provider, subject)`, а совпадение email не должно автоматически объединять аккаунты. Отсутствует безопасный link-on-login flow.
+
+Запрещено исправлять это простым merge по email.
+
+## Текущая разработка — PHASE-02.6 Account Linking MVP
 
 Рабочая ветка:
+
+```text
+feat/account-linking-mvp
+```
+
+Каноническая спецификация:
+
+```text
+docs/ACCOUNT-LINKING-MVP.md
+```
+
+Принятые сценарии:
+
+- Google-first → Email-second: Magic Link подтверждает email, затем требуется Google OAuth существующего аккаунта;
+- Email-first → Google-second: Google OAuth подтверждает Google identity, затем требуется специальная ссылка `link_email` существующего email-аккаунта;
+- до завершения подтверждения новый user/workspace/profile не создаётся;
+- после связывания оба способа всегда ведут к одному `user_id`, workspace и profile;
+- совпадение verified email только запускает link-flow и само по себе ничего не объединяет;
+- отказ может создать отдельный аккаунт только после явного подтверждения последствий.
+
+Состав PHASE-02.6:
+
+- HC-025 — link-on-login и UI «Способы входа»;
+- HC-026 — контролируемый разбор существующих дублей;
+- HC-027 — запрет молчаливого создания новых дублей в bootstrap;
+- HC-028 — добровольная TOTP 2FA, не блокирующая возврат к Slice 2.
+
+## Slice 2 Clinical Context
+
+Спецификация сохранена в ветке:
 
 ```text
 feat/clinical-context-slice-2
 ```
 
-Спецификация:
+Файл:
 
 ```text
 docs/CLINICAL-CONTEXT-SLICE-2.md
 ```
 
-План Slice 2:
+Реализация Slice 2 заморожена до завершения HC-025 и HC-026.
 
-- хронические состояния;
-- аллергии и непереносимости;
-- лекарства;
-- витамины, минералы и БАДы;
-- дозировка, единица, частота, даты и active/inactive;
-- provenance и confirmation;
-- audit;
-- FORCE RLS;
-- migration `0023`;
-- API, UI и cross-user tests.
+## Ближайший порядок работ
+
+1. Аудит фактического Google callback, Magic Link request/consume и bootstrap.
+2. Точная техническая спецификация HC-025 по реальному коду.
+3. Миграция link-intent, backend flows и security tests.
+4. UI link-on-login и «Способы входа».
+5. HC-026 для уже существующих дублей.
+6. CI, review, merge и отдельный production deployment.
+7. Возврат к Clinical Context Slice 2.
 
 ## Известные ограничения
 
+- Без HC-025 один человек может получить разные профили для Google и Magic Link.
 - Реальные загрузки документов и OCR ещё не реализованы.
 - Лабораторные показатели и их динамика ещё не реализованы.
 - Интеграции Oura и других wearable-источников ещё не реализованы.

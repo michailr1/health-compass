@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime
 import uuid
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
@@ -12,16 +12,19 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.account_linking import hash_secret, new_browser_binding
 from app.core.config import settings
 from app.core.magic_links import hash_magic_token, new_magic_token, normalize_email, send_magic_link
 from app.core.session_tokens import hash_token, new_session_token
 from app.db.rls import apply_session_context, apply_user_context
 from app.db.session import get_session
 from app.models.user import AuthSession, User, UserIdentity
+from app.services.account_linking import create_account_link_intent, lookup_verified_email_candidate
 from app.services.bootstrap import ensure_personal_workspace
 
 router = APIRouter(prefix="/auth/email", tags=["auth"])
 EMAIL_PROVIDER = "email"
+GOOGLE_PROVIDER = "google"
 EMAIL_ISSUER = "health-compass-email"
 
 
@@ -33,9 +36,9 @@ class MagicLinkAccepted(BaseModel):
     message: str
 
 
-def _frontend_url(path: str, query: str = "") -> str:
+def _frontend_url(path: str, query: dict[str, str] | None = None) -> str:
     parts = urlsplit(settings.frontend_url)
-    return urlunsplit((parts.scheme, parts.netloc, path, query, ""))
+    return urlunsplit((parts.scheme, parts.netloc, path, urlencode(query or {}), ""))
 
 
 async def _lookup_identity_user_id(
@@ -59,6 +62,18 @@ def _set_session_cookie(response: RedirectResponse, token: str) -> None:
         httponly=True,
         samesite="lax",
         path="/api",
+    )
+
+
+def _set_account_link_cookie(response: RedirectResponse, value: str) -> None:
+    response.set_cookie(
+        settings.account_link_cookie_name,
+        value,
+        max_age=settings.account_link_intent_ttl_seconds,
+        secure=True,
+        httponly=True,
+        samesite="lax",
+        path="/api/auth",
     )
 
 
@@ -119,11 +134,48 @@ async def consume_magic_link(
     email = result.scalar_one_or_none()
     if not email:
         return RedirectResponse(
-            _frontend_url("/auth-link", "status=invalid"),
+            _frontend_url("/auth-link", {"status": "invalid"}),
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
     user_id = await _lookup_identity_user_id(session, EMAIL_PROVIDER, email)
+    if user_id is None and settings.account_linking_enabled:
+        candidate = await lookup_verified_email_candidate(session, email)
+        if candidate.has_existing_duplicates:
+            return RedirectResponse(
+                _frontend_url(
+                    "/auth/link-account",
+                    {"status": "existing-duplicates", "required": GOOGLE_PROVIDER},
+                ),
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        if candidate.has_single_candidate:
+            browser_binding = new_browser_binding()
+            intent_id = await create_account_link_intent(
+                session,
+                flow_type="email_first_google_existing",
+                normalized_email=email,
+                candidate_user_id=candidate.user_id,
+                initiating_provider=EMAIL_PROVIDER,
+                initiating_subject=email,
+                required_provider=GOOGLE_PROVIDER,
+                browser_binding_hash=hash_secret(browser_binding),
+                expires_at=datetime.datetime.now(datetime.UTC)
+                + datetime.timedelta(seconds=settings.account_link_intent_ttl_seconds),
+                initiating_claims={"email": email, "email_verified": True},
+                created_ip=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+            )
+            response = RedirectResponse(
+                _frontend_url(
+                    "/auth/link-account",
+                    {"intent": str(intent_id), "required": GOOGLE_PROVIDER},
+                ),
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+            _set_account_link_cookie(response, browser_binding)
+            return response
+
     if user_id is None:
         user_id = uuid.uuid4()
         await apply_user_context(session, user_id)
@@ -149,7 +201,6 @@ async def consume_magic_link(
         await apply_user_context(session, user_id)
         user_result = await session.execute(select(User).where(User.id == user_id))
         user = user_result.scalar_one()
-        user.email = email
         identity_result = await session.execute(
             select(UserIdentity).where(
                 UserIdentity.provider == EMAIL_PROVIDER,
