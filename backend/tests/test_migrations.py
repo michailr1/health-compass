@@ -85,10 +85,34 @@ def test_migration_upgrade():
         assert "service_metadata" in tables
         assert "audit_events" in tables
         assert "processing_jobs" in tables
+        assert "body_measurements" in tables
+        assert "profile_audit_events" in tables
+        assert "user_consents" in tables
 
         result = conn.execute(text("SELECT version_num FROM health_compass.alembic_version"))
         version = result.scalar()
-        assert version is not None
+        assert version == "0022"
+
+        rls_rows = conn.execute(
+            text(
+                "SELECT relname, relrowsecurity, relforcerowsecurity "
+                "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "WHERE n.nspname = 'health_compass' "
+                "AND relname IN ('body_measurements', 'profile_audit_events', 'user_consents')"
+            )
+        ).all()
+        assert len(rls_rows) == 3
+        assert all(row[1] and row[2] for row in rls_rows)
+
+        public_execute = conn.execute(
+            text(
+                "SELECT has_function_privilege(" 
+                "'public', "
+                "'health_compass.app_can_edit_profile(uuid)', "
+                "'EXECUTE')"
+            )
+        ).scalar_one()
+        assert public_execute is False
 
 
 @pytest.mark.order(2)
@@ -130,3 +154,6 @@ def test_migration_upgrade_after_downgrade():
         assert "service_metadata" in tables
         assert "audit_events" in tables
         assert "processing_jobs" in tables
+        assert "body_measurements" in tables
+        assert "profile_audit_events" in tables
+        assert "user_consents" in tables
