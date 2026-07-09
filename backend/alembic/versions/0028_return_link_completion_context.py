@@ -1,4 +1,4 @@
-"""Return real intent_id and user_id from both linking completion functions.
+"""Add result-returning completion functions without replacing 0025/0026 functions.
 
 Revision ID: 0028
 Revises: 0027
@@ -19,17 +19,11 @@ APP = "health_compass_app"
 
 
 def upgrade() -> None:
-    old_email_sig = f"{S}.app_consume_link_email_token(text, text, text)"
-    old_google_sig = f"{S}.app_complete_google_link(uuid, text, text, text, text, text, text)"
-    op.execute(f"REVOKE EXECUTE ON FUNCTION {old_email_sig} FROM {APP}")
-    op.execute(f"REVOKE EXECUTE ON FUNCTION {old_google_sig} FROM {APP}")
-    op.execute(f"DROP FUNCTION {old_email_sig}")
-    op.execute(f"DROP FUNCTION {old_google_sig}")
     op.execute(f"GRANT CREATE ON SCHEMA {S} TO {R}")
 
     op.execute(
         f"""
-        CREATE FUNCTION {S}.app_consume_link_email_token(
+        CREATE FUNCTION {S}.app_consume_link_email_token_result(
           link_token_hash text,
           expected_browser_binding_hash text,
           google_issuer text
@@ -148,7 +142,7 @@ def upgrade() -> None:
 
     op.execute(
         f"""
-        CREATE FUNCTION {S}.app_complete_google_link(
+        CREATE FUNCTION {S}.app_complete_google_link_result(
           target_intent_id uuid,
           expected_browser_binding_hash text,
           confirmed_state_hash text,
@@ -259,8 +253,8 @@ def upgrade() -> None:
         """
     )
 
-    email_sig = f"{S}.app_consume_link_email_token(text, text, text)"
-    google_sig = f"{S}.app_complete_google_link(uuid, text, text, text, text, text, text)"
+    email_sig = f"{S}.app_consume_link_email_token_result(text, text, text)"
+    google_sig = f"{S}.app_complete_google_link_result(uuid, text, text, text, text, text, text)"
     for signature in (email_sig, google_sig):
         op.execute(f"ALTER FUNCTION {signature} OWNER TO {R}")
         op.execute(f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC")
@@ -269,4 +263,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError("0028 downgrade is intentionally blocked; restore 0027 from backup")
+    email_sig = f"{S}.app_consume_link_email_token_result(text, text, text)"
+    google_sig = f"{S}.app_complete_google_link_result(uuid, text, text, text, text, text, text)"
+    for signature in (google_sig, email_sig):
+        op.execute(f"REVOKE EXECUTE ON FUNCTION {signature} FROM {APP}")
+        op.execute(f"DROP FUNCTION IF EXISTS {signature}")
