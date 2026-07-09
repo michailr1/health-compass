@@ -1,117 +1,187 @@
 # Health Compass — текущее состояние
 
 Дата: 2026-07-09  
-Рабочая ветка: `feat/direct-google-and-email-auth`  
+Основная ветка: `main`  
 Production URL: `https://health.funti.cc`  
-Старый переходный URL: `https://funti.cc/health`  
-Развёрнутый commit: `e3523ac03331d3c51e722a0fe54ee1a24a464141`
+Старый URL: `https://funti.cc/health` → 301 на production-поддомен  
+Развёрнутый commit: `77453af7c5cb6aae77ff4164069131737981f208`  
+Alembic revision: `0022 (head)`
 
 ## Что работает
 
 - FastAPI backend и React/Vite frontend.
-- PostgreSQL + Alembic, production head `0021`.
-- Прямой Google OIDC с `prompt=select_account`.
+- PostgreSQL + Alembic.
+- Прямой Google OAuth 2.0 / OIDC.
 - Email Magic Links через Brevo.
 - Friendly page для использованной или просроченной magic link.
-- Локальные серверные сессии и logout с отзывом сессии.
-- Workspace/profile/dashboard bootstrap.
-- Демонстрационные данные создаются отдельно для каждого профиля и явно помечены.
-- FORCE RLS и tenant isolation.
-- Production-поддомен `health.funti.cc` работает через HTTPS и отдельный Apache VirtualHost.
+- Локальные PostgreSQL sessions и logout с отзывом сессии.
+- Собственные users, identities, workspaces, profiles и permissions.
+- FORCE ROW LEVEL SECURITY и tenant isolation.
+- Production-поддомен `health.funti.cc` через HTTPS и отдельный Apache VirtualHost.
+- Progressive Health Intake, Slice 1 — Basic Health Profile.
 
-## Подтверждённая приёмка
+## Auth MVP
 
-- Google login: PASS.
-- Email Magic Link: PASS.
-- Logout и повторный вход: PASS.
-- Повторное использование magic link отклоняется: PASS.
-- Friendly invalid-link page: PASS.
-- Dashboard и маркировка демоданных: PASS.
-- Tenant isolation между двумя пользователями: PASS.
+Auth MVP завершён и принят.
 
-Ручная cross-user проверка:
+Подтверждено:
 
-- у пользователей разные `user_id`, `profile_id`, `workspace_id`, `dashboard_id`;
-- каждый видит один собственный профиль;
-- B → dashboard A: 404;
-- A → dashboard B: 404;
-- чужие профили в `/api/profiles` отсутствуют.
+- Google login: PASS;
+- Email Magic Link: PASS;
+- logout и повторный вход: PASS;
+- повторное использование magic link отклоняется: PASS;
+- friendly invalid-link page: PASS;
+- tenant isolation между двумя пользователями: PASS;
+- пользователь A не читает dashboard/profile пользователя B;
+- пользователь B не читает dashboard/profile пользователя A;
+- чужие ресурсы через API возвращают `404`.
+
+Production release auth MVP: `v0.1.0-auth-mvp`.
+
+## PHASE-02.5 Slice 1 — Basic Health Profile
+
+Реализовано и развёрнуто:
+
+- экран `/app/profile`;
+- имя профиля;
+- дата рождения;
+- поле `sex` со значениями `male`, `female`, `not_specified`;
+- рост в сантиметрах;
+- история веса через `body_measurements`;
+- consent gate для медицинских данных;
+- contextual readiness без health score;
+- provenance;
+- append-only audit;
+- soft validation необычных значений;
+- аннулирование ошибочного измерения без физического удаления;
+- RLS и cross-user negative tests;
+- регресс-тест SQLSTATE `54001`;
+- автоматическое определение IANA timezone браузером;
+- ручная корректировка timezone через ненавязчивую настройку;
+- собственный favicon и актуальные метаданные Health Compass.
+
+Часовой пояс нужен для корректного отнесения сна, тренировок, измерений и импортированных событий к локальным суткам. Он не является обязательным ручным полем основной формы.
 
 ## Последний production deployment
 
 Подтверждено на `funti.cc` (`172.245.108.154`):
 
-- HEAD `e3523ac03331d3c51e722a0fe54ee1a24a464141`;
-- Git status clean;
-- compileall: OK;
-- Ruff: OK;
-- pytest: `15 PASS, 11 SKIP, 0 FAIL`;
-- frontend build: OK;
-- frontend tests: `1 PASS`;
-- systemd: active;
-- Apache configtest: Syntax OK;
-- `/api/health`, `/`, `/login`, `/auth-link?status=invalid`: 200;
-- свежие логи без 500, 503, 54001, 42501, Traceback и permission denied.
+- HEAD `77453af7c5cb6aae77ff4164069131737981f208`;
+- Alembic `0022 (head)`;
+- backend service active;
+- frontend release переключён через `/opt/health-compass/current-subdomain`;
+- `/api/health` → 200;
+- `/` → 200;
+- `/app/profile` → 200;
+- Google start endpoint → 307 на `accounts.google.com`;
+- favicon и title обновлены;
+- timezone UI работает;
+- свежие логи без ERROR, CRITICAL и Traceback.
 
-Причины SKIP:
+Backup перед deployment Slice 1:
 
-- тесты с БД требуют `TEST_DATABASE_*`;
-- migration suite требует `TEST_DATABASE_MIGRATOR_URL`;
-- production DB в тестах не используется.
+```text
+/opt/health-compass/backups/health_compass_20260709T122531Z.sql.gz
+```
+
+## Тесты Slice 1
+
+Перед merge и deployment подтверждены:
+
+- backend compile;
+- Ruff;
+- backend unit tests;
+- frontend lint;
+- frontend tests;
+- production frontend build;
+- PostgreSQL migration cycle `0021 → 0022 → 0021 → 0022`;
+- FORCE RLS scan;
+- cross-user matrix owner/edit/view/analyze/outsider;
+- отсутствие PUBLIC EXECUTE на definer helpers.
+
+Production DB для автоматических тестов не используется.
+
+## Текущая разработка
+
+Начат PHASE-02.5 Slice 2 — Clinical Context.
+
+Рабочая ветка:
+
+```text
+feat/clinical-context-slice-2
+```
+
+Спецификация:
+
+```text
+docs/CLINICAL-CONTEXT-SLICE-2.md
+```
+
+План Slice 2:
+
+- хронические состояния;
+- аллергии и непереносимости;
+- лекарства;
+- витамины, минералы и БАДы;
+- дозировка, единица, частота, даты и active/inactive;
+- provenance и confirmation;
+- audit;
+- FORCE RLS;
+- migration `0023`;
+- API, UI и cross-user tests.
+
+## Известные ограничения
+
+- Реальные загрузки документов и OCR ещё не реализованы.
+- Лабораторные показатели и их динамика ещё не реализованы.
+- Интеграции Oura и других wearable-источников ещё не реализованы.
+- Invitations и совместный доступ пока не готовы как законченный пользовательский flow.
+- Contextual Intake Slice 3 ещё не реализован.
+- AI-объяснения и doctor report пока не реализованы.
 
 ## Google Cloud Console
 
-Новый callback уже добавлен:
+Действующий callback:
 
 ```text
 https://health.funti.cc/api/auth/callback
 ```
 
-Старый callback пока сохраняется:
+Старый callback можно удалить вручную после дополнительной проверки:
 
 ```text
 https://funti.cc/health/api/auth/callback
 ```
-
-## Следующие действия
-
-1. Включить redirect со старого `/health` на `https://health.funti.cc`.
-2. Проверить redirect и rollback.
-3. Создать PR `feat/direct-google-and-email-auth → main`.
-4. Выпустить тег `v0.1.0-auth-mvp`.
-5. Начать PHASE-03 с утверждения API contracts первого Human-first vertical slice.
-
-## Известные ограничения
-
-- Медицинские показатели пока демонстрационные.
-- Реальные загрузки анализов и интеграции устройств ещё не реализованы.
-- Magic link consume остаётся GET-based; scanner-safe confirmation требуется позже.
-- Invitations и совместный доступ пока не готовы.
-- Product/UX и AI baseline утверждены только на уровне документации.
-- Production пока развёрнут из feature-ветки; после merge источником истины должен стать `main`.
 
 ## Роли
 
 ### ChatGPT / coding role
 
 - архитектура;
+- data model и API contracts;
 - продуктовый код;
-- миграции и тесты;
-- ADR и документация;
-- точные runbook-инструкции.
+- миграции, RLS и тесты;
+- frontend;
+- документация;
+- точные задачи VPS-агенту.
 
 ### VPS-агент
 
 - подключение только к `funti.cc` (`172.245.108.154`);
-- backup, build, deploy, Apache, systemd, Certbot, smoke tests и rollback;
-- не пишет продуктовый код и не принимает архитектурных решений.
+- backup, git pull конкретного HEAD, build, migrations, Apache, systemd, smoke tests и rollback;
+- не принимает архитектурных решений;
+- не пишет продуктовый код без отдельной точной задачи;
+- не использует production DB для тестов;
+- не выводит секреты.
 
 ## Stop conditions
 
 Остановить релиз при:
 
 - подключении не к `funti.cc`;
-- несовпадении HEAD;
+- несовпадении ожидаемого HEAD;
+- грязном git worktree;
+- неуспешном backup;
 - неуспешной миграции;
 - признаках cross-user leak;
 - 5xx, `54001`, `42501`, `permission denied` или Traceback;
