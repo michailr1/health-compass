@@ -88,6 +88,13 @@ def upgrade() -> None:
             RETURN NULL;
           END IF;
 
+          IF locked_intent.browser_binding_hash <> expected_browser_binding_hash
+             OR locked_intent.state_hash <> confirmed_state_hash
+             OR locked_intent.nonce_hash <> confirmed_nonce_hash
+             OR locked_intent.pkce_verifier_hash <> confirmed_pkce_verifier_hash THEN
+            RETURN NULL;
+          END IF;
+
           IF locked_intent.status = 'completed' THEN
             RETURN locked_intent.candidate_user_id;
           END IF;
@@ -95,11 +102,7 @@ def upgrade() -> None:
           IF locked_intent.status <> 'pending_confirmation'
              OR locked_intent.required_provider <> 'google'
              OR locked_intent.initiating_provider <> 'email'
-             OR locked_intent.expires_at <= now()
-             OR locked_intent.browser_binding_hash <> expected_browser_binding_hash
-             OR locked_intent.state_hash <> confirmed_state_hash
-             OR locked_intent.nonce_hash <> confirmed_nonce_hash
-             OR locked_intent.pkce_verifier_hash <> confirmed_pkce_verifier_hash THEN
+             OR locked_intent.expires_at <= now() THEN
             RETURN NULL;
           END IF;
 
