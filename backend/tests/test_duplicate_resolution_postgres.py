@@ -7,8 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 import psycopg
 import pytest
 
+ADMIN_DSN = os.getenv("HC_TEST_DATABASE_ADMIN_DSN")
 APP_DSN = os.getenv("HC_TEST_DATABASE_APP_DSN")
-MIGRATOR_DSN = os.getenv("HC_TEST_DATABASE_MIGRATOR_DSN")
 
 pytestmark = pytest.mark.integration
 
@@ -20,8 +20,8 @@ def require_dsn(value: str | None, name: str) -> str:
 
 
 def test_concurrent_empty_duplicate_absorption_is_idempotent() -> None:
+    admin_dsn = require_dsn(ADMIN_DSN, "HC_TEST_DATABASE_ADMIN_DSN")
     app_dsn = require_dsn(APP_DSN, "HC_TEST_DATABASE_APP_DSN")
-    migrator_dsn = require_dsn(MIGRATOR_DSN, "HC_TEST_DATABASE_MIGRATOR_DSN")
 
     canonical_user_id = uuid.uuid4()
     absorbed_user_id = uuid.uuid4()
@@ -41,8 +41,7 @@ def test_concurrent_empty_duplicate_absorption_is_idempotent() -> None:
     browser_hash = "d" * 64
     token_hash = "r" * 64
 
-    with psycopg.connect(migrator_dsn) as connection, connection.cursor() as cursor:
-        cursor.execute("SET ROLE health_compass_rls_definer")
+    with psycopg.connect(admin_dsn) as connection, connection.cursor() as cursor:
         cursor.execute(
             """
             INSERT INTO health_compass.users (
@@ -151,7 +150,7 @@ def test_concurrent_empty_duplicate_absorption_is_idempotent() -> None:
               id, user_id, session_token_hash, expires_at
             ) VALUES (%s, %s, %s, now() + interval '1 hour')
             """,
-            (absorbed_session_id, absorbed_user_id, f"session-{absorbed_user_id.hex}",),
+            (absorbed_session_id, absorbed_user_id, f"session-{absorbed_user_id.hex}"),
         )
 
     intent_id: uuid.UUID | None = None
@@ -201,8 +200,7 @@ def test_concurrent_empty_duplicate_absorption_is_idempotent() -> None:
         assert all(result["intent_id"] == str(intent_id) for result in results)
         assert sorted(result["replayed"] for result in results) == [False, True]
 
-        with psycopg.connect(migrator_dsn) as connection, connection.cursor() as cursor:
-            cursor.execute("SET ROLE health_compass_rls_definer")
+        with psycopg.connect(admin_dsn) as connection, connection.cursor() as cursor:
             cursor.execute(
                 "SELECT count(*) FROM health_compass.users WHERE id = %s",
                 (absorbed_user_id,),
@@ -244,8 +242,7 @@ def test_concurrent_empty_duplicate_absorption_is_idempotent() -> None:
             )
             assert cursor.fetchone()[0] == "completed"
     finally:
-        with psycopg.connect(migrator_dsn) as connection, connection.cursor() as cursor:
-            cursor.execute("SET ROLE health_compass_rls_definer")
+        with psycopg.connect(admin_dsn) as connection, connection.cursor() as cursor:
             cursor.execute(
                 "DELETE FROM health_compass.profile_permissions WHERE profile_id = %s",
                 (canonical_profile_id,),
