@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  Activity, Dna, LayoutDashboard, ListChecks, Database, History, LogOut, HeartPulse,
+  Activity, Dna, LayoutDashboard, ListChecks, Database, History, LogOut, HeartPulse, KeyRound,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -65,6 +65,12 @@ export default function AppLayout() {
                 <div className="truncate text-xs text-muted-foreground">{user?.email}</div>
                 <div className="mt-1 text-[11px] text-primary">Профиль здоровья</div>
               </Link>
+              <Link
+                to="/app/sign-in-methods"
+                className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <KeyRound className="h-3.5 w-3.5" /> Способы входа
+              </Link>
               <button
                 onClick={onLogout}
                 className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
@@ -84,6 +90,9 @@ export default function AppLayout() {
               <span className="font-display text-sm font-semibold">Health Compass</span>
             </div>
             <div className="flex items-center gap-3">
+              <Link to="/app/sign-in-methods" aria-label="Способы входа" className="text-muted-foreground">
+                <KeyRound className="h-4 w-4" />
+              </Link>
               <Link to="/app/profile" className="max-w-32 truncate text-xs text-primary">
                 {displayName}
               </Link>
