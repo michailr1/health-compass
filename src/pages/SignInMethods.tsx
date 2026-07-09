@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
   CheckCircle2,
+  Combine,
   KeyRound,
   Link2,
   Loader2,
@@ -32,6 +33,16 @@ type RemovalStartResponse = {
   message: string;
 };
 
+type DuplicateResolutionStartResponse = {
+  available: boolean;
+  reason: string | null;
+  intent_id: string | null;
+  required_provider: string | null;
+  canonical_is_current: boolean | null;
+  confirmation_url: string | null;
+  message: string;
+};
+
 export const providerTitles: Record<string, string> = {
   google: "Google",
   email: "Email Magic Link",
@@ -51,6 +62,9 @@ export default function SignInMethodsPage() {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removalMessage, setRemovalMessage] = useState<string | null>(null);
   const [removalError, setRemovalError] = useState<string | null>(null);
+  const [duplicateBusy, setDuplicateBusy] = useState(false);
+  const [duplicateMessage, setDuplicateMessage] = useState<string | null>(null);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
   const { data = [], isLoading, error } = useQuery({
     queryKey: ["sign-in-methods"],
@@ -67,10 +81,7 @@ export default function SignInMethodsPage() {
     try {
       const response = await fetch(
         `/api/auth/identities/remove/${encodeURIComponent(method.id)}/start`,
-        {
-          method: "POST",
-          credentials: "include",
-        },
+        { method: "POST", credentials: "include" },
       );
       const payload = (await response.json()) as RemovalStartResponse | { detail?: string };
       if (!response.ok) {
@@ -96,6 +107,33 @@ export default function SignInMethodsPage() {
     }
   }
 
+  async function startDuplicateResolution() {
+    if (duplicateBusy) return;
+    setDuplicateBusy(true);
+    setDuplicateMessage(null);
+    setDuplicateError(null);
+    try {
+      const response = await fetch("/api/auth/duplicates/start", {
+        method: "POST",
+        credentials: "include",
+      });
+      const payload = (await response.json()) as DuplicateResolutionStartResponse;
+      if (!response.ok || !payload.available) {
+        setDuplicateError(payload.message || "Автоматическое объединение недоступно.");
+        return;
+      }
+      if (payload.confirmation_url) {
+        window.location.assign(payload.confirmation_url);
+        return;
+      }
+      setDuplicateMessage(payload.message);
+    } catch {
+      setDuplicateError("Не удалось проверить существующие дубли.");
+    } finally {
+      setDuplicateBusy(false);
+    }
+  }
+
   return (
     <section className="space-y-6">
       <div>
@@ -113,11 +151,18 @@ export default function SignInMethodsPage() {
           Способ входа отключён. Оставшийся способ продолжает открывать тот же профиль.
         </div>
       )}
-      {status?.includes("removal") && status !== "removed" && (
-        <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
-          Не удалось подтвердить отключение. Запустите процедуру заново.
+      {status === "duplicate-resolved" && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-primary">
+          Пустой дубликат поглощён. Оба подтверждённых способа входа теперь используют один профиль.
         </div>
       )}
+      {(status?.includes("removal") || status?.includes("duplicate")) &&
+        status !== "removed" &&
+        status !== "duplicate-resolved" && (
+          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+            Не удалось завершить защищённую операцию. Запустите процедуру заново.
+          </div>
+        )}
       {removalMessage && (
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-primary">
           {removalMessage}
@@ -126,6 +171,16 @@ export default function SignInMethodsPage() {
       {removalError && (
         <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
           {removalError}
+        </div>
+      )}
+      {duplicateMessage && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-primary">
+          {duplicateMessage}
+        </div>
+      )}
+      {duplicateError && (
+        <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+          {duplicateError}
         </div>
       )}
 
@@ -237,10 +292,31 @@ export default function SignInMethodsPage() {
         </div>
       )}
 
+      <div className="hm-card p-6">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+          <div>
+            <div className="flex items-center gap-2 font-medium">
+              <Combine className="h-4 w-4 text-primary" /> Проверить старые дубли
+            </div>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+              Портал может поглотить только полностью пустой bootstrap-аккаунт. Если оба профиля содержат медицинские данные, автоматическое объединение запрещено.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={duplicateBusy}
+            onClick={startDuplicateResolution}
+          >
+            {duplicateBusy ? "Проверяем…" : "Проверить"}
+          </Button>
+        </div>
+      </div>
+
       <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
         <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
         <span>
-          Последний способ входа отключить нельзя. Любое отключение требует повторного подтверждения через другой уже подключённый способ.
+          Последний способ входа отключить нельзя. Отключение и устранение дубля требуют повторного подтверждения через другой аккаунт или способ входа.
         </span>
       </div>
     </section>
