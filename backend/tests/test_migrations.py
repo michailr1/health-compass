@@ -134,6 +134,7 @@ def _assert_clinical_context_head(engine, expected_head: str) -> None:
         "profile_medications",
         "profile_supplements",
         "profile_clinical_safety_flags",
+        "profile_clinical_reviews",
     }
     with engine.connect() as connection:
         assert _current_database_revision(engine) == expected_head
