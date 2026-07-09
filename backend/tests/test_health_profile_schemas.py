@@ -10,6 +10,8 @@ from pydantic import ValidationError
 
 from app.schemas.health_profile import (
     BodyMeasurementCreateRequest,
+    ConsentAcceptRequest,
+    MeasurementVoidRequest,
     ProfilePatchRequest,
 )
 
@@ -28,6 +30,16 @@ def test_profile_patch_accepts_supported_values() -> None:
     assert payload.timezone == "Europe/Paris"
 
 
+def test_profile_patch_strips_display_name() -> None:
+    payload = ProfilePatchRequest(display_name="  Михаил  ")
+    assert payload.display_name == "Михаил"
+
+
+def test_profile_patch_rejects_blank_display_name() -> None:
+    with pytest.raises(ValidationError):
+        ProfilePatchRequest(display_name="   ")
+
+
 def test_profile_patch_rejects_future_birth_date() -> None:
     with pytest.raises(ValidationError):
         ProfilePatchRequest(
@@ -38,6 +50,11 @@ def test_profile_patch_rejects_future_birth_date() -> None:
 def test_profile_patch_rejects_unknown_sex() -> None:
     with pytest.raises(ValidationError):
         ProfilePatchRequest(sex="unknown")
+
+
+def test_profile_patch_accepts_explicit_null_sex() -> None:
+    payload = ProfilePatchRequest(sex=None)
+    assert payload.model_dump(exclude_unset=True) == {"sex": None}
 
 
 def test_profile_patch_rejects_unknown_timezone() -> None:
@@ -70,3 +87,17 @@ def test_weight_accepts_timezone_aware_timestamp() -> None:
     assert payload.measurement_type == "weight"
     assert payload.unit == "kg"
     assert payload.value == Decimal("98.0")
+
+
+def test_void_reason_is_trimmed_and_cannot_be_blank() -> None:
+    assert MeasurementVoidRequest(reason="  Ошибка ввода  ").reason == "Ошибка ввода"
+    with pytest.raises(ValidationError):
+        MeasurementVoidRequest(reason="   ")
+
+
+def test_consent_accepts_only_current_document_version() -> None:
+    payload = ConsentAcceptRequest(document_version="health-data-processing-v1")
+    assert payload.document_version == "health-data-processing-v1"
+
+    with pytest.raises(ValidationError):
+        ConsentAcceptRequest(document_version="arbitrary-version")
