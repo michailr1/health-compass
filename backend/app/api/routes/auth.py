@@ -168,7 +168,8 @@ async def callback(
             select(UserIdentity).where(UserIdentity.provider == GOOGLE_PROVIDER, UserIdentity.subject == subject)
         )
         identity = identity_result.scalar_one()
-        user.email = email.strip().lower()
+        # Provider claims are refreshed, but ordinary sign-in must not silently
+        # replace the user's canonical contact email.
         user.display_name = claims.get("name") or user.display_name
         identity.claims = claims
         identity.last_seen_at = datetime.datetime.now(datetime.UTC)
