@@ -48,14 +48,20 @@ PR: `#7`
 - повторный `link_email` consume получает безопасный идемпотентный результат;
 - после первого успешного linking отправляется security notification;
 - ошибка отправки уведомления не откатывает linking и фиксируется отдельным audit-событием;
-- миграция `0028` сохраняет старые completion-функции и имеет штатный downgrade.
+- API `GET /api/auth/identities` показывает подключённые способы входа без раскрытия provider subject;
+- экран `/app/sign-in-methods` показывает Google и Email Magic Link, verified status и запрет удаления последнего способа;
+- authenticated settings flow запускает тот же account-link intent через `/api/auth/link/settings/start`;
+- settings flows `settings_add_google` и `settings_add_email` имеют отдельные purpose-aware completion branches;
+- из desktop и mobile profile UI добавлена ссылка «Способы входа»;
+- helper собирает все уникальные подтверждённые identity emails для последующих security notifications.
 
 ## Не завершено
 
-- отправка уведомлений на все подтверждённые связанные адреса, если они различаются;
-- UI «Способы входа» в настройках;
+- подключение рассылки уведомлений ко всем подтверждённым адресам вместо одного канонического;
+- endpoint отключения identity со step-up и запретом последней identity;
 - HC-026 для существующих дублей;
 - полный набор PostgreSQL/RLS/concurrency/API/frontend tests;
+- исправление downgrade implementation миграции `0029` до полного Alembic cycle;
 - локальный Ruff, pytest, frontend test/build и Alembic up/down cycle;
 - CI review и deployment.
 
@@ -69,15 +75,15 @@ PR: `#7`
 → 0026 Google link preparation + completion
 → 0027 decline + explicit separate-account + audit helpers
 → 0028 result-returning completion + replay context
+→ 0029 purpose-aware settings completion
 ```
 
 Миграции не применялись в production. Feature flag по умолчанию выключен.
 
 ## Следующий кодовый блок
 
-1. identities API;
-2. UI «Способы входа»;
-3. запрет отключения последней identity;
-4. уведомления на все подтверждённые адреса;
-5. PostgreSQL/RLS/concurrency/API/frontend tests;
-6. HC-026 для существующих дублей.
+1. завершить notification fan-out на все verified addresses;
+2. добавить tests для identities API и settings flow;
+3. исправить и проверить downgrade `0029`;
+4. полный PostgreSQL/RLS/concurrency/API/frontend test matrix;
+5. HC-026 для существующих дублей.
