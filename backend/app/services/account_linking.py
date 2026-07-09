@@ -10,7 +10,7 @@ import datetime
 import json
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterable
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +31,34 @@ class VerifiedEmailCandidate:
     @property
     def has_existing_duplicates(self) -> bool:
         return self.count > 1
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationIdentity:
+    provider: str
+    subject: str
+    claims: dict[str, Any]
+
+
+def collect_verified_notification_emails(
+    canonical_email: str,
+    identities: Iterable[NotificationIdentity],
+) -> tuple[str, ...]:
+    """Return unique canonical and verified identity emails in stable order."""
+    recipients: set[str] = set()
+    canonical = normalize_email(canonical_email)
+    if canonical:
+        recipients.add(canonical)
+
+    for identity in identities:
+        claims = identity.claims or {}
+        if claims.get("email_verified") is not True:
+            continue
+        address = identity.subject if identity.provider == "email" else str(claims.get("email") or "")
+        normalized = normalize_email(address)
+        if normalized:
+            recipients.add(normalized)
+    return tuple(sorted(recipients))
 
 
 async def lookup_verified_email_candidate(
@@ -56,23 +84,17 @@ async def verified_notification_emails(
     session: AsyncSession,
     user: User,
 ) -> tuple[str, ...]:
-    """Return unique verified identity emails plus the canonical contact email."""
-    result = await session.execute(
-        select(UserIdentity).where(UserIdentity.user_id == user.id)
+    """Load identities and return every unique verified notification address."""
+    result = await session.execute(select(UserIdentity).where(UserIdentity.user_id == user.id))
+    identities = (
+        NotificationIdentity(
+            provider=identity.provider,
+            subject=identity.subject,
+            claims=dict(identity.claims or {}),
+        )
+        for identity in result.scalars().all()
     )
-    recipients: set[str] = {normalize_email(user.email)}
-    for identity in result.scalars().all():
-        claims = identity.claims or {}
-        if claims.get("email_verified") is not True:
-            continue
-        if identity.provider == "email":
-            address = identity.subject
-        else:
-            address = str(claims.get("email") or "")
-        normalized = normalize_email(address)
-        if normalized:
-            recipients.add(normalized)
-    return tuple(sorted(recipients))
+    return collect_verified_notification_emails(user.email, identities)
 
 
 async def create_account_link_intent(
