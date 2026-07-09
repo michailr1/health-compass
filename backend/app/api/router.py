@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.api.routes.account_link import router as account_link_router
 from app.api.routes.auth import router as login_router
 from app.api.routes.email_auth import router as email_auth_router
 from app.api.routes.health import router as health_router
@@ -21,3 +22,4 @@ api_router.include_router(user_router)
 api_router.include_router(health_profile_router)
 api_router.include_router(login_router)
 api_router.include_router(email_auth_router)
+api_router.include_router(account_link_router)
