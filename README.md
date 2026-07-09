@@ -1,164 +1,119 @@
 # Health Compass
 
-Health Compass — многопользовательский веб-портал для хранения, обработки и отображения персональных данных о здоровье.
+Health Compass — персональный портал здоровья, который собирает в одном месте медицинские документы, лабораторные показатели, данные носимых устройств и важный контекст о человеке.
+
+Цель проекта — помочь пользователю не просто хранить анализы, а понимать их динамику, видеть источник каждого значения, готовить понятные отчёты для врача и получать объяснения, основанные на подтверждённых данных.
+
+**Production:** https://health.funti.cc
+
+## Что даёт Health Compass
+
+- единое защищённое пространство для личных данных о здоровье;
+- загрузку анализов и медицинских документов;
+- распознавание показателей из PDF и изображений;
+- обязательную проверку распознанных значений пользователем;
+- историю и графики динамики показателей;
+- персональный профиль здоровья с возрастом, полом, состояниями, аллергиями и лекарствами;
+- контекстные уточнения только тогда, когда они действительно влияют на интерпретацию;
+- AI-объяснения с указанием источников и без подмены врача;
+- подготовку краткого отчёта для консультации с врачом;
+- отдельные профили и защищённое разделение данных между пользователями.
+
+## Как должен выглядеть основной сценарий
+
+```text
+Вход
+→ минимальный onboarding
+→ загрузка анализа
+→ распознавание документа
+→ проверка значений
+→ сохранение результатов
+→ график динамики
+→ объяснение с источниками
+→ отчёт для врача
+```
+
+Большая обязательная анкета перед первым анализом не используется. Профиль здоровья заполняется постепенно: часть данных пользователь указывает сам, часть система предлагает добавить из документов после подтверждения.
 
 ## Текущий статус
 
-Рабочая ветка:
+Завершён первый production-релиз авторизации и изоляции данных:
 
-```text
-feat/direct-google-and-email-auth
-```
+- вход через Google;
+- вход по Email Magic Link;
+- локальные серверные сессии;
+- отдельные рабочие пространства и профили;
+- PostgreSQL Row-Level Security;
+- проверенная двухпользовательская изоляция;
+- production на отдельном домене `health.funti.cc`.
 
-Production URL:
+Текущий продуктовый этап — **Progressive Health Intake** и подготовка первого вертикального сценария загрузки медицинских документов.
 
-```text
-https://health.funti.cc
-```
+Медицинские показатели, которые сейчас отображаются в портале, являются демонстрационными до завершения реального импорта и OCR.
 
-Развёрнутый production commit:
+## Принципы проекта
 
-```text
-4e7df2bdeb313cd788165c182b64ef83487720bc
-```
+- **Privacy first:** собираются только нужные данные, чувствительные поля остаются опциональными.
+- **Human confirmation:** OCR и AI не записывают медицинские факты без подтверждения пользователя.
+- **Explainable AI:** содержательные AI-ответы должны опираться на evidence и provenance.
+- **No auto-diagnosis:** портал не ставит диагнозы и не назначает лечение.
+- **Security first:** изоляция пользователей обеспечивается не только приложением, но и PostgreSQL RLS.
+- **Human-first:** человеческий контур развивается первым; Pet Health проектируется отдельно и не смешивается с человеческими данными.
 
-Старый URL временно сохраняется до окончания ручной приёмки:
+## Кратко о технологиях
 
-```text
-https://funti.cc/health
-```
-
-Архивная ветка прежней архитектуры через Authentik:
-
-```text
-feat/identity-and-profile-access
-```
-
-Архивную ветку не удалять.
-
-## Каноническая документация
-
-- [Основной план](docs/PROJECT-PLAN.md)
-- [Текущее состояние](docs/CURRENT-STATE.md)
-- [История разработки и инцидентов](docs/DEVELOPMENT-HISTORY.md)
-- [Security invariants](docs/SECURITY-INVARIANTS.md)
-- [Product & UX baseline](docs/PRODUCT-UX-BASELINE.md)
-- [AI product and safety](docs/AI-PRODUCT-SAFETY.md)
-- [Production deployment runbook](docs/DEPLOYMENT-RUNBOOK.md)
-- [Рекомендации Fable](docs/reviews/FABLE-RECOMMENDATIONS.md)
-- [Реестр источников](docs/source-index/SOURCE-REGISTER.md)
-
-При расхождении документации с кодом приоритет имеют код, миграции, тесты и подтверждённое production-состояние. Документация должна обновляться после каждого релиза и архитектурного изменения.
-
-## Архитектура
-
-### Backend
+**Backend**
 
 - FastAPI;
 - Python 3.12+;
 - SQLAlchemy 2;
 - Alembic;
 - PostgreSQL;
-- PostgreSQL Row-Level Security;
-- локальные серверные сессии.
+- PostgreSQL Row-Level Security.
 
-### Frontend
+**Frontend**
 
-- React 18;
+- React;
 - TypeScript;
 - Vite;
 - TanStack Query;
 - Tailwind CSS;
 - shadcn/ui;
-- React Router;
 - Recharts.
 
-### Аутентификация
-
-Для MVP используется собственная identity/session модель:
+**Аутентификация**
 
 - прямой Google OAuth 2.0 / OpenID Connect;
-- PKCE S256, state, nonce и `prompt=select_account`;
-- Email Magic Links через Brevo;
-- локальные users, identities и sessions;
-- собственные workspaces, profiles и permissions;
-- PostgreSQL RLS для tenant isolation.
+- Email Magic Links;
+- собственные users, identities, sessions, workspaces, profiles и permissions.
 
-В MVP не используются Authentik, Keycloak или внешний IAM.
+Для MVP не используются Authentik, Keycloak или другой внешний IAM.
 
-Google identity определяется парой:
+## Документация
 
-```text
-provider + subject
-```
+Подробная архитектура, история решений, инструкции для агентов и operational-процедуры находятся в `docs/`:
 
-Email не является ключом автоматического объединения разных identity.
+- [Основной план проекта](docs/PROJECT-PLAN.md)
+- [Текущее состояние](docs/CURRENT-STATE.md)
+- [Product & UX baseline](docs/PRODUCT-UX-BASELINE.md)
+- [Progressive Health Intake](docs/PROGRESSIVE-HEALTH-INTAKE.md)
+- [AI product and safety](docs/AI-PRODUCT-SAFETY.md)
+- [Security invariants](docs/SECURITY-INVARIANTS.md)
+- [История разработки](docs/DEVELOPMENT-HISTORY.md)
+- [Реестр источников](docs/source-index/SOURCE-REGISTER.md)
 
-## Безопасность
+Исходные стратегические материалы и внешние ревью хранятся в `docs/source-materials/` как неизменяемый reference archive.
 
-- Security first и fail-closed production configuration.
-- Runtime и migrator роли PostgreSQL разделены.
-- Защищённые таблицы используют `FORCE ROW LEVEL SECURITY`.
-- RLS helper-функции принадлежат выделенной роли `health_compass_rls_definer NOLOGIN BYPASSRLS`.
-- `PUBLIC EXECUTE` для security-definer helpers запрещён.
-- User/session context устанавливается внутри транзакции запроса.
-- Dev auth разрешён только локально.
-- Секреты не хранятся в Git и не выводятся в отчёты.
+## Локальный запуск
 
-Подробности: [docs/SECURITY-INVARIANTS.md](docs/SECURITY-INVARIANTS.md).
-
-## Реализовано
-
-- Google OIDC login и локальный logout;
-- Email Magic Link registration/login;
-- PostgreSQL sessions;
-- workspace/profile/dashboard bootstrap;
-- multi-user RLS isolation;
-- устранение рекурсии SQLSTATE `54001`;
-- закрытие self-grant owner и self-add workspace escalation;
-- интеграционный RLS пакет: `22 PASS, 0 FAIL`;
-- отдельные демонстрационные dashboard records для каждого пользователя;
-- production deployment на `health.funti.cc` с HTTPS, Apache и root-path API/frontend.
-
-Медицинские показатели пока демонстрационные и должны явно обозначаться как такие до реализации реального импорта.
-
-## Текущий этап
-
-Новый поддомен технически развёрнут и прошёл инфраструктурные smoke-тесты:
-
-```text
-https://health.funti.cc/
-https://health.funti.cc/api/health
-https://health.funti.cc/api/auth/callback
-https://health.funti.cc/api/auth/email/consume
-```
-
-Остаётся ручная приёмка Google login, Email Magic Link, logout, повторного входа и двухпользовательской изоляции. После неё старый `/health` будет перенаправлен на новый поддомен, рабочая ветка будет слита в `main`, а production начнёт разворачиваться из `main`.
-
-VPS-проверки последнего deployment: compileall OK, Ruff passed, frontend build successful, pytest `14 PASS / 4 known FAIL`. Четыре failures должны быть закрыты до формального release gate.
-
-Продуктовый и UI baseline этапов Fable 3/3.5 зафиксирован в документации как целевой дизайн и не считается реализованным до появления кода, API и тестов.
-
-## Локальный запуск frontend
-
-Требуется Node.js 20–22 и npm 10.
+Frontend:
 
 ```bash
 npm ci
 npm run dev
 ```
 
-Проверки:
-
-```bash
-npm run build
-npm run lint
-npm test
-```
-
-## Локальный запуск backend
-
-Требуется Python 3.12+ и PostgreSQL.
+Backend:
 
 ```bash
 cd backend
@@ -168,52 +123,8 @@ python -m venv .venv
 .venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8100
 ```
 
-Проверки:
-
-```bash
-.venv/bin/python -m compileall -q app alembic tests
-.venv/bin/python -m pytest -q
-.venv/bin/python -m ruff check app tests
-```
-
-Интеграционные тесты PostgreSQL должны использовать отдельную БД с именем, заканчивающимся на `_test`.
-
-## Production
-
-Production server:
-
-```text
-funti.cc (172.245.108.154)
-```
-
-Backend service:
-
-```text
-health-compass-api.service
-```
-
-Production environment:
-
-```text
-/etc/health-compass/backend.env
-```
-
-Target URLs:
-
-```env
-FRONTEND_URL=https://health.funti.cc/app
-OIDC_REDIRECT_URI=https://health.funti.cc/api/auth/callback
-MAGIC_LINK_CONSUME_URL=https://health.funti.cc/api/auth/email/consume
-```
-
-Значения OAuth secrets, SMTP credentials, database credentials, session tokens и иных секретов запрещено сохранять в репозитории или выводить в логи.
-
-## Роли агентов
-
-ChatGPT/coding role отвечает за архитектуру, код, миграции, тесты, ADR и документацию.
-
-VPS-агент отвечает за backup, pull конкретного HEAD, build, migrations, Apache, systemd, Certbot, deployment, smoke tests и rollback. Перед любыми действиями он обязан подключиться именно к production-серверу `funti.cc` (`172.245.108.154`). VPS-агент не пишет продуктовый код и не принимает архитектурных решений.
+Подробности deployment и production-процедур вынесены в [docs/DEPLOYMENT-RUNBOOK.md](docs/DEPLOYMENT-RUNBOOK.md).
 
 ## Медицинский дисклеймер
 
-Health Compass не является медицинским изделием и не заменяет консультацию врача. Любые выводы и рекомендации являются информационными материалами, а не диагнозом или назначением лечения.
+Health Compass не является медицинским изделием и не заменяет консультацию врача. Информация и объяснения в портале предназначены для ориентирования и подготовки к разговору со специалистом, а не для постановки диагноза или назначения лечения.
