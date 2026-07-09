@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, Scale, ShieldCheck, UserRound } from "lucide-react";
 
+import { ClinicalContextSection } from "@/components/ClinicalContextSection";
 import {
   apiGet,
   apiPatch,
@@ -288,6 +289,8 @@ export default function HealthProfilePage() {
           {saveState === "error" && "Не удалось сохранить"}
         </div>
       </section>
+
+      <ClinicalContextSection profileId={profile.id} consentActive={consentActive} />
 
       <section className="hm-card p-5 md:p-6">
         <h2 className="font-display text-lg font-semibold">Готовность контекста</h2>
