@@ -93,3 +93,21 @@ async def send_account_linked_notification(recipient: str, providers: tuple[str,
         "Теперь они открывают один и тот же профиль. Если вы не выполняли это действие, "
         "завершите активные сессии и обратитесь в поддержку.",
     )
+
+
+async def send_account_linked_notifications(
+    recipients: tuple[str, ...],
+    providers: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Notify each verified address independently and return failed recipients.
+
+    One failed mailbox must not suppress notifications to the remaining verified
+    addresses and must never roll back an already completed account link.
+    """
+    failures: list[str] = []
+    for recipient in recipients:
+        try:
+            await send_account_linked_notification(recipient, providers)
+        except Exception:
+            failures.append(recipient)
+    return tuple(failures)
