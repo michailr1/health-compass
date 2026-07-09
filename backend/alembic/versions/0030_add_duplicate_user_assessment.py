@@ -188,6 +188,7 @@ def upgrade() -> None:
         SET row_security = off
         AS $$
         DECLARE
+          current_user_id uuid;
           first_user {S}.users%ROWTYPE;
           second_user {S}.users%ROWTYPE;
           first_activity jsonb;
@@ -198,7 +199,10 @@ def upgrade() -> None:
           eligible boolean := false;
           reason text;
         BEGIN
-          IF first_user_id = second_user_id THEN
+          current_user_id := nullif(current_setting('app.current_user_id', true), '')::uuid;
+          IF current_user_id IS NULL
+             OR current_user_id NOT IN (first_user_id, second_user_id)
+             OR first_user_id = second_user_id THEN
             RETURN NULL;
           END IF;
 
@@ -284,7 +288,7 @@ def upgrade() -> None:
             'reason', reason,
             'canonical_user_id', canonical_user_id,
             'absorbed_user_id', absorbed_user_id,
-            'shared_verified_email', shared_verified_email,
+            'shared_verified_email', true,
             'first', first_activity,
             'second', second_activity
           );
@@ -293,23 +297,21 @@ def upgrade() -> None:
         """
     )
 
-    signatures = (
-        f"{S}.app_duplicate_user_activity(uuid)",
-        f"{S}.app_assess_duplicate_user_pair(uuid, uuid)",
-    )
-    for signature in signatures:
+    helper_signature = f"{S}.app_duplicate_user_activity(uuid)"
+    public_signature = f"{S}.app_assess_duplicate_user_pair(uuid, uuid)"
+
+    for signature in (helper_signature, public_signature):
         op.execute(f"ALTER FUNCTION {signature} OWNER TO {R}")
         op.execute(f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC")
-        op.execute(f"GRANT EXECUTE ON FUNCTION {signature} TO {APP}")
+        op.execute(f"REVOKE ALL ON FUNCTION {signature} FROM {APP}")
 
+    op.execute(f"GRANT EXECUTE ON FUNCTION {public_signature} TO {APP}")
     op.execute(f"REVOKE CREATE ON SCHEMA {S} FROM {R}")
 
 
 def downgrade() -> None:
-    signatures = (
-        f"{S}.app_assess_duplicate_user_pair(uuid, uuid)",
-        f"{S}.app_duplicate_user_activity(uuid)",
-    )
-    for signature in signatures:
-        op.execute(f"REVOKE EXECUTE ON FUNCTION {signature} FROM {APP}")
+    public_signature = f"{S}.app_assess_duplicate_user_pair(uuid, uuid)"
+    helper_signature = f"{S}.app_duplicate_user_activity(uuid)"
+    op.execute(f"REVOKE EXECUTE ON FUNCTION {public_signature} FROM {APP}")
+    for signature in (public_signature, helper_signature):
         op.execute(f"DROP FUNCTION IF EXISTS {signature}")
