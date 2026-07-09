@@ -4,7 +4,7 @@ import { CheckCircle2, KeyRound, Link2, Loader2, Mail, ShieldCheck } from "lucid
 import { Button } from "@/components/ui/button";
 import { apiGet } from "@/lib/api";
 
-type SignInMethod = {
+export type SignInMethod = {
   id: string;
   provider: "google" | "email" | string;
   label: string;
@@ -14,10 +14,17 @@ type SignInMethod = {
   can_remove: boolean;
 };
 
-const providerTitles: Record<string, string> = {
+export const providerTitles: Record<string, string> = {
   google: "Google",
   email: "Email Magic Link",
 };
+
+export function getMissingProvider(methods: SignInMethod[]): "google" | "email" | null {
+  const connected = new Set(methods.map((method) => method.provider));
+  if (connected.has("google") && !connected.has("email")) return "email";
+  if (connected.has("email") && !connected.has("google")) return "google";
+  return null;
+}
 
 export default function SignInMethodsPage() {
   const { data = [], isLoading, error } = useQuery({
@@ -25,8 +32,7 @@ export default function SignInMethodsPage() {
     queryFn: () => apiGet<SignInMethod[]>("/auth/identities"),
   });
 
-  const connected = new Set(data.map((method) => method.provider));
-  const missingProvider = connected.has("google") ? "email" : connected.has("email") ? "google" : null;
+  const missingProvider = getMissingProvider(data);
 
   return (
     <section className="space-y-6">
