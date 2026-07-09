@@ -25,13 +25,21 @@ PR: `#7`
 - блокировка token и intent через `FOR UPDATE`;
 - проверка ownership конфликтующей `(provider, subject)` identity;
 - создание сессии существующего пользователя только после успешного completion;
-- frontend-кнопка отправки специальной ссылки подтверждения.
+- frontend-кнопка отправки специальной ссылки подтверждения;
+- endpoint `/api/auth/link/google/start`;
+- отдельный OIDC purpose `account_link`;
+- state/nonce/PKCE hashes записываются в intent до redirect к Google;
+- Google callback различает обычный login и account-linking;
+- browser binding доступен start и callback через общую HttpOnly cookie область `/api/auth`;
+- подтверждённый Google `sub` обязан принадлежать candidate user;
+- verified Google email обязан совпадать с intent email;
+- транзакционное добавление Email identity к существующему Google user;
+- повторный callback разрешён идемпотентно только при полном совпадении browser/state/nonce/PKCE bindings;
+- после completion создаётся session существующего candidate user.
 
 ## Не завершено
 
-- Google confirmation flow для сценария Email-first → Google-second;
-- отдельные link-purpose state/nonce/PKCE и callback completion;
-- идемпотентная обработка повторного успешно завершённого callback/consume;
+- идемпотентная обработка повторного `link_email` consume с безопасным UX;
 - decline и отдельное двойное подтверждение создания отдельного аккаунта;
 - audit events и security notifications;
 - UI «Способы входа» в настройках;
@@ -47,15 +55,16 @@ PR: `#7`
 → 0023 account_link_intents + verified-email lookup
 → 0024 narrow intent creation function
 → 0025 purpose-specific link_email tokens + completion
+→ 0026 Google link preparation + completion
 ```
 
 Миграции не применялись в production. Feature flag по умолчанию выключен.
 
 ## Следующий кодовый блок
 
-1. `/api/auth/link/google/start`;
-2. запись hash state/nonce/PKCE в intent;
-3. Google callback с purpose `account_link`;
-4. транзакционное добавление Email identity к существующему Google user;
-5. идемпотентное завершение intent;
-6. negative и concurrency tests.
+1. decline без создания аккаунта;
+2. отдельное повторное подтверждение create-separate-account;
+3. audit событий linking;
+4. security notifications;
+5. identities API и UI «Способы входа»;
+6. PostgreSQL/RLS/concurrency/API/frontend tests.
