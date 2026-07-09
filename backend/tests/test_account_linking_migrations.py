@@ -51,6 +51,40 @@ def test_result_completion_migration_has_real_downgrade() -> None:
     assert "RuntimeError" not in downgrade
 
 
+def test_identity_removal_uses_separate_tables_purpose_and_force_rls() -> None:
+    removal_sql = read_migration("0029_add_identity_removal_step_up.py")
+
+    assert "identity_removal_intents" in removal_sql
+    assert "identity_removal_email_tokens" in removal_sql
+    assert "purpose varchar(32) NOT NULL DEFAULT 'remove_identity_email'" in removal_sql
+    assert "purpose = 'remove_identity_email'" in removal_sql
+    assert removal_sql.count("FORCE ROW LEVEL SECURITY") >= 1
+    assert "REVOKE ALL ON {S}.{table} FROM {APP}" in removal_sql
+
+
+def test_identity_removal_preserves_intent_for_idempotent_replay() -> None:
+    removal_sql = read_migration("0029_add_identity_removal_step_up.py")
+
+    assert "ON DELETE SET NULL" in removal_sql
+    assert "IF i.status = 'completed'" in removal_sql
+    assert "'replayed', true" in removal_sql
+
+
+def test_identity_removal_locks_rows_before_counting() -> None:
+    removal_sql = read_migration("0029_add_identity_removal_step_up.py")
+
+    assert "ORDER BY ui.id\n          FOR UPDATE" in removal_sql
+    assert "SELECT count(*) INTO identity_count" in removal_sql
+    assert "WHERE ui.user_id = i.user_id\n          FOR UPDATE" not in removal_sql
+
+
+def test_identity_removal_has_hard_last_identity_guard() -> None:
+    removal_sql = read_migration("0029_add_identity_removal_step_up.py")
+
+    assert removal_sql.count("IF identity_count <= 1 THEN") >= 3
+    assert "target_provider <> required_provider" in removal_sql
+
+
 def test_security_definer_functions_revoke_public_execute() -> None:
     for filename in (
         "0023_add_account_linking_intents.py",
@@ -59,6 +93,7 @@ def test_security_definer_functions_revoke_public_execute() -> None:
         "0026_add_google_link_confirmation.py",
         "0027_add_link_decline_and_separate_account.py",
         "0028_return_link_completion_context.py",
+        "0029_add_identity_removal_step_up.py",
     ):
         migration = read_migration(filename)
         assert "SECURITY DEFINER" in migration
