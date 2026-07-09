@@ -32,7 +32,21 @@ jobs:
       - name: Compile
         run: python -m compileall -q app tests alembic
       - name: Ruff
-        run: ruff check app tests alembic
+        id: ruff
+        shell: bash
+        run: |
+          ruff check app tests alembic > ruff.log 2>&1 || {
+            cat ruff.log
+            exit 1
+          }
+      - name: Upload Ruff failure
+        if: failure() && steps.ruff.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruff-failure
+          path: backend/ruff.log
+          if-no-files-found: error
+          retention-days: 3
       - name: Unit tests
         id: backend_tests
         shell: bash
