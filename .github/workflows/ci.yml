@@ -32,6 +32,54 @@ jobs:
       - name: Unit tests
         run: pytest -q -m "not integration"
 
+  migrations:
+    name: PostgreSQL migration cycle
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      PGPASSWORD: postgres
+      TEST_DATABASE_MIGRATOR_URL: postgresql+psycopg://health_compass_migrator:test@127.0.0.1:5432/health_compass_test
+      DATABASE_URL: postgresql+asyncpg://health_compass_app:test@127.0.0.1:5432/health_compass_test
+      DATABASE_MIGRATOR_URL: postgresql+psycopg://health_compass_migrator:test@127.0.0.1:5432/health_compass_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Provision test roles and database
+        working-directory: .
+        run: |
+          psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE health_compass_migrator LOGIN PASSWORD 'test';
+          CREATE ROLE health_compass_app LOGIN PASSWORD 'test' NOBYPASSRLS;
+          CREATE ROLE health_compass_rls_definer NOLOGIN BYPASSRLS;
+          GRANT health_compass_rls_definer TO health_compass_migrator;
+          CREATE DATABASE health_compass_test OWNER health_compass_migrator;
+          GRANT CONNECT ON DATABASE health_compass_test TO health_compass_app;
+          SQL
+      - name: Install backend
+        run: python -m pip install -e ".[dev]"
+      - name: Migration upgrade/downgrade/upgrade
+        run: pytest -q tests/test_migrations.py
+
   frontend:
     name: Frontend lint, tests and build
     runs-on: ubuntu-latest
