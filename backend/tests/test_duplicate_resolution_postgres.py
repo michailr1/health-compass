@@ -59,11 +59,11 @@ def test_concurrent_empty_duplicate_absorption_is_idempotent() -> None:
             ) VALUES
               (
                 %s, %s, 'google', %s, 'https://accounts.google.com',
-                jsonb_build_object('email', %s, 'email_verified', true), now()
+                jsonb_build_object('email', %s::text, 'email_verified', true), now()
               ),
               (
                 %s, %s, 'email', %s, 'health-compass-email',
-                jsonb_build_object('email', %s, 'email_verified', true), now()
+                jsonb_build_object('email', %s::text, 'email_verified', true), now()
               )
             """,
             (
