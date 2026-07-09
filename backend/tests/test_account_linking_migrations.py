@@ -85,6 +85,34 @@ def test_identity_removal_has_hard_last_identity_guard() -> None:
     assert "target_provider <> required_provider" in removal_sql
 
 
+def test_duplicate_assessment_is_conservative() -> None:
+    duplicate_sql = read_migration("0030_add_duplicate_user_assessment.py")
+
+    for signal in (
+        "dashboard_snapshots",
+        "body_measurements",
+        "profile_audit_events",
+        "user_consents",
+        "customized_profiles",
+        "shared_workspace_members",
+        "shared_profile_permissions",
+    ):
+        assert signal in duplicate_sql
+    assert "both_users_have_meaningful_data" in duplicate_sql
+    assert "both_empty_oldest_wins" in duplicate_sql
+
+
+def test_duplicate_assessment_is_bound_to_current_user_context() -> None:
+    duplicate_sql = read_migration("0030_add_duplicate_user_assessment.py")
+
+    assert "current_setting('app.current_user_id', true)" in duplicate_sql
+    assert "current_user_id NOT IN (first_user_id, second_user_id)" in duplicate_sql
+    assert "REVOKE ALL ON FUNCTION {helper_signature} FROM {APP}" in duplicate_sql
+    assert "GRANT EXECUTE ON FUNCTION {public_signature} TO {APP}" in duplicate_sql
+    assert "'shared_verified_email', true" in duplicate_sql
+    assert "'shared_verified_email', shared_verified_email" not in duplicate_sql
+
+
 def test_security_definer_functions_revoke_public_execute() -> None:
     for filename in (
         "0023_add_account_linking_intents.py",
@@ -94,6 +122,7 @@ def test_security_definer_functions_revoke_public_execute() -> None:
         "0027_add_link_decline_and_separate_account.py",
         "0028_return_link_completion_context.py",
         "0029_add_identity_removal_step_up.py",
+        "0030_add_duplicate_user_assessment.py",
     ):
         migration = read_migration(filename)
         assert "SECURITY DEFINER" in migration
