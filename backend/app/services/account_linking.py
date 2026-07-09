@@ -7,6 +7,7 @@ intent identifiers. A verified-email match never links identities by itself.
 from __future__ import annotations
 
 import datetime
+import json
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -80,7 +81,7 @@ async def create_account_link_intent(
             "required_provider": required_provider,
             "browser_binding_hash": browser_binding_hash,
             "expires_at": expires_at,
-            "initiating_claims": initiating_claims,
+            "initiating_claims": json.dumps(initiating_claims) if initiating_claims is not None else None,
             "created_ip": created_ip,
             "user_agent": user_agent,
         },
