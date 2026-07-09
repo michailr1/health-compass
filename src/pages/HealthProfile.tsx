@@ -12,6 +12,8 @@ import {
 } from "@/lib/api";
 
 const CONSENT_VERSION = "health-data-processing-v1";
+const WEIGHT_WARNING_MIN_KG = 20;
+const WEIGHT_WARNING_MAX_KG = 400;
 
 async function loadProfilePage() {
   const profiles = await apiGet<HealthProfile[]>("/profiles");
@@ -42,7 +44,7 @@ export default function HealthProfilePage() {
     setDraft({
       display_name: profile.display_name,
       date_of_birth: profile.date_of_birth ?? "",
-      sex: profile.sex ?? "not_specified",
+      sex: profile.sex ?? "",
       height_cm: profile.height_cm ?? "",
       timezone: profile.timezone ?? "",
     });
@@ -63,7 +65,7 @@ export default function HealthProfilePage() {
     if (!profile || Object.keys(draft).length === 0) return;
     const timer = window.setTimeout(() => {
       const payload: Record<string, unknown> = {
-        display_name: draft.display_name,
+        display_name: draft.display_name.trim(),
       };
       if (consentActive) {
         payload.date_of_birth = draft.date_of_birth || null;
@@ -75,7 +77,7 @@ export default function HealthProfilePage() {
       const medicalUnchanged =
         !consentActive ||
         (payload.date_of_birth === profile.date_of_birth &&
-          payload.sex === (profile.sex ?? "not_specified") &&
+          payload.sex === profile.sex &&
           String(payload.height_cm ?? "") === String(profile.height_cm ?? "") &&
           payload.timezone === profile.timezone);
       const unchanged = payload.display_name === profile.display_name && medicalUnchanged;
@@ -93,19 +95,32 @@ export default function HealthProfilePage() {
   });
 
   const weightMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (confirmUnusualValue: boolean) =>
       apiPost<BodyMeasurement>(`/profiles/${profile!.id}/body-measurements`, {
         measurement_type: "weight",
         value: Number(weight),
         unit: "kg",
         measured_at: new Date().toISOString(),
-        confirm_unusual_value: false,
+        confirm_unusual_value: confirmUnusualValue,
       }),
     onSuccess: () => {
       setWeight("");
       queryClient.invalidateQueries({ queryKey: ["health-profile"] });
     },
   });
+
+  const addWeight = () => {
+    const numericWeight = Number(weight);
+    if (!Number.isFinite(numericWeight) || numericWeight <= 0) return;
+    const unusual = numericWeight < WEIGHT_WARNING_MIN_KG || numericWeight > WEIGHT_WARNING_MAX_KG;
+    if (unusual) {
+      const confirmed = window.confirm(
+        `Вес ${numericWeight.toLocaleString("ru-RU")} кг выглядит необычно. Проверьте значение и единицы. Сохранить?`,
+      );
+      if (!confirmed) return;
+    }
+    weightMutation.mutate(unusual);
+  };
 
   const readinessItems = useMemo(() => {
     const readiness = profile?.readiness;
@@ -173,10 +188,11 @@ export default function HealthProfilePage() {
           <Field label="Дата рождения" type="date" value={draft.date_of_birth ?? ""} disabled={!consentActive} onChange={(value) => setDraft((state) => ({ ...state, date_of_birth: value }))} />
           <label className="space-y-1.5 text-sm">
             <span className="text-muted-foreground">Пол</span>
-            <select disabled={!consentActive} value={draft.sex ?? "not_specified"} onChange={(event) => setDraft((state) => ({ ...state, sex: event.target.value }))} className="w-full rounded-xl border border-border bg-background px-3 py-2.5">
+            <select disabled={!consentActive} value={draft.sex ?? ""} onChange={(event) => setDraft((state) => ({ ...state, sex: event.target.value }))} className="w-full rounded-xl border border-border bg-background px-3 py-2.5">
+              <option value="">Не выбрано</option>
               <option value="male">Мужской</option>
               <option value="female">Женский</option>
-              <option value="not_specified">Не указано</option>
+              <option value="not_specified">Предпочитаю не указывать</option>
             </select>
           </label>
           <Field label="Рост, см" type="number" value={draft.height_cm ?? ""} disabled={!consentActive} onChange={(value) => setDraft((state) => ({ ...state, height_cm: value }))} />
@@ -208,7 +224,7 @@ export default function HealthProfilePage() {
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
           <input disabled={!consentActive} type="number" step="0.1" min="0" value={weight} onChange={(event) => setWeight(event.target.value)} placeholder="Вес, кг" className="rounded-xl border border-border bg-background px-3 py-2.5" />
-          <button disabled={!consentActive || !weight || weightMutation.isPending} onClick={() => weightMutation.mutate()} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
+          <button disabled={!consentActive || !weight || weightMutation.isPending} onClick={addWeight} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
             Добавить измерение
           </button>
         </div>
