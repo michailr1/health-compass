@@ -15,7 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.account_linking import hash_secret
 from app.core.config import settings
-from app.core.magic_links import hash_magic_token, new_magic_token, send_account_link_email
+from app.core.magic_links import (
+    hash_magic_token,
+    new_magic_token,
+    send_account_link_email,
+    send_account_linked_notification,
+)
 from app.core.session_tokens import hash_token, new_session_token
 from app.db.rls import apply_session_context, apply_user_context
 from app.db.session import get_session
@@ -116,11 +121,7 @@ async def _create_authenticated_response(
     return response
 
 
-@router.post(
-    "/email/request",
-    response_model=LinkEmailAccepted,
-    status_code=status.HTTP_202_ACCEPTED,
-)
+@router.post("/email/request", response_model=LinkEmailAccepted, status_code=status.HTTP_202_ACCEPTED)
 async def request_link_email(
     payload: LinkEmailRequest,
     request: Request,
@@ -128,7 +129,6 @@ async def request_link_email(
 ) -> LinkEmailAccepted:
     if not settings.account_linking_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-
     browser_binding = request.cookies.get(settings.account_link_cookie_name)
     if not browser_binding:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Link session is missing")
@@ -161,10 +161,7 @@ async def request_link_email(
             intent_id=payload.intent_id,
             metadata={"stage": "link_email_issue"},
         )
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Link request is unavailable or expired",
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Link request is unavailable or expired")
 
     try:
         await send_account_link_email(recipient, token)
@@ -181,10 +178,7 @@ async def request_link_email(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Email delivery is temporarily unavailable",
         ) from exc
-
-    return LinkEmailAccepted(
-        message="A confirmation link has been sent to the verified email address."
-    )
+    return LinkEmailAccepted(message="A confirmation link has been sent to the verified email address.")
 
 
 @router.get("/email/consume")
@@ -195,7 +189,6 @@ async def consume_link_email(
 ) -> RedirectResponse:
     if not settings.account_linking_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-
     browser_binding = request.cookies.get(settings.account_link_cookie_name)
     if not browser_binding:
         return RedirectResponse(
@@ -214,19 +207,43 @@ async def consume_link_email(
             "issuer": settings.oidc_issuer or "https://accounts.google.com",
         },
     )
-    user_id = result.scalar_one_or_none()
-    if user_id is None:
+    completion = result.scalar_one_or_none()
+    if not completion:
         return RedirectResponse(
             _frontend_url("/auth/link-account", {"status": "invalid-or-expired"}),
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
+    user_id = uuid.UUID(str(completion["user_id"]))
+    intent_id = uuid.UUID(str(completion["intent_id"]))
+    replayed = bool(completion.get("replayed"))
     await apply_user_context(session, user_id)
     user_result = await session.execute(select(User).where(User.id == user_id))
     user = user_result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Linked account is unavailable")
 
+    await _record_link_audit(
+        session,
+        request,
+        event_type="identity.link_completed",
+        result="success",
+        intent_id=intent_id,
+        actor_user_id=user.id,
+        metadata={"confirmation": "link_email", "replayed": replayed},
+    )
+    if not replayed:
+        try:
+            await send_account_linked_notification(user.email, ("Google", "Email Magic Link"))
+        except Exception:
+            await _record_link_audit(
+                session,
+                request,
+                event_type="identity.link_notification_failed",
+                result="error",
+                intent_id=intent_id,
+                actor_user_id=user.id,
+            )
     return await _create_authenticated_response(session, request, user)
 
 
@@ -238,21 +255,15 @@ async def decline_account_link(
 ) -> None:
     if not settings.account_linking_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-
     browser_binding = request.cookies.get(settings.account_link_cookie_name)
     if not browser_binding:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Link session is missing")
-
     result = await session.execute(
         text("select health_compass.app_decline_account_link(:intent_id, :browser_hash)"),
-        {
-            "intent_id": payload.intent_id,
-            "browser_hash": hash_secret(browser_binding),
-        },
+        {"intent_id": payload.intent_id, "browser_hash": hash_secret(browser_binding)},
     )
     if not bool(result.scalar_one()):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Link request cannot be declined")
-
     await _record_link_audit(
         session,
         request,
@@ -275,7 +286,6 @@ async def create_separate_account(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Explicit separate-account confirmation is required",
         )
-
     browser_binding = request.cookies.get(settings.account_link_cookie_name)
     if not browser_binding:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Link session is missing")
@@ -285,10 +295,7 @@ async def create_separate_account(
             "select health_compass.app_claim_declined_link_for_separate_account("
             ":intent_id, :browser_hash)"
         ),
-        {
-            "intent_id": payload.intent_id,
-            "browser_hash": hash_secret(browser_binding),
-        },
+        {"intent_id": payload.intent_id, "browser_hash": hash_secret(browser_binding)},
     )
     identity_payload = result.scalar_one_or_none()
     if not identity_payload:
@@ -325,7 +332,6 @@ async def create_separate_account(
         )
     )
     await ensure_personal_workspace(session, user)
-
     await _record_link_audit(
         session,
         request,
