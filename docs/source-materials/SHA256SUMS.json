@@ -1,0 +1,277 @@
+[
+  {
+    "path": "docs/source-materials/README.md",
+    "size": 1983,
+    "sha256": "525691e4b6957f561b8f5bf301e5b700c0d888c4db0cd1a340b482c2009c6f9d"
+  },
+  {
+    "path": "docs/source-materials/fable/reviews/review-fable5-rls-recursion.txt",
+    "size": 27134,
+    "sha256": "9822eb6f7e2b26567ba6d76a96fc6abacfb4a3c4539b744a0ceddf9e55d97b06"
+  },
+  {
+    "path": "docs/source-materials/fable/reviews/review-fable5.txt",
+    "size": 39344,
+    "sha256": "be8d68b698387e18dadae69add174775da4e4ad4ac16e21942e87c8c5f5f8486"
+  },
+  {
+    "path": "docs/source-materials/fable/stage-02.5/02.5-health-intake-spec.md",
+    "size": 13540,
+    "sha256": "dd2da53e01a24ba3ad483bb0344b77df938f643edb20607f594529859b75abf3"
+  },
+  {
+    "path": "docs/source-materials/fable/stage-02.5/02.5-intake-fields.xlsx",
+    "size": 16319,
+    "sha256": "0e85d0ba9c883502657fcfbf8acd10f5a396c4c2f07174a2eb55687622c4f747"
+  },
+  {
+    "path": "docs/source-materials/fable/stage-02.5/02.5-intake-wireframes.pdf",
+    "size": 84910,
+    "sha256": "ebf03e8c8eb16908a023592fd1120373227c48e42a18f1450de3aa0144a49e04"
+  },
+  {
+    "path": "docs/source-materials/strategic/01-health-compass-master-plan.pdf",
+    "size": 110491,
+    "sha256": "43781223d6ba094ac02c079164263f0d61247dc4a31069cfef5332958924e9bb"
+  },
+  {
+    "path": "docs/source-materials/strategic/03-implementation-roadmap.xlsx",
+    "size": 28487,
+    "sha256": "b02e03d8b654fa44e4f14a4f3967d12512f8c004bb69e6ab32b4f6612615c0c7"
+  },
+  {
+    "path": "docs/source-materials/strategic/04-health-compass-vision-and-roadmap.pptx",
+    "size": 56009,
+    "sha256": "f58a4edadaaf756a77c7014d1c660b3dafaeef9d318aaf9967407ee0b98509dd"
+  },
+  {
+    "path": "docs/source-materials/strategic/14-unit-economics.xlsx",
+    "size": 17804,
+    "sha256": "18b29a1b0028653c80544a4e98f7c711b62c0d4937947a796c458a7a5ea8cacf"
+  },
+  {
+    "path": "docs/source-materials/strategic/START-HERE.md",
+    "size": 5375,
+    "sha256": "8d81e0b95d4d57fb0a16def2902ff8d552fb3a6ab0bc16663c9542b6bd393bf0"
+  },
+  {
+    "path": "docs/source-materials/strategic/health-compass-master-plan.zip",
+    "size": 388619,
+    "sha256": "0147744a07ee2670746ecaa63b2260a6791b121f24b3829d133ae313aef52867"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/01-health-compass-master-plan.md",
+    "size": 37148,
+    "sha256": "8c34d0c2416383a6749f5b0f120226c16f94ae0e5cf5ea64266a4af06fab6be7"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/01-health-compass-master-plan.pdf",
+    "size": 110491,
+    "sha256": "43781223d6ba094ac02c079164263f0d61247dc4a31069cfef5332958924e9bb"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/02-technical-architecture.md",
+    "size": 20903,
+    "sha256": "d59594e2e9556791237cc41f979b70bcb42c68474242b1601b647a7844dff519"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/03-implementation-roadmap.xlsx",
+    "size": 28487,
+    "sha256": "b02e03d8b654fa44e4f14a4f3967d12512f8c004bb69e6ab32b4f6612615c0c7"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/04-health-compass-vision-and-roadmap.pptx",
+    "size": 56009,
+    "sha256": "f58a4edadaaf756a77c7014d1c660b3dafaeef9d318aaf9967407ee0b98509dd"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/05-portal-wireframes.pdf",
+    "size": 67459,
+    "sha256": "d8d7e2a046387b57a90004e140b3eea921844709b176bb3594c69ca802ea6396"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/05-product-and-ux-specification.md",
+    "size": 9019,
+    "sha256": "633a05277c8b27f9bf5c1dfdbeb0a7019b47df1a476938561e081af65224a23d"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/06-data-model-diagram.mmd",
+    "size": 2616,
+    "sha256": "074a57bfdef93f68f7a80aee909d3cf70cddd3fa7cfb4a5ba23fac272c3d624d"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/06-data-model-diagram.pdf",
+    "size": 75749,
+    "sha256": "a1672a4cae80797c26af5a111c9de6b992e8f205d7f2f7e20cf777e8b378d35e"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/06-data-model.md",
+    "size": 10086,
+    "sha256": "28af591d65e91b541e9fad0f227ff2abeb9eba9efea519efa5d759c62d04deac"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/07-security-and-threat-model.md",
+    "size": 9661,
+    "sha256": "542d8404aacd78de1778373bfd1149e7f857c27616247b2826020e8abe9297b5"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/08-war-games.xlsx",
+    "size": 13521,
+    "sha256": "05a353d76c37eb6a2d5150c5efbc49c64c5f5bca12cf9f3425880500d3d751a9"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/09-agent-prompts/architect-prompts.md",
+    "size": 3338,
+    "sha256": "241f4450e3f4e6f94c668e61bd574f851c37d7b60d529ba78d31871ca1780929"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/09-agent-prompts/coding-agent-prompts.md",
+    "size": 5563,
+    "sha256": "8078d0bd11a7a4bfca9bec22c9f8a9640c44cff61740ab03a2edc60796ce9b50"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/09-agent-prompts/incident-prompts.md",
+    "size": 6218,
+    "sha256": "c769fbd09a33d3ac3080fa195fdeb45ce844cf4b33b3981d636d9314ecffcd55"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/09-agent-prompts/release-prompts.md",
+    "size": 1635,
+    "sha256": "e0155db369900fbafff04b83c95ecea532c018a4f8e2ac21a0bfbac862b92cad"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/09-agent-prompts/review-prompts.md",
+    "size": 3055,
+    "sha256": "6bf461c2ecf986286a04445385dc88615272d128fe68a70aa7689a5fb313b2e0"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/09-agent-prompts/vps-agent-prompts.md",
+    "size": 4264,
+    "sha256": "68df9d9c851b522548351b3ae66cf312fab1364d4a6c27c6d512b236820933ad"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/10-machine-readable-roadmap.yaml",
+    "size": 9921,
+    "sha256": "c39de9810a1dd3c30b6bf116b9747a22c37281e3ce9f6299d163ef91f254ee2e"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-001.md",
+    "size": 781,
+    "sha256": "d63ea8df18d49e57e168c1137ff4d2034306924a3ccf6199e8783af92d8c8b09"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-002.md",
+    "size": 667,
+    "sha256": "95ca39b410ffaf65a892a51581a4937a8875cbe2d3e34f0e2123309b1b0d5d1e"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-003.md",
+    "size": 934,
+    "sha256": "5e4fa60dc1037690325832265a790eac4a3a7eb942ab3b253079bac3db5b5a28"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-004.md",
+    "size": 442,
+    "sha256": "6991b583318f3c2b8dbf5f1866bbbc24f537657d529e9f533c9f14834aefdcff"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-005.md",
+    "size": 228,
+    "sha256": "223c784c9954bf81295efd16db2b952a49f6d9c1de10ff266a41d20a24ccefd7"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-006.md",
+    "size": 492,
+    "sha256": "97b9481b7324cccd0e894f765707be31cd6cb221885bf99ce7f97e2a0cbc9d28"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-007.md",
+    "size": 1078,
+    "sha256": "64ff797621ec50216475f061513b1516ae74ef0df6ef3bc7e21b49248b2b55de"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-008.md",
+    "size": 565,
+    "sha256": "1493b23fbdee9c2ca3a7a431ce67969d0adcc8860e0cb327c36d3c4cf458d57d"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-009.md",
+    "size": 473,
+    "sha256": "44a5cfc65758fe1049b92d9e65d942151a66d43bb889dd29e2df98d619414ef6"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-010.md",
+    "size": 450,
+    "sha256": "bdf717b39dc481969351a3aba4ddef5bbc0540d3a198d3bdd670db603b03be5b"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-011.md",
+    "size": 535,
+    "sha256": "70baf69416657c0ac64310e5110a00e4624aa970df09c6515ed9edbfe1ff2841"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-012.md",
+    "size": 674,
+    "sha256": "7332da88b4b283a054d7d65b623d3acef7ed7dc1ae1741127402fa4736fedfef"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-013.md",
+    "size": 432,
+    "sha256": "6be5e39fe927ab46a862e74bc777fb3bbcbcd2bac25a69b65268596838046269"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-014.md",
+    "size": 399,
+    "sha256": "3943617e66f6e6c6fcf5c6579f1a167d2272a3799d9fc479c34a24f5ae1174c9"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-015.md",
+    "size": 433,
+    "sha256": "f70abf826bad71a843b33b7de66456e02336e367f00b0560de5c9522824b75f5"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-016.md",
+    "size": 409,
+    "sha256": "7e7a025127105938df20911454bee9571f26f49d2a97d6d1b58d83a20d28e9c7"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-017.md",
+    "size": 733,
+    "sha256": "ebe399de61c43775ec9e31133e1cd2af0be10ad3a588aac08832e01116ce8382"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-018.md",
+    "size": 715,
+    "sha256": "f777653ee1d9663fe6a90dbc8746f6a50d5c971882a3ec4f3d917b40f32ebbd9"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-019.md",
+    "size": 603,
+    "sha256": "5321414777ae8024e309fc803a8056aaf441515cc50bed36c0da0b1403238774"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/11-adr/ADR-020.md",
+    "size": 900,
+    "sha256": "2e305b5324788e25969a2d706fca4110214ec66a17e4d086659af967a52fddff"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/12-product-strategy-and-monetization.md",
+    "size": 8927,
+    "sha256": "89f39e3b7f79cb974049b301fa0336035d8e7e97caaf5636d984496500b641b4"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/13-pricing-and-entitlements.xlsx",
+    "size": 19282,
+    "sha256": "de878fab341664cd082894248964bddfe44b7d9087ee9034172bdc03f865917b"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/14-unit-economics.xlsx",
+    "size": 17804,
+    "sha256": "18b29a1b0028653c80544a4e98f7c711b62c0d4937947a796c458a7a5ea8cacf"
+  },
+  {
+    "path": "docs/source-materials/strategic/master-plan-kit/START-HERE.md",
+    "size": 5375,
+    "sha256": "8d81e0b95d4d57fb0a16def2902ff8d552fb3a6ab0bc16663c9542b6bd393bf0"
+  }
+]

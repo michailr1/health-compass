@@ -1,0 +1,277 @@
+Разбор выполнен по фактическому коду ветки (миграции 0001–0019, `app/services/bootstrap.py`, модели, `auth.py`). Ошибка воспроизводится логически полностью, включая то, почему она стреляет именно на `profile_permissions`, а не раньше.
+
+## 1–2. Подтверждённая root cause и точная цепочка
+
+Ваша гипотеза верна по архитектуре, но цикл замыкается на шаг раньше, чем предполагалось, и у него есть точная дата рождения — **миграция 0015**.
+
+**Ключевой факт №1.** `app_can_view_profile` и `app_has_workspace_access` (0006) — `SECURITY DEFINER`, владелец — `health_compass_migrator`, который владеет таблицами. До 0015 они «работали» только потому, что владелец таблицы неявно обходит RLS. Миграция 0015 (`FORCE ROW LEVEL SECURITY`) отняла этот обход у владельца — и функции-помощники сами попали под те политики, которые их вызывают. Цикл существовал в графе зависимостей с 0006, FORCE его активировал.
+
+**Ключевой факт №2 (почему именно этот INSERT).** SQLAlchemy добавляет `RETURNING` только для колонок с server default. По моделям:
+
+- `Workspace`, `WorkspaceAccess` — в ORM-моделях **нет** `created_at` → INSERT без RETURNING → SELECT-политики не проверяются → проходят.
+- `HealthProfile` — есть `created_at` → `INSERT … RETURNING`, а PostgreSQL при RETURNING применяет к новой строке SELECT-политики (это и есть причина существования вашей же миграции 0014 — «Allow owner rows to be visible during INSERT RETURNING»). Спасает прямая политика `profiles_owner_direct_select`, которая проверяется на самом кортеже без сканирования.
+- `ProfileAccess` — есть `created_at` → RETURNING → SELECT-политика применяется, а у `profile_permissions` **единственная** SELECT-политика — рекурсивная `profile_access_select`. Короткого пути нет.
+
+**Точная цепочка:**
+
+```text
+INSERT INTO profile_permissions … RETURNING created_at
+→ WithCheckOptions: новая строка обязана пройти SELECT-политики
+→ profile_access_select → app_can_view_profile(NEW.profile_id)      [вызов 1]
+→ функция под FORCE RLS (обход владельца снят миграцией 0015)
+→ SELECT … FROM health_profiles WHERE id = profile_id
+   (строка профиля вставлена ПРЕДЫДУЩИМ flush → видима в снапшоте)
+→ security-qual строки включает profiles_view_select
+→ app_can_view_profile(hp.id)                                        [вызов 2]
+→ тот же скан той же видимой строки → вызов 3 → … → 54001
+```
+
+Почему `INSERT health_profiles` на шаг раньше не зациклился: там WCO-проверка идёт по новому кортежу, а внутри рекурсивного вызова новая строка **невидима собственному стейтменту** (правило cmin) — сканы возвращают 0 строк, рекурсия обрывается на глубине 2, а `profiles_owner_direct_select` даёт true. У `profile_permissions` же аргумент функции — id *уже видимого* профиля, и цикл раскручивается бесконечно.
+
+Параллельные рёбра цикла (все реальные):
+- `profile_access_select → app_can_view_profile → SELECT profile_permissions → profile_access_select` — прямой цикл длины 1, сработает при любом скане pp с кандидатами;
+- `workspace_access_select → app_has_workspace_access → SELECT workspace_members → workspace_access_select` — **любой SELECT workspaces/members у пользователя, имеющего членство, после 0015 падает так же**. Сейчас это замаскировано тем, что первый логин падает до commit'а и пользователей в базе нет.
+
+Про `max_stack_depth` вы правы сильнее, чем сформулировали: рекурсия **бесконечная**, а не глубокая, поэтому увеличение лимита — не «маскировка», а буквально no-op: упадёт на любом конечном значении, просто позже и с большим потреблением стека.
+
+## 3–6. SECURITY DEFINER: безопасность, владелец, search_path, EXECUTE
+
+**(3)** `SECURITY DEFINER` для lookup-функций — корректный и канонический паттерн разрыва RLS-рекурсии, при условиях: тело — статический SQL без динамики; возврат — только boolean/uuid, никогда SETOF строк данных; `STABLE`; фиксированный `search_path`; владелец — минимально привилегированный. Небезопасен он был в текущей редакции: безопасность/работоспособность держались на *неявном* обходе владельца, который молча исчез при FORCE.
+
+**(4)** Владелец — выделенная роль `health_compass_rls_definer` `NOLOGIN BYPASSRLS`, не migrator и не суперпользователь. `BYPASSRLS` игнорирует и FORCE — это единственный явный, аудируемый механизм исключения при сохранении FORCE как default-deny. Роли даётся только `USAGE` на схему и `SELECT` на конкретные таблицы, которые читают функции. Важно: `BYPASSRLS` выставляется только суперпользователем — это разовый ops-шаг до миграции (у вас свой PostgreSQL на VPS, проблемы нет; на managed-PG вроде RDS этот путь недоступен — тогда альтернатива: снять FORCE и вернуть owner-bypass через выделенную роль-владельца таблиц, но это хуже).
+
+**(5)** `SET search_path = ''` с полной квалификацией всех имён в теле (у вас она уже есть) — самый строгий вариант; `SET search_path = health_compass, pg_temp` (текущая запись, pg_temp явно последним) — допустимый минимум. Дополнительно рекомендую `SET row_security = off` внутри definer-функций как «растяжку»: для владельца с BYPASSRLS это no-op, а если владение когда-нибудь регрессирует — запросы к FORCE-таблицам упадут громкой ошибкой вместо тихой рекурсии.
+
+**(6)** `REVOKE ALL ON FUNCTION … FROM PUBLIC` обязателен: `CREATE FUNCTION` по умолчанию даёт EXECUTE всем, и ни 0006, ни 0017, ни 0019 это не отзывали, а 0007 ещё и наливает `GRANT EXECUTE ON ALL FUNCTIONS`. Выдать EXECUTE только `health_compass_app`. Плюс `ALTER DEFAULT PRIVILEGES IN SCHEMA health_compass REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` на будущее.
+
+## 7. Создаёт ли исправление обход изоляции
+
+Сама функция — boolean-оракул «видит ли *текущий GUC-пользователь* профиль X», данных не возвращает; при отозванном PUBLIC поверхность не расширяется. Два честных замечания:
+
+1. Вся модель уже доверяет app-tier: `set_config('app.current_user_id', …)` никак не аутентифицирован, полноценная SQL-инъекция может назначить себе чужой id. RLS здесь — защита от багов приложения и частичных инъекций, не от компрометации роли. Это было так и до фикса.
+2. Реальный риск — эволюционный: любая функция, принадлежащая BYPASSRLS-роли, — это дырка в RLS by design. Правило ревью: такие функции возвращают только скаляры, не принимают динамический SQL, их список — короткий и известный (см. инвариант-тест ниже).
+
+**Но при аудите найдены две настоящие дыры эскалации, не связанные с рекурсией:**
+
+- `profile_owner_access_insert` (0013): `WITH CHECK (user_id = app_current_user_id() AND permission = 'owner')` — пользователь A может вставить себе `owner`-permission на **любой** `profile_id` (FK-проверка обходит RLS по правилам PostgreSQL, видимость профиля для INSERT не требуется). После этого A видит профиль B.
+- `workspace_owner_member_insert` (0013): `WITH CHECK (user_id = app_current_user_id())` — A может добавить себя членом **любого** workspace.
+
+Обе закрываются в 0020 привязкой к фактическому владению (см. миграцию). Заодно `profiles_owner_insert` стоит ужесточить проверкой членства в workspace — сейчас A может создать профиль внутри чужого workspace (загрязнение данных, не утечка).
+
+## 8. Bootstrap-policy для первой записи owner
+
+Отдельная политика нужна, и она же закрывает эскалацию: право вставить `permission = 'owner'` для себя должно требовать `health_profiles.owner_user_id = current` (через bypass-функцию `app_owns_profile`). Bootstrap работает, потому что профиль вставлен предыдущим `flush` (отдельная команда → строка видима). Важное ограничение паттерна: helper со `STABLE`-снапшотом не увидит строку, вставленную *тем же* стейтментом — профиль и permission нельзя объединять в один statement (сейчас и не объединены; зафиксируйте комментарием). Будущий сценарий «поделиться профилем» — отдельной политикой с проверкой `granted_by_user_id = current AND app_owns_profile(...)`.
+
+Дополнительно добавьте прямые self-политики `pp_self_select` / `wm_self_select` (`user_id = current`): они дают нерекурсивный быстрый путь для WCO при RETURNING и убирают зависимость корректности от порядка вычисления OR пермиссивных политик (он не гарантирован — сейчас health_profiles спасается фактическим порядком, это хрупко).
+
+## 9. Migration 0020
+
+Предварительный шаг суперпользователя (разово, вне alembic):
+
+```sql
+CREATE ROLE health_compass_rls_definer NOLOGIN BYPASSRLS;
+GRANT health_compass_rls_definer TO health_compass_migrator;  -- иначе migrator не сможет сделать ALTER ... OWNER TO
+```
+
+```python
+"""Break RLS recursion via dedicated BYPASSRLS definer; close permission-escalation inserts.
+
+Revision ID: 0020
+Revises: 0019
+"""
+from alembic import op
+
+revision = "0020"
+down_revision = "0019"
+branch_labels = None
+depends_on = None
+
+S = "health_compass"
+R = "health_compass_rls_definer"
+
+FUNCS = [
+    f"{S}.app_can_view_profile(uuid)",
+    f"{S}.app_has_workspace_access(uuid)",
+    f"{S}.app_owns_profile(uuid)",
+    f"{S}.app_created_workspace(uuid)",
+    f"{S}.app_lookup_identity_user_id(text, text)",
+]
+
+
+def upgrade() -> None:
+    # 0. Fail-fast: роль обязана существовать и иметь BYPASSRLS.
+    op.execute(f"""
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{R}' AND rolbypassrls) THEN
+        RAISE EXCEPTION 'Provision first (superuser): CREATE ROLE {R} NOLOGIN BYPASSRLS; GRANT {R} TO health_compass_migrator';
+      END IF;
+    END $$;
+    """)
+
+    # 1. Минимальные привилегии роли-владельца функций.
+    op.execute(f"GRANT USAGE ON SCHEMA {S} TO {R}")
+    op.execute(f"""
+    GRANT SELECT ON {S}.health_profiles, {S}.profile_permissions,
+                    {S}.workspaces, {S}.workspace_members, {S}.user_identities TO {R}
+    """)
+
+    # 2. Пересоздание helper-функций: фиксированный search_path,
+    #    row_security = off как растяжка на случай регресса владельца.
+    op.execute(f"""
+    CREATE OR REPLACE FUNCTION {S}.app_can_view_profile(target_profile_id uuid)
+    RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = '' SET row_security = off AS $$
+      SELECT EXISTS (
+        SELECT 1 FROM {S}.health_profiles hp
+        WHERE hp.id = target_profile_id
+          AND hp.owner_user_id = {S}.app_current_user_id()
+      ) OR EXISTS (
+        SELECT 1 FROM {S}.profile_permissions pp
+        WHERE pp.profile_id = target_profile_id
+          AND pp.user_id = {S}.app_current_user_id()
+          AND pp.permission IN ('owner','edit','analyze','view')
+      )
+    $$
+    """)
+    op.execute(f"""
+    CREATE OR REPLACE FUNCTION {S}.app_has_workspace_access(target_workspace_id uuid)
+    RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = '' SET row_security = off AS $$
+      SELECT EXISTS (
+        SELECT 1 FROM {S}.workspace_members wm
+        WHERE wm.workspace_id = target_workspace_id
+          AND wm.user_id = {S}.app_current_user_id()
+      )
+    $$
+    """)
+    op.execute(f"""
+    CREATE FUNCTION {S}.app_owns_profile(target_profile_id uuid)
+    RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = '' SET row_security = off AS $$
+      SELECT EXISTS (
+        SELECT 1 FROM {S}.health_profiles hp
+        WHERE hp.id = target_profile_id
+          AND hp.owner_user_id = {S}.app_current_user_id()
+      )
+    $$
+    """)
+    op.execute(f"""
+    CREATE FUNCTION {S}.app_created_workspace(target_workspace_id uuid)
+    RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = '' SET row_security = off AS $$
+      SELECT EXISTS (
+        SELECT 1 FROM {S}.workspaces w
+        WHERE w.id = target_workspace_id
+          AND w.created_by_user_id = {S}.app_current_user_id()
+      )
+    $$
+    """)
+    # 0017: pre-auth lookup обязан обходить RLS — под FORCE он сейчас
+    # возвращает NULL и создавал бы дубликат user на каждый вход.
+    op.execute(f"""
+    CREATE OR REPLACE FUNCTION {S}.app_lookup_identity_user_id(identity_provider text, identity_subject text)
+    RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = '' SET row_security = off AS $$
+      SELECT ui.user_id FROM {S}.user_identities ui
+      WHERE ui.provider = identity_provider AND ui.subject = identity_subject
+      LIMIT 1
+    $$
+    """)
+
+    # 3. Владение и EXECUTE.
+    for sig in FUNCS:
+        op.execute(f"ALTER FUNCTION {sig} OWNER TO {R}")
+        op.execute(f"REVOKE ALL ON FUNCTION {sig} FROM PUBLIC")
+        op.execute(f"GRANT EXECUTE ON FUNCTION {sig} TO health_compass_app")
+    op.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA {S} REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC")
+
+    # 4. Закрытие эскалаций в INSERT-политиках.
+    op.execute(f"DROP POLICY IF EXISTS profile_owner_access_insert ON {S}.profile_permissions")
+    op.execute(f"""
+    CREATE POLICY pp_owner_bootstrap_insert ON {S}.profile_permissions FOR INSERT
+    WITH CHECK (
+      user_id = {S}.app_current_user_id()
+      AND permission = 'owner'
+      AND {S}.app_owns_profile(profile_id)
+    )
+    """)
+    op.execute(f"DROP POLICY IF EXISTS workspace_owner_member_insert ON {S}.workspace_members")
+    op.execute(f"""
+    CREATE POLICY wm_creator_bootstrap_insert ON {S}.workspace_members FOR INSERT
+    WITH CHECK (
+      user_id = {S}.app_current_user_id()
+      AND role = 'owner'
+      AND {S}.app_created_workspace(workspace_id)
+    )
+    """)
+    op.execute(f"DROP POLICY IF EXISTS profiles_owner_insert ON {S}.health_profiles")
+    op.execute(f"""
+    CREATE POLICY profiles_owner_insert ON {S}.health_profiles FOR INSERT
+    WITH CHECK (
+      owner_user_id = {S}.app_current_user_id()
+      AND {S}.app_has_workspace_access(workspace_id)
+    )
+    """)
+
+    # 5. Прямые self-политики: нерекурсивный путь для WCO/RETURNING,
+    #    независимость от порядка OR пермиссивных политик.
+    op.execute(f"""
+    CREATE POLICY pp_self_select ON {S}.profile_permissions FOR SELECT
+    USING (user_id = {S}.app_current_user_id())
+    """)
+    op.execute(f"""
+    CREATE POLICY wm_self_select ON {S}.workspace_members FOR SELECT
+    USING (user_id = {S}.app_current_user_id())
+    """)
+
+    # 6. Отсутствовавшая UPDATE-политика users: повторный вход обновляет
+    #    email/display_name и сейчас упадёт StaleDataError (0 строк под RLS).
+    op.execute(f"""
+    CREATE POLICY users_self_update ON {S}.users FOR UPDATE
+    USING (id = {S}.app_current_user_id())
+    WITH CHECK (id = {S}.app_current_user_id())
+    """)
+
+
+def downgrade() -> None:
+    op.execute(f"DROP POLICY IF EXISTS users_self_update ON {S}.users")
+    op.execute(f"DROP POLICY IF EXISTS wm_self_select ON {S}.workspace_members")
+    op.execute(f"DROP POLICY IF EXISTS pp_self_select ON {S}.profile_permissions")
+    # Политики 0013 намеренно не восстанавливаются: содержали эскалацию привилегий.
+    op.execute(f"DROP FUNCTION IF EXISTS {S}.app_created_workspace(uuid)")
+    op.execute(f"DROP FUNCTION IF EXISTS {S}.app_owns_profile(uuid)")
+```
+
+Обязательное сопутствующее изменение в коде (иначе следующий стоп будет на `auth_sessions`): у `AuthSession` есть `created_at` → `INSERT … RETURNING` → SELECT-политика `sessions_current_select` требует совпадения `app.current_session_hash`, который в callback не установлен. Перед `session.add(AuthSession(...))` в `auth.py` и `email_auth.py` вызвать `await apply_session_context(session, hash_token(token))`.
+
+## Аудит остальных таблиц на аналогичную рекурсию
+
+- **health_profiles** — да, цикл `profiles_view_select ↔ app_can_view_profile`; сейчас маскируется порядком политик в OR (недокументированное поведение). Устраняется фиксом функции.
+- **profile_permissions** — да, прямой цикл длины 1 (сам предмет инцидента).
+- **workspace_members** — да, прямой цикл `workspace_access_select ↔ app_has_workspace_access`. После 0015 любой листинг workspace у пользователя с членством даст 54001 — второй production-инцидент, ждущий первых закоммиченных пользователей.
+- **workspaces** — транзитивно да (политика вызывает функцию, цикл живёт в workspace_members).
+- **dashboard_snapshots** — транзитивно да (обе политики через `app_can_view_profile`); сама таблица в цикле не участвует.
+- **invitations** — RLS + FORCE, политик нет вообще → fail-closed deny; рекурсии нет, но фича мертва до добавления политик (добавить вместе с invite-флоу).
+- **email_login_tokens / magic links (0019)** — рекурсии нет (политик нет), но конструкция повторяет исходную ошибку: definer-функции migrator'а держатся на owner-bypass, потому что 0019 «забыл» FORCE. Рекомендую перевести обе функции на ту же bypass-роль и добавить `FORCE ROW LEVEL SECURITY` для единообразия модели. Также заметьте: под FORCE сломан и `app_lookup_identity_user_id` (0017) — возвращал бы NULL при каждом входе, а после снятия уникальности email в 0018 это тихие дубликаты пользователей на каждый логин; сейчас это скрыто тем, что транзакция первого входа целиком откатывается. Фикс включён в 0020.
+
+## Обязательные SQL-тесты (под ролью health_compass_app, на реальном PG)
+
+1. **Bootstrap smoke:** полный сценарий первого входа (user → identity → workspace → member → profile → permission → snapshot), все INSERT с RETURNING, без 54001.
+2. **Owner может создать permission:** с GUC = A, профиль A → INSERT pp(owner) проходит.
+3. **A не видит профиль B:** сиды на двух пользователей; SELECT health_profiles / profile_permissions / dashboard_snapshots под GUC = A → 0 строк из данных B.
+4. **A не может выдать себе доступ к B:** `INSERT pp(profile_B, user_A, 'owner')` → 42501; то же для `INSERT workspace_members(workspace_B, user_A)`.
+5. **Fail-closed без контекста:** `set_config('app.current_user_id','',true)` → SELECT по всем таблицам = 0 строк, все INSERT → violation, `app_can_view_profile(любой)` → false, без ошибок на NULL.
+6. **Функция не даёт произвольного чтения:** `has_function_privilege('public', ...)` = false для всех definer-функций; под ролью без гранта EXECUTE → permission denied; сигнатуры возвращают только boolean/uuid (assert по `pg_proc.prorettype`).
+7. **Регресс рекурсии на «тёплых» данных:** пользователь с существующими wm/pp строками → `SELECT workspaces / workspace_members / profile_permissions` проходят (fresh-user тесты этот цикл не ловят!).
+8. **Повторный вход:** `app_lookup_identity_user_id` возвращает id при пустом GUC; UPDATE users.email под users_self_update проходит; дубликат user не создаётся.
+9. **RETURNING-пути:** явные `INSERT … RETURNING created_at` на pp/hp/ds/auth_sessions (с установленным session-hash GUC).
+10. **Инвариант-аудит:** SQL-тест, что каждая функция, упомянутая в `pg_policy.polqual/polwithcheck`, принадлежит `health_compass_rls_definer` (join pg_policy → pg_depend → pg_proc → pg_roles) — защита от повторения бага в будущих миграциях.
+
+## Риски решения
+
+BYPASSRLS-роль — концентрированная точка доверия: любая её функция — легальная дырка в RLS, поэтому — только скалярные возвраты, статический SQL, инвариант-тест №10. Boolean-оракул позволяет держателю EXECUTE перебирать существование грантов по UUID (для app-роли ничего нового). Провижининг роли требует суперпользователя — на вашем VPS ок, но решение непереносимо на RDS-подобные managed PG без изменений. `CREATE OR REPLACE` функций в будущих миграциях потребует членства migrator в definer-роли (учтено в pre-req). И общесистемное: GUC-модель по-прежнему доверяет процессу приложения целиком — RLS защищает от логических багов, не от компрометации роли `health_compass_app`.
+
+## Вердикт
+
+**Merge в `main` блокируется.** Причины в порядке тяжести: (1) первый вход падает в production на 54001 — функциональность нулевая; (2) две эскалации привилегий в WITH CHECK-политиках 0013 (self-grant owner на чужой профиль и self-add в чужой workspace) — это дефекты изоляции tenant-данных с медицинским содержимым; (3) четыре подтверждённых латентных отказа, которые всплывут сразу после фикса рекурсии: цикл workspace_members на «тёплых» пользователях, NULL-lookup identity с тихими дубликатами пользователей, отсутствие UPDATE-политики users (StaleDataError на повторном входе), падение INSERT auth_sessions на RETURNING без session-hash GUC. Отказ от `max_stack_depth` правильный — для бесконечного цикла это даже не workaround.

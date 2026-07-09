@@ -1,0 +1,143 @@
+project: health-compass
+version: "1.0"
+generated: "2026-07-08"
+repo: michailr1/health-compass
+current_branch: feat/direct-google-and-email-auth
+expected_head: "UNKNOWN — архив без .git; зафиксировать после HC-001"
+expected_migration_head: "0021"
+production:
+  host: funti.cc
+  not_production: [de.funti.cc]
+  path: /opt/health-compass/repo
+  service: health-compass-api.service
+  env_file: /etc/health-compass/backend.env
+  frontend_url: https://funti.cc/health/
+prohibited_actions:
+  - править код или миграции непосредственно на production
+  - выполнять что-либо на de.funti.cc
+  - выводить значения секретов из env-файлов
+  - объединять аккаунты по совпадению email
+  - создавать таблицу пользовательских данных без ENABLE+FORCE RLS и политик в той же миграции
+  - коммитить посреди HTTP-запроса (сбрасывает RLS-контекст)
+  - вставлять демо/фейковые медицинские данные в реальные профили
+  - деплоить frontend раньше backend, backend раньше миграций
+  - применять человеческие нормы или дозировки к животным
+  - показывать AI-ответ без ai_evidence-источников (с PHASE-08)
+invariants_ref: 02-technical-architecture.md#3.2
+risks:
+  - {id: RISK-001, title: "users_oidc_insert WITH CHECK (true)", severity: high, fixed_by: HC-003}
+  - {id: RISK-002, title: "viewer может INSERT dashboard_snapshots", severity: high, fixed_by: HC-003}
+  - {id: RISK-003, title: "viewer видит все гранты профиля", severity: medium, fixed_by: HC-003}
+  - {id: RISK-004, title: "нет политик grant/revoke для шаринга", severity: medium, fixed_by: PHASE-10}
+  - {id: RISK-005, title: "дублирующиеся select-политики wm", severity: low, fixed_by: HC-003}
+  - {id: RISK-006, title: "фейковый мед-dashboard в bootstrap (Factor V Leiden)", severity: critical, fixed_by: HC-005}
+  - {id: RISK-007, title: "нет janitor протухших сессий/токенов", severity: medium, fixed_by: HC-006}
+  - {id: RISK-008, title: "CSRF-механизм не реализован", severity: medium, fixed_by: HC-007}
+  - {id: RISK-009, title: "magic-link consume по GET (сканеры почты)", severity: medium, fixed_by: HC-006}
+  - {id: RISK-010, title: "разная нормализация email в двух потоках", severity: low, fixed_by: HC-006}
+  - {id: RISK-011, title: "нет потока связывания аккаунтов", severity: medium, fixed_by: PHASE-10}
+  - {id: RISK-012, title: "нет интеграционных RLS-тестов", severity: high, fixed_by: HC-002}
+phases:
+  - id: PHASE-01
+    name: Auth/RLS stabilization
+    blocker: true
+    tasks: [HC-001, HC-002, HC-003, HC-004, HC-005, HC-006]
+  - id: PHASE-02
+    name: Engineering foundation (CI, staging, backup, observability, headers)
+    tasks: [HC-007, HC-008, HC-009, HC-010, HC-011]
+  - id: PHASE-03
+    name: Profile & session lifecycle & consents
+    tasks: [HC-012, HC-013, HC-014]
+  - id: PHASE-04
+    name: Documents pipeline & timeline v1
+    tasks: [HC-015, HC-016, HC-017]
+  - id: PHASE-05
+    name: Lab results core
+    tasks: [HC-018, HC-019, HC-020, HC-021]
+  - id: PHASE-06
+    name: Measurements
+    tasks: [HC-022]
+  - id: PHASE-07
+    name: Oura & wearable ingestion (+Redis, monitoring)
+    tasks: [HC-023, HC-024]
+  - id: PHASE-08
+    name: AI safety foundation + assistant v1
+    tasks: []
+  - id: PHASE-09
+    name: Reports & doctor visit prep
+    tasks: []
+  - id: PHASE-10
+    name: Family sharing & permissions
+    tasks: []
+  - id: PHASE-11
+    name: Pet Health MVP
+    tasks: []
+  - id: PHASE-12
+    name: Monetization & entitlements
+    tasks: []
+tasks:
+  HC-001:
+    goal: Верифицировать production (0021 применена, роль rls_definer корректна, e2e вход, dev-header=401)
+    executor: vps-agent
+    prompt: 09-agent-prompts/vps-agent-prompts.md#HC-001
+    read_only: true
+    acceptance: "отчёт с преамбулом 0.1-0.9, alembic current=0021, роль bypassrls=t/canlogin=f, 4 smoke зелёные"
+    rollback: не требуется (read-only)
+    next: HC-002
+  HC-002:
+    goal: Интеграционные тесты изоляции RLS + регресс 54001 + self-grant/self-add + пустой SELECT без контекста
+    executor: coding-agent
+    prompt: 09-agent-prompts/coding-agent-prompts.md#HC-002
+    depends_on: []
+    files: [backend/tests/test_rls_isolation.py]
+    acceptance: "все проверки из промта реализованы и зелёные локально и в CI"
+    rollback: revert PR
+    next: HC-003
+  HC-003:
+    goal: "Миграция 0022: закрыть RISK-001/002/003 (+функция app_can_edit_profile)"
+    executor: coding-agent
+    depends_on: [HC-002]
+    acceptance: "политики заменены; downgrade работает; расширенные тесты HC-002 зелёные"
+    rollback: alembic downgrade -1
+    next: HC-005
+  HC-004:
+    goal: Правдивая документация (C-1..C-4), source-of-truth-status.md
+    executor: architect
+    depends_on: [HC-001]
+    acceptance: "нет устаревших утверждений вне исторических файлов"
+    rollback: git revert
+  HC-005:
+    goal: Убрать демо-данные из bootstrap (RISK-006), пустые состояния фронта
+    executor: coding-agent
+    depends_on: [HC-003]
+    acceptance: "новый пользователь получает пустой dashboard; тест отсутствия INITIAL_*"
+    rollback: revert PR
+    next: HC-006
+  HC-006:
+    goal: Janitor сессий/токенов, единая normalize_email, интерстициал magic-link (POST-consume)
+    executor: coding-agent
+    depends_on: [HC-005]
+    acceptance: "джоба удаляет протухшее; consume только POST-ом со страницы"
+    rollback: revert PR
+  HC-007:
+    goal: CSP, CSRF (double-submit c csrf_token_hash), санитайзинг логов
+    executor: coding-agent
+    acceptance: "заголовки присутствуют; тест маскировки секретов"
+    rollback: revert PR
+  HC-008: {goal: CI GitHub Actions (pytest+ruff+alembic up/down+RLS-скан таблиц без FORCE), executor: coding-agent, acceptance: "красный CI блокирует merge", rollback: отключить workflow}
+  HC-009: {goal: Staging окружение и БД, executor: vps-agent+architect, acceptance: "staging smoke зелёный", rollback: удалить staging}
+  HC-010: {goal: Backup-скрипт + restore-runbook + restore-тест на staging, executor: vps-agent, acceptance: "успешный restore задокументирован", rollback: не требуется}
+  HC-011: {goal: Sentry со scrubbing PII, executor: coding-agent, acceptance: "email/токены замаскированы (тест)", rollback: выключить DSN}
+  HC-012: {goal: "Профиль: birth_date/sex, настройки", executor: coding-agent, acceptance: "миграция+API+UI+тесты", rollback: downgrade}
+  HC-013: {goal: Session management UI + ротация токена, executor: coding-agent, acceptance: "список/отзыв/ротация с тестами", rollback: revert}
+  HC-014: {goal: Consent-модель, executor: coding-agent, acceptance: "consents фиксируются и проверяются", rollback: downgrade}
+  HC-015: {goal: "Upload-пайплайн: FS-storage, ClamAV, лимиты, document_files", executor: coding-agent, acceptance: "EICAR блокируется; выдача только авторизованно", rollback: downgrade}
+  HC-016: {goal: PostgreSQL-очередь (SKIP LOCKED) + worker systemd unit, executor: coding-agent+vps-agent, acceptance: "e2e джоба на staging", rollback: остановить unit}
+  HC-017: {goal: Timeline v1 (medical_documents+medical_events), executor: coding-agent, acceptance: "документ появляется в timeline", rollback: downgrade}
+  HC-018: {goal: OCR-воркер + document_extractions c confidence, executor: coding-agent, acceptance: "PDF -> needs_review c payload", rollback: downgrade}
+  HC-019: {goal: Экран подтверждения извлечения, executor: coding-agent, acceptance: "подтверждение создаёт lab_report/items", rollback: revert}
+  HC-020: {goal: Справочник показателей и референсов (MVP-набор) + конверсии единиц, executor: architect+coding-agent, acceptance: "сид-миграция; тесты конверсий", rollback: downgrade}
+  HC-021: {goal: Динамика показателей с референс-зонами, executor: coding-agent, acceptance: "график c нормой по 2+ точкам", rollback: revert}
+  HC-022: {goal: "Measurements: ввод и графики", executor: coding-agent, acceptance: "ввод ≤10 сек; график", rollback: downgrade}
+  HC-023: {goal: Wearable ingestion слой (connections/sync_runs/raw/normalized, шифрование токенов), executor: coding-agent, acceptance: "идемпотентность по provider_event_id (тест)", rollback: downgrade}
+  HC-024: {goal: Oura OAuth + sync первых метрик, executor: coding-agent, acceptance: "sleep/activity на dashboard; ошибки sync видимы", rollback: отключить connection}

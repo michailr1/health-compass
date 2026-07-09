@@ -1,0 +1,54 @@
+erDiagram
+    USERS ||--o{ USER_IDENTITIES : has
+    USERS ||--o{ AUTH_SESSIONS : has
+    USERS ||--o{ WORKSPACE_MEMBERS : joins
+    WORKSPACES ||--o{ WORKSPACE_MEMBERS : contains
+    WORKSPACES ||--o{ HEALTH_PROFILES : contains
+    WORKSPACES ||--o{ PETS : contains
+    HEALTH_PROFILES ||--o{ PROFILE_PERMISSIONS : grants
+    USERS ||--o{ PROFILE_PERMISSIONS : receives
+    PETS ||--o{ PET_GUARDIANS : grants
+    USERS ||--o{ PET_GUARDIANS : receives
+    HEALTH_PROFILES ||--o{ MEDICAL_DOCUMENTS : owns
+    MEDICAL_DOCUMENTS ||--o{ DOCUMENT_FILES : stores
+    MEDICAL_DOCUMENTS ||--o{ DOCUMENT_EXTRACTIONS : versions
+    DOCUMENT_EXTRACTIONS ||--o{ EXTRACTION_CORRECTIONS : corrected_by
+    HEALTH_PROFILES ||--o{ LAB_REPORTS : has
+    LAB_REPORTS ||--o{ LAB_RESULT_ITEMS : contains
+    LAB_TEST_DEFINITIONS ||--o{ LAB_RESULT_ITEMS : defines
+    LAB_TEST_DEFINITIONS ||--o{ LAB_REFERENCE_RANGES : normed_by
+    HEALTH_PROFILES ||--o{ MEASUREMENTS : tracks
+    MEASUREMENT_TYPES ||--o{ MEASUREMENTS : typed_by
+    HEALTH_PROFILES ||--o{ MEDICAL_EVENTS : timeline
+    HEALTH_PROFILES ||--o{ WEARABLE_CONNECTIONS : connects
+    WEARABLE_CONNECTIONS ||--o{ WEARABLE_SYNC_RUNS : runs
+    WEARABLE_SYNC_RUNS ||--o{ WEARABLE_RAW_EVENTS : ingests
+    HEALTH_PROFILES ||--o{ NORMALIZED_METRICS : derives
+    HEALTH_PROFILES ||--o{ AI_CONVERSATIONS : discusses
+    AI_CONVERSATIONS ||--o{ AI_MESSAGES : contains
+    AI_MESSAGES ||--o{ AI_RUNS : produced_by
+    AI_RUNS ||--o{ AI_EVIDENCE : cites
+    AI_RUNS ||--o{ AI_SAFETY_EVENTS : flags
+    PETS ||--o{ PET_VET_VISITS : has
+    PETS ||--o{ PET_LAB_REPORTS : has
+    PET_LAB_REPORTS ||--o{ PET_LAB_RESULTS : contains
+    PET_LAB_REFERENCE_RANGES ||--o{ PET_LAB_RESULTS : normed_by
+    PETS ||--o{ PET_MEDICATIONS : takes
+    PETS ||--o{ PET_MEASUREMENTS : tracks
+    PETS ||--o{ PET_VACCINATIONS : receives
+    WORKSPACES ||--o{ SUBSCRIPTIONS : billed
+    PLANS ||--o{ SUBSCRIPTIONS : defines
+    PLANS ||--o{ ENTITLEMENTS : includes
+    WORKSPACES ||--o{ USAGE_COUNTERS : consumes
+
+    USERS { uuid id PK "email non-unique" }
+    USER_IDENTITIES { uuid id PK "UNIQUE(provider,subject)" }
+    AUTH_SESSIONS { uuid id PK "token_hash UNIQUE" }
+    WORKSPACES { uuid id PK "tenant boundary" }
+    HEALTH_PROFILES { uuid id PK "human domain" }
+    PETS { uuid id PK "veterinary domain" }
+    LAB_TEST_DEFINITIONS { uuid id PK "HUMAN ONLY norms" }
+    PET_LAB_REFERENCE_RANGES { uuid id PK "species-specific" }
+    MEDICAL_DOCUMENTS { uuid id PK "fact layer" }
+    DOCUMENT_EXTRACTIONS { uuid id PK "immutable versions" }
+    AI_EVIDENCE { uuid id PK "every claim cites data" }

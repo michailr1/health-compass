@@ -1,0 +1,292 @@
+I now have a complete picture. Let me verify the two most important security claims — the RLS bypass and the `FORCE ROW LEVEL SECURITY` gap — before writing the review.
+
+I have everything I need. Let me confirm the critical RLS-owner bypass point by checking table ownership semantics and how the app connects.
+
+The key facts are established. `health_compass_app` has `NOBYPASSRLS` (good), but tables are **owned by** `health_compass_migrator`, and no migration issues `FORCE ROW LEVEL SECURITY`. That's the linchpin of the RLS verdict. Now I'll write the review.
+
+I have a complete picture of the codebase. Here is the review.
+
+---
+
+# Health Compass — техническое ревью
+
+Ветка `feat/identity-and-profile-access`, 197 файлов, изучены фактически (не только README). Ниже — факты из кода с точными путями; предположения помечены отдельно. Секретов в дереве не найдено (см. §12).
+
+---
+
+## A. Executive summary
+
+**Общая оценка.** Фундамент здоровый. Это аккуратный, читаемый монолит с осмысленным разделением слоёв, серверными сессиями (не токены во фронте), RLS на уровне БД, разделением ролей migrator/app и линейной историей миграций. Для стадии «второй пользователь + первые реальные данные» это гораздо лучше, чем типичный проект такого возраста. **Продолжать на этом репозитории можно — переписывать фундамент не нужно.**
+
+**Зрелость архитектуры.** Ранняя, но не наивная. Доменная модель (users / identities / workspaces / profiles / permissions / sessions) уже правильно нормализована и заложена под многопользовательский доступ. Слабые места — не в структуре, а в конкретных «затычках», которые открывают дыры в изоляции.
+
+**Главные риски (по убыванию).**
+1. **RLS создаёт ложное чувство безопасности.** Таблицы принадлежат роли `health_compass_migrator` и **нигде нет `FORCE ROW LEVEL SECURITY`**. Плюс RLS-политики на `SELECT` для `health_profiles`/`workspaces` не сопровождаются `WHERE`-фильтром в приложении — а несколько политик написаны как `USING (true)`. Изоляция держится на честном слове.
+2. **Account takeover через email + отсутствие `email_verified`.** `callback` доверяет `email` из claims без проверки `email_verified`, а `users.email` — `UNIQUE`. Это создаёт возможность коллизий и потенциального перехвата (детали в §7, §12).
+3. **`ALLOW_DEV_AUTH` + заголовок `X-Health-Compass-User-Id`** — бэкдор аутентификации по одному булеву флагу. Защита есть (`validate_production`), но это единственный барьер между «выдать себя за любого юзера» и prod.
+4. Нет **soft delete, версионирования, audit trail в рантайме** (таблицы есть — записей никто не пишет), нет revoke-all-sessions, нет idle-TTL.
+
+**Рекомендация по Authentik: убрать сейчас (вариант B).** Обоснование в §D — коротко: Authentik добавляет два болезненных класса проблем (лишний flow-экран, RP-logout), не давая на текущем масштабе ничего, что нельзя получить прямым Google OIDC + magic links за меньшую сложность.
+
+---
+
+## B. Карта фактической архитектуры
+
+**Frontend** (`/src`, Vite + React 18 + TS + shadcn/ui):
+- Роутинг `App.tsx` с `basename="/health"`; `ProtectedRoute` гейтит `/app/*` по `useAuth`.
+- `context/AuthContext.tsx` — реальная серверная сессия через `GET /health/api/me` (не mock, вопреки README).
+- `lib/api.ts` — тонкий fetch-клиент с `credentials: "include"`.
+- **Смешение реальных и демо-данных:** `Dashboard.tsx` ходит в API, но `Oura.tsx`, `Genetics.tsx`, `ActionPlan.tsx`, `Sources.tsx`, `History.tsx` рендерят статику из `data/demo.ts` (240 строк моков, включая генетические маркеры).
+
+**Backend** (`/backend/app`, FastAPI + SQLAlchemy async + psycopg3):
+- `main.py` — app factory, `root_path=/health/api`, глобальные хендлеры 404/500, docs скрыты в prod.
+- `api/routes/`: `auth.py` (login/callback/**POST** logout), `logout.py` (**GET** logout + Authentik end-session), `provider_login.py` (`/auth/provider/google`), `identity.py` (`/me`, `/workspaces`, `/profiles`, `/profiles/{id}/dashboard`), `health.py`, `version.py`, `private.py` (мёртвая заглушка, всегда 401).
+- `core/`: `config.py` (pydantic-settings + `validate_production`), `oidc.py` (authlib, PKCE, JWKS), `session_tokens.py` (sha256), `security.py` (**устаревший** placeholder), `logging.py`, `request_id.py`.
+- `services/bootstrap.py` — создание первого workspace/profile/dashboard.
+- `db/`: `session.py` (async engine, pool 5+10), `rls.py` (`set_config('app.current_user_id', …, true)`).
+
+**Data layer:** схема `health_compass` (не `public`). Модели: user/identity/auth_session, workspace/workspace_members, health_profile/profile_permissions, dashboard_snapshots, invitations, audit_events, processing_jobs, service_metadata.
+
+**Auth:** серверная сессия (sha256-хэш токена в БД, HttpOnly cookie), OIDC через Authentik с PKCE/state/nonce.
+
+**Migrations:** 0001–0014, **линейный head = 0014**, дублирующего 0008 в ветке нет (проблема из ТЗ уже устранена).
+
+**Deployment-related в Git:** `docs/*.md`, `docs/examples/health-compass-api.service`. **Отсутствуют в Git:** Apache-конфиг, docker-compose PostgreSQL, скрипт создания ролей/БД, CI. Есть только в документации как текст.
+
+---
+
+## C. Findings
+
+**F-1 · Critical · Broken Access Control (RLS bypass) · `0006`, все RLS-миграции, `db/session.py`**
+Таблицы владеет `health_compass_migrator`; ни в одной миграции нет `FORCE ROW LEVEL SECURITY`. Владелец таблицы по умолчанию **обходит** RLS. Приложение ходит под `health_compass_app` (это правильно, и роль `NOBYPASSRLS`), поэтому *сейчас* изоляция работает — но она держится на одном условии «app-роль ≠ owner ≠ superuser». Любой фоновой скрипт/миграция/ручной psql под migrator видит и меняет все строки всех пользователей, и это не аномалия, а штатное поведение Postgres. Для health-данных это недопустимо оставлять неявным.
+*Сценарий:* будущий cron/ETL-джоб коннектится под migrator «чтобы посчитать агрегаты» → RLS молча выключен → кросс-юзерная утечка.
+*Fix:* `ALTER TABLE … FORCE ROW LEVEL SECURITY` на всех таблицах с данными; owner таблиц — отдельная роль без DML-доступа приложения; фоновые задачи — под app-ролью с явным `app.current_user_id` или под ролью с продуманными политиками. **Сложность M. До реальных данных — обязательно.**
+
+**F-2 · High · Broken Access Control (RLS `USING (true)`) · `0009` строки 23–30, `0011` строки 23–25**
+`identity_lookup_policy` (`user_identities FOR SELECT USING (true)`), `sessions_token_select/update USING (true)`, `identities_oidc_insert/update USING/WITH CHECK (true)` — открывают полное чтение identities и сессий *всем* строкам. Формально это нужно для callback (lookup identity до того, как известен user), но по факту это дыра: любой аутентифицированный контекст читает все identity-строки и все auth_sessions.
+*Сценарий:* эндпоинт с багом или SQLi-подобная ошибка при живой app-роли → дамп всех сессионных хэшей и всех связей identity→user.
+*Fix:* заменить `USING (true)` на точечные политики. Для identity-lookup в callback использовать `SECURITY DEFINER`-функцию, ограниченную поиском по `(provider, subject)`, а не открывать таблицу. Для сессий — `USING (session_token_hash = current_setting('app.session_hash'))` либо lookup через `SECURITY DEFINER`. **Сложность M. До второго пользователя.**
+
+**F-3 · High · Auth / Account Takeover · `auth.py` строки 92–130**
+`callback` не проверяет `claims["email_verified"]`, берёт `email` как есть, а `users.email` — `UNIQUE`. Модель отождествляет identity через `(provider, subject)` — это правильно — но `email` пишется/перезаписывается из claims (`user.email = email.lower()` при каждом входе). Два риска: (а) непроверенный email от провайдера; (б) `UNIQUE(email)` вызовет `IntegrityError` при коллизии email между разными identity, роняя вход второму человеку. Разделения «person ≠ user ≠ email» нет.
+*Fix:* требовать `email_verified is True`; снять `UNIQUE` с `users.email` (или сделать его вторичным, не identity-ключом); никогда не связывать аккаунты по совпадению email автоматически. **Сложность S. До второго пользователя.**
+
+**F-4 · High · Auth backdoor · `deps.py` строки 31, 48–53; `config.py` 49, 71–72**
+`X-Health-Compass-User-Id` + `allow_dev_auth` = выдать себя за любого пользователя одним заголовком. Единственная защита — `validate_production()` при старте. Одна ошибка в env (`ENVIRONMENT=Production ` с пробелом → `is_production` = False) снимает барьер.
+*Fix:* вынести dev-auth в отдельный модуль, импортируемый только в тестах; либо ужесточить: явный allowlist + проверка, что host = localhost. Минимум — сделать `is_production` fail-safe (по умолчанию считать prod). **Сложность S. Немедленно.**
+
+**F-5 · Medium · Session context leakage (pooling) · `db/rls.py`, `db/session.py`**
+`set_config(..., is_local=true)` привязан к транзакции — это корректный выбор. Но `get_session` не открывает явную транзакцию перед `apply_user_context`; в async SQLAlchemy первый `execute` стартует транзакцию неявно, и до её коммита контекст живёт. Риск: если где-то `apply_user_context` вызван, затем `commit`, затем ещё запросы в той же сессии — `app.current_user_id` уже сброшен (LOCAL до конца транзакции), и последующий запрос уйдёт с пустым контекстом → `app_current_user_id()` вернёт NULL → политики `= NULL` → **пустая выдача** (fail-closed, это ок), но поведение хрупкое и незаметное. При переходе на pgBouncer в transaction-mode всё сломается тоньше.
+*Fix:* явная транзакция на запрос (`async with session.begin()`), `apply_user_context` — первым; на возврате в пул — гарантировать сброс (`DISCARD ALL` или reset-функция). Тест на «pool не переносит контекст» обязателен. **Сложность M. До второго пользователя.**
+
+**F-6 · Medium · Broken Access Control (нет DELETE-политик) · все RLS-миграции**
+Ни для одной таблицы нет `FOR DELETE` политики. При включённом RLS отсутствие политики = запрет (fail-closed, безопасно), но это значит, что удаление данных пользователя *в принципе невозможно* через app-роль — а удаление пользователя (§15, GDPR-подобные требования) вам понадобится. Сейчас это тихо работающий тупик.
+*Fix:* добавить осознанные DELETE-политики (owner-only) там, где удаление предусмотрено. **Сложность S. До реальных данных.**
+
+**F-7 · Medium · Session management · `models/user.py` 43–55, `deps.py`, `auth.py`**
+Нет idle-TTL (только absolute 12ч), нет `last_seen_at` (поле отсутствует), нет ротации токена, нет revoke-all, **просроченные/отозванные сессии никогда не удаляются** из БД (только помечаются). `csrf_token_hash` в модели есть, но **не используется** — CSRF-защиты нет вовсе, а logout/… — cookie-based на `SameSite=lax`.
+*Fix:* добавить `last_seen_at` + idle-TTL, cleanup-джоб просроченных сессий, endpoint «завершить все сессии», задействовать CSRF-токен для мутаций. **Сложность M. До реальных данных.**
+
+**F-8 · Medium · Provider flow не гарантирует Google · `provider_login.py` строка 23**
+`location + "&source=google"` — произвольный query-параметр, который Authentik **проигнорирует**. Это не заставляет Authentik выбрать Google; промежуточный экран выбора останется. Заявленная в ТЗ проблема 7.1 **кодом не решена** — это плацебо.
+*Fix:* убрать. Правильный способ зависит от Authentik: либо OIDC-параметр `acr_values`/кастомный flow-slug в issuer-URL, либо (при переходе на прямой Google, §D) проблема исчезает сама. **Сложность S.**
+
+**F-9 · Medium · Open questions в logout · `logout.py` 23–33**
+RP-initiated logout не передаёт `id_token_hint` (Authentik может потребовать его, иначе покажет экран подтверждения или проигнорирует `post_logout_redirect_uri`). `post_logout_redirect_uri` должен быть в allowlist Authentik — если нет, редирект молча не сработает. При недоступности Authentik `get_discovery()` кинет исключение → **logout упадёт с 500 и пользователь останется залогинен локально** (запись revoked, но пользователь этого не увидит). Cookie удаляется с `path=/health/api`, а ставится тоже с `path=/health/api` — совпадает, ок.
+*Fix:* сохранять `id_token` в сессии, передавать как `id_token_hint`; logout должен удалять локальную сессию/cookie **до** обращения к Authentik и не падать, если IdP недоступен; редирект-таргет — из фиксированного allowlist. **Сложность M.**
+
+**F-10 · Low · Дублирующиеся RLS-политики · `0010` vs `0013`**
+`0010` создаёт `workspaces_insert_self`/`profiles_insert_self`/…, `0013` создаёт `workspaces_owner_insert`/`profiles_owner_insert`/… — **функционально те же INSERT-политики под другими именами** на тех же таблицах. Обе останутся после upgrade. Не опасно (обе `WITH CHECK owner=current`), но это мусор, затрудняющий аудит, и след «VPS-агент коммитил, не осмысляя» из ТЗ.
+*Fix:* `0015` — дропнуть дубли из `0010`; перед публичным релизом — squash миграций 0006–0014 в одну чистую RLS-миграцию. **Сложность S.**
+
+**F-11 · Low · Мёртвый код / устаревшие модули · `core/security.py`, `routes/private.py`**
+`security.py::get_current_user` (всегда 401) и `private.py` дублируют имя `get_current_user` из `deps.py` (реальный). Это ровно тот источник путаницы, о котором предупреждает ТЗ §7.3. `private.py` — заглушка, недостижимый код.
+*Fix:* удалить `core/security.py` и `routes/private.py`, или явно пометить как test-only. **Сложность S.**
+
+**F-12 · Low · PII в логах / claims в БД · `models/user.py` 38 (`claims JSONB`), `auth.py` 119**
+Весь OIDC id_token сохраняется в `user_identities.claims` целиком (может содержать больше PII, чем нужно). `ip_address`/`user_agent` в сессиях — приемлемо, но требует политики хранения.
+*Fix:* хранить только нужные claims; политика ретенции. **Сложность S.**
+
+**F-13 · Informational · Нет rate limiting, security headers, CORS-middleware, pagination**
+CORS в config определён, но `CORSMiddleware` в `main.py` **не подключён** (сейчас не нужен — same-origin через Apache, но при мобильном клиенте понадобится). Нет CSP/HSTS/Referrer-Policy (должны прийти от Apache — но конфига нет в Git). `/profiles`, `/workspaces` без пагинации. Нет `TrustedHostMiddleware`, нет обработки `X-Forwarded-*` (uvicorn `--proxy-headers` в unit **не указан** → `request.client.host` покажет 127.0.0.1, а не реального клиента → IP в сессиях бесполезен). **Сложность S–M каждый.**
+
+---
+
+## D. Authentication verdict
+
+**Убрать Authentik сейчас (вариант B).** На вашем масштабе (один-два пользователя, личный VPS, важен простой UX) Authentik — это отдельный сервис, который надо обновлять и бэкапить, плюс два конкретных источника боли, уже зафиксированных в ТЗ (лишний flow-экран 7.1 и RP-logout 7.2), при этом всё, что он даёт сегодня, вы не используете (MFA, federation, SCIM, LDAP — 0 из этого включено).
+
+**Целевая схема на 6–12 месяцев:**
+- **Google напрямую через OIDC** (тот же `authlib`, тот же PKCE/state/nonce — код `oidc.py` переиспользуется почти as-is, меняется только `issuer` на `https://accounts.google.com`). Убирает экран выбора Authentik навсегда (F-8 растворяется).
+- **Email — passwordless magic links** (одноразовый токен в БД, TTL 15 мин, single-use). Никаких своих паролей — прямо соответствует вашему требованию «не хранить пароли без необходимости». Реиспользует уже готовую инфраструктуру серверных сессий.
+- **Модель identity уже это выдержит:** `provider ∈ {google, email}`, ключ `(provider, subject)`; для email `subject` = верифицированный email. Ничего в схеме менять не нужно.
+- **MFA/несколько провайдеров позже:** когда реально понадобится MFA — либо TOTP поверх своей сессии (небольшой модуль), либо тогда и вернуться к managed-решению. Не сейчас.
+
+**Что удалить:** `provider_login.py` (хак `source=google`), `core/security.py`, `routes/private.py`, зависимость от Authentik end-session в `logout.py`.
+**Что оставить:** всю серверную сессионную инфраструктуру, `oidc.py`, PKCE/state/nonce, `bootstrap.py`.
+**Logout в целевой схеме:** локально удалить сессию + cookie; при Google нет SSO-сессии, которую надо принудительно рвать (Google logout — не ваша забота и делать его нельзя), так что проблема 7.2 исчезает.
+**Переход без потери пользователей:** сейчас реальных пользователей ~0–1, так что миграция тривиальна — при первом входе через Google `(provider='google', subject=google_sub)` создаётся новая identity; если хотите сохранить существующий Authentik-аккаунт, свяжите по **верифицированному** email один раз, вручную, а не автоматически (F-3).
+
+**Managed (вариант C, Auth0/Clerk/Supabase)** — не рекомендую сейчас: health-данные на РФ-инфраструктуре + внешний US-IdP добавляют юридический и data-residency вопрос, которого у вас пока нет. Вернуться к этому — только если появится команда и потребность в enterprise SSO.
+
+---
+
+## E. RLS verdict
+
+**Текущая модель некорректна как гарантия — она корректна только как «второй забор» при идеальной конфигурации ролей.** Три структурных дефекта: (1) нет `FORCE ROW LEVEL SECURITY` при том, что таблицы принадлежат migrator (F-1); (2) политики `USING (true)` на identities и sessions (F-2); (3) нет DELETE-политик (F-6). Самоссылочная `app_can_view_profile(id)` в SELECT-политике `health_profiles` действительно вызывала проблему INSERT…RETURNING — и «фикс» через `profiles_owner_direct_select` (0014) корректен, но лечит симптом: правильнее не иметь рекурсивную функцию в критическом пути.
+
+**Опасные политики:** `identity_lookup_policy`, `sessions_token_select/update`, `identities_oidc_insert/update`, `users_oidc_insert` (последняя, к счастью, уже снята в 0012).
+
+**Функции переписать:** `app_can_view_profile` — она `SECURITY DEFINER` с `search_path` (хорошо), но её использование в INSERT-policy для dashboard создаёт зависимость от порядка. `app_current_user_id()` — **не** `SECURITY DEFINER` и **без** зафиксированного `search_path`; для устойчивости стоит добавить `SET search_path`.
+
+**Роли:** нужна **третья роль-owner** таблиц, отличная и от migrator (только DDL), и от app (только DML под RLS). Тогда `FORCE RLS` + app-роль дают настоящую изоляцию.
+
+**Безопасный pooling:** явная транзакция на запрос, `SET LOCAL` первым, сброс на возврате в пул; при pgBouncer — только session-mode, либо reset-хук.
+
+**Целевой шаблон политик (пример для profiles):**
+```sql
+ALTER TABLE health_compass.health_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE health_compass.health_profiles FORCE ROW LEVEL SECURITY;
+
+-- чтение: owner напрямую (без рекурсии) ИЛИ явный grant
+CREATE POLICY hp_select ON health_compass.health_profiles FOR SELECT
+  USING (owner_user_id = health_compass.app_current_user_id()
+         OR EXISTS (SELECT 1 FROM health_compass.profile_permissions pp
+                    WHERE pp.profile_id = id
+                      AND pp.user_id = health_compass.app_current_user_id()));
+CREATE POLICY hp_insert ON health_compass.health_profiles FOR INSERT
+  WITH CHECK (owner_user_id = health_compass.app_current_user_id());
+CREATE POLICY hp_update ON health_compass.health_profiles FOR UPDATE
+  USING (owner_user_id = health_compass.app_current_user_id())
+  WITH CHECK (owner_user_id = health_compass.app_current_user_id());
+CREATE POLICY hp_delete ON health_compass.health_profiles FOR DELETE
+  USING (owner_user_id = health_compass.app_current_user_id());
+```
+```sql
+CREATE OR REPLACE FUNCTION health_compass.app_current_user_id()
+RETURNS uuid LANGUAGE sql STABLE
+SET search_path = health_compass, pg_temp AS $$
+  SELECT NULLIF(current_setting('app.current_user_id', true), '')::uuid
+$$;
+```
+
+**Обязательные тесты изоляции** (сейчас их **ноль**): A не видит профиль B; B не может вставить строку с `owner=A`; viewer только читает; удалённый permission немедленно убирает доступ; app-роль не может подменить `current_user_id` чужим UUID; пул не переносит контекст между запросами; INSERT…RETURNING и UPDATE…RETURNING проходят; под owner-ролью FORCE RLS реально включён.
+
+---
+
+## F. Целевая архитектура (6–12 мес, без over-engineering)
+
+Оставаться **монолитом**. Ни микросервисов, ни Kubernetes — масштаб не требует.
+
+- **Auth-модуль:** Google OIDC + email magic links (§D). Серверные сессии — как есть, плюс idle-TTL, ротация, revoke-all.
+- **Ingestion:** отдельный слой `services/ingest/` с провайдерами (`oura.py`, позже `garmin.py`). Хранение сырых данных — таблица `raw_imports(id, profile_id, source, source_version, payload JSONB, content_hash, imported_at)`; `content_hash` + `UNIQUE(profile_id, source, content_hash)` = защита от повторного импорта. Нормализованные метрики — отдельная `health_metrics(profile_id, metric, ts, value, unit, source_import_id)` для timeline; provenance через FK на `raw_imports`.
+- **API:** версионировать префиксом `/v1` уже сейчас (дёшево). Пагинация на всех list-эндпоинтах.
+- **Background processing:** **Arq** (async, Redis-backed, лёгкий — подходит под ваш async-стек лучше Celery). Redis добавить, когда появится Oura-импорт, не раньше. Джобы пишут в существующую `processing_jobs`.
+- **AI:** отдельный модуль; в LLM передавать **только агрегаты/нормализованные метрики**, не сырые файлы и не PII; хранить `ai_reports(profile_id, model, prompt_hash, prompt_version, output, created_at)` — версионирование промпта/модели обязательно. AI-выводы держать в отдельной таблице с флагом «не медицинский факт», не смешивая с измеренными данными.
+- **Storage/blobs:** документы (VCF, PDF) — **не в Б␈**; на файловой системе VPS с шифрованием at-rest или в объектном хранилище; в БД только метаданные + путь + хэш. Никогда не отдавать сырые файлы браузеру (это уже зафиксировано в README — соблюдать).
+- **Audit:** таблица `audit_events` уже есть — **начать в неё писать** (сейчас 0 записей): вход, logout, выдача/отзыв permission, доступ к профилю, экспорт. Append-only, отдельная роль без UPDATE/DELETE.
+- **Observability:** structured JSON logging уже есть; добавить `/health` + `/ready` (сейчас только `/health`), метрики (prometheus-client), алерты на 5xx и на неудачные логины.
+
+---
+
+## G. Приоритетный план работ
+
+### Немедленно (до реальных health-данных)
+- **F-1 FORCE RLS + owner-роль.** Зачем: без этого RLS — иллюзия. Файлы: новая миграция `0015`, `docs/database.md`, скрипт создания ролей. Готово: тест подтверждает, что под owner-ролью строки чужих юзеров не видны.
+- **F-4 убрать dev-auth из prod-пути.** Зачем: бэкдор. Файлы: `deps.py`, `config.py`. Готово: dev-auth недоступен без явного test-флага + localhost.
+- **F-2 закрыть `USING (true)`.** Зачем: полное чтение identities/sessions. Файлы: `0009`, `0011` → новая миграция. Готово: тест «юзер видит только свои identity/сессии».
+
+### До второго пользователя
+- **F-3 `email_verified` + снять `UNIQUE(email)`.** Файлы: `auth.py`, миграция. Готово: два разных Google-аккаунта с одинаковым email не ломают вход и не сливаются.
+- **F-5 транзакции per-request + reset пула.** Файлы: `db/session.py`, `db/rls.py`. Готово: тест «пул не переносит контекст».
+- **Тесты изоляции RLS** (весь блок из §E). Готово: A↔B изоляция зелёная в CI.
+- **F-11 удалить `security.py`/`private.py`.** Готово: один `get_current_user`.
+
+### До интеграции Oura
+- **F-6 DELETE-политики + удаление пользователя.** F-7 idle-TTL/last_seen/cleanup/revoke-all/CSRF. `raw_imports` + dedup по хэшу. Arq + Redis. `/v1` + пагинация. Начать писать в `audit_events`.
+- **F-9 logout устойчивый** (или уже удалён вместе с Authentik по §D).
+
+### После стабильного MVP
+- AI-модуль с версионированием промптов, blob-storage для документов, метрики/алерты, squash миграций перед публичным релизом, вынести Apache/compose/роль-скрипты в Git как шаблоны.
+
+---
+
+## H. Quick wins (1–4 часа каждый)
+
+1. `--proxy-headers` в systemd unit — иначе IP в сессиях всегда 127.0.0.1 (F-13).
+2. Удалить `provider_login.py` хак `source=google` (F-8) — он ничего не делает.
+3. Удалить `core/security.py` + `routes/private.py` (F-11).
+4. `0015`-миграция: дропнуть дубли-политики из `0010` (F-10).
+5. Добавить `SET search_path` в `app_current_user_id()` (F-1/E).
+6. Заменить `USING (true)` в `identity_lookup_policy` на SECURITY DEFINER-lookup (F-2).
+7. Добавить `/ready` эндпоинт отдельно от `/health`.
+8. `email_verified` guard в `callback` — 3 строки (F-3, частично).
+9. Вынести Apache-конфиг и role-creation SQL в `docs/examples/` как шаблоны (сейчас только в тексте).
+10. Убрать `data/demo.ts`-импорты со страниц, которые претендуют на «реальные» (Genetics/Oura) или явно пометить их DemoBanner (компонент есть, но **нигде не используется**).
+
+---
+
+## I. Конкретные patch suggestions
+
+**Patch 1 — FORCE RLS + owner-роль (миграция `0015`):**
+```python
+# 0015_force_rls.py  (down_revision = "0014")
+S = "health_compass"
+TABLES = ["users","user_identities","workspaces","workspace_members",
+          "health_profiles","profile_permissions","invitations",
+          "dashboard_snapshots","auth_sessions"]
+def upgrade():
+    for t in TABLES:
+        op.execute(f"ALTER TABLE {S}.{t} FORCE ROW LEVEL SECURITY")
+    # дропнуть дубли из 0010 (оставить именование 0013)
+    for p,t in [("workspaces_insert_self","workspaces"),
+                ("workspace_members_insert_self","workspace_members"),
+                ("profiles_insert_self","health_profiles"),
+                ("profile_access_insert_self","profile_permissions"),
+                ("dashboard_insert_visible","dashboard_snapshots")]:
+        op.execute(f"DROP POLICY IF EXISTS {p} ON {S}.{t}")
+```
+
+**Patch 2 — dev-auth fail-safe (`config.py`):**
+```python
+@property
+def is_production(self) -> bool:
+    return self.environment.strip().lower() != "development"  # prod по умолчанию
+```
+и в `deps.py` дополнительно требовать явный тестовый признак, а не только `allow_dev_auth`.
+
+**Patch 3 — email_verified (`auth.py`, после строки 92):**
+```python
+if claims.get("email_verified") is not True:
+    raise HTTPException(400, detail="Email not verified by provider")
+```
++ миграция: снять `uq_users_email`, при необходимости заменить на `UNIQUE(provider, email)` в identities, не в users.
+
+**Patch 4 — транзакция per-request (`db/session.py`):**
+```python
+async with async_session_factory() as session:
+    async with session.begin():   # явная транзакция
+        yield session
+        # commit по выходу из begin(); rollback при исключении
+```
+(и `apply_user_context` вызывать первым внутри неё).
+
+**Тесты (новый `tests/test_rls_isolation.py`)** — по списку из §E, через отдельный PostgreSQL (Testcontainers) под app-ролью с ручным `set_config`.
+
+---
+
+## J. Финальный вердикт
+
+1. **Продолжать на этом репозитории?** — **Да.** Фундамент качественный, проблемы точечные и исправимые.
+2. **Менять фундамент сейчас?** — **Нет.** Ни микросервисов, ни смены стека, ни ORM. Правьте RLS-конфигурацию и auth-затычки внутри текущей архитектуры.
+3. **Оставлять Authentik?** — **Нет, убрать (вариант B):** прямой Google OIDC + email magic links. Меньше кода, меньше боли, тот же уровень безопасности на вашем масштабе.
+4. **Готов ко второму пользователю?** — **Нет, пока нет.** Блокеры: F-1 (FORCE RLS), F-2 (`USING true`), F-3 (email takeover), F-4 (dev-auth). Плюс нужны тесты изоляции. После них — да.
+5. **Готов к реальным данным Oura?** — **Нет.** Нужны: весь блок §G до Oura + audit trail в рантайме + blob-политика + удаление данных пользователя (F-6).
+6. **Три самых важных действия прямо сейчас:**
+   1. **`FORCE ROW LEVEL SECURITY` + отдельная owner-роль** (F-1) — без этого RLS декоративен.
+   2. **Закрыть `USING (true)` и обезвредить dev-auth** (F-2, F-4) — это фактические дыры доступа.
+   3. **Написать тесты изоляции A↔B** — без них любое утверждение о безопасности недоказуемо; они же зафиксируют, что фиксы 1–2 работают.
+
+Про правовую часть (health-данные, GDPR/HIPAA/152-ФЗ) — намеренно без утверждений о соответствии. Архитектурно к нему готовят: (а) явная изоляция на уровне БД, (б) шифрование at-rest для blobs, (в) удаление данных пользователя, (г) audit trail, (д) политика ретенции claims/IP/UA, (е) для 152-ФЗ отдельно проработать вопрос локализации хранения ПДн. Эти вопросы решаются архитектурно и не зависят от выбора юрисдикции.
+
+Один файл я бы поправил в первую очередь чисто из-за путаницы, о которой вы сами написали в ТЗ (§7.3): `core/security.py` и `routes/private.py` — это ровно тот «мёртвый параллельный `get_current_user`», который сбивает и людей, и агентов. Удалите их первым же коммитом — станет заметно чище.
