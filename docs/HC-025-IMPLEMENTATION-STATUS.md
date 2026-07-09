@@ -43,7 +43,7 @@ PR: `#7`
 - отдельный user, identity, workspace и пустой profile создаются только после подтверждения `CREATE_SEPARATE_ACCOUNT`;
 - audit helpers и события `identity.link_declined`, `identity.link_failed`, `identity.separate_account_confirmed`;
 - frontend показывает последствия отдельного аккаунта и требует повторного подтверждения;
-- обе completion-функции возвращают реальный `intent_id`, `user_id` и признак replay;
+- completion-функции возвращают реальный `intent_id`, `user_id` и признак replay;
 - successful completion audit пишется для обоих направлений linking;
 - повторный `link_email` consume получает безопасный идемпотентный результат;
 - после первого успешного linking отправляется security notification;
@@ -53,15 +53,21 @@ PR: `#7`
 - authenticated settings flow запускает тот же account-link intent через `/api/auth/link/settings/start`;
 - settings flows `settings_add_google` и `settings_add_email` имеют отдельные purpose-aware completion branches;
 - из desktop и mobile profile UI добавлена ссылка «Способы входа»;
-- helper собирает все уникальные подтверждённые identity emails для последующих security notifications.
+- helper собирает все уникальные подтверждённые identity emails для security notifications;
+- recipient selection вынесен в чистую функцию и покрыт тестами дедупликации, нормализации и игнорирования unverified identity;
+- settings-aware completion перенесён в ещё не выпущенную миграцию `0028`;
+- временная миграция `0029` удалена;
+- `0028` снова имеет полноценный downgrade;
+- добавлены статические security tests для FORCE RLS, fixed purpose, PUBLIC EXECUTE revoke, flow coverage и downgrade.
 
 ## Не завершено
 
-- подключение рассылки уведомлений ко всем подтверждённым адресам вместо одного канонического;
+- подключение фактической рассылки уведомлений ко всем подтверждённым адресам вместо одного канонического;
 - endpoint отключения identity со step-up и запретом последней identity;
 - HC-026 для существующих дублей;
-- полный набор PostgreSQL/RLS/concurrency/API/frontend tests;
-- исправление downgrade implementation миграции `0029` до полного Alembic cycle;
+- полноценные PostgreSQL integration и concurrency tests;
+- API tests для identities/settings flow;
+- frontend tests для страницы способов входа;
 - локальный Ruff, pytest, frontend test/build и Alembic up/down cycle;
 - CI review и deployment.
 
@@ -74,16 +80,15 @@ PR: `#7`
 → 0025 purpose-specific link_email tokens + completion
 → 0026 Google link preparation + completion
 → 0027 decline + explicit separate-account + audit helpers
-→ 0028 result-returning completion + replay context
-→ 0029 purpose-aware settings completion
+→ 0028 result-returning completion + replay + settings flows
 ```
 
 Миграции не применялись в production. Feature flag по умолчанию выключен.
 
 ## Следующий кодовый блок
 
-1. завершить notification fan-out на все verified addresses;
-2. добавить tests для identities API и settings flow;
-3. исправить и проверить downgrade `0029`;
-4. полный PostgreSQL/RLS/concurrency/API/frontend test matrix;
+1. подключить notification fan-out на все verified addresses;
+2. добавить API tests для identities и settings flow;
+3. добавить frontend tests страницы способов входа;
+4. полный PostgreSQL/RLS/concurrency test matrix;
 5. HC-026 для существующих дублей.
