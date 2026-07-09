@@ -52,7 +52,7 @@ def upgrade() -> None:
     op.execute(f"REVOKE ALL ON {S}.account_link_email_tokens FROM {APP}")
     op.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {S}.account_link_email_tokens TO {R}")
     op.execute(f"GRANT SELECT, UPDATE ON {S}.account_link_intents TO {R}")
-    op.execute(f"GRANT SELECT, INSERT ON {S}.user_identities TO {R}")
+    op.execute(f"GRANT SELECT, INSERT, UPDATE ON {S}.user_identities TO {R}")
 
     op.execute(f"GRANT CREATE ON SCHEMA {S} TO {R}")
     op.execute(
@@ -120,26 +120,34 @@ def upgrade() -> None:
         SET row_security = off
         AS $$
         DECLARE
-          locked_intent {S}.account_link_intents%ROWTYPE;
           consumed_token_id uuid;
+          target_intent_id uuid;
+          locked_intent {S}.account_link_intents%ROWTYPE;
           google_subject text;
           google_email text;
+          existing_identity_user_id uuid;
         BEGIN
-          SELECT t.id, ali.*
-          INTO consumed_token_id, locked_intent
+          SELECT t.id, t.intent_id
+          INTO consumed_token_id, target_intent_id
           FROM {S}.account_link_email_tokens t
-          JOIN {S}.account_link_intents ali ON ali.id = t.intent_id
           WHERE t.token_hash = link_token_hash
             AND t.purpose = 'link_email'
             AND t.used_at IS NULL
             AND t.expires_at > now()
-          FOR UPDATE OF t, ali;
+          FOR UPDATE;
 
           IF consumed_token_id IS NULL THEN
             RETURN NULL;
           END IF;
 
-          IF locked_intent.status <> 'pending_confirmation'
+          SELECT ali.*
+          INTO locked_intent
+          FROM {S}.account_link_intents ali
+          WHERE ali.id = target_intent_id
+          FOR UPDATE;
+
+          IF locked_intent.id IS NULL
+             OR locked_intent.status <> 'pending_confirmation'
              OR locked_intent.required_provider <> 'email'
              OR locked_intent.expires_at <= now()
              OR locked_intent.browser_binding_hash <> expected_browser_binding_hash THEN
@@ -157,42 +165,42 @@ def upgrade() -> None:
             RETURN NULL;
           END IF;
 
-          IF EXISTS (
-            SELECT 1 FROM {S}.user_identities ui
-            WHERE ui.provider = 'google'
-              AND ui.subject = google_subject
-              AND ui.user_id <> locked_intent.candidate_user_id
-          ) THEN
+          SELECT ui.user_id
+          INTO existing_identity_user_id
+          FROM {S}.user_identities ui
+          WHERE ui.provider = 'google'
+            AND ui.subject = google_subject
+          FOR UPDATE;
+
+          IF existing_identity_user_id IS NOT NULL
+             AND existing_identity_user_id <> locked_intent.candidate_user_id THEN
             RETURN NULL;
           END IF;
 
-          INSERT INTO {S}.user_identities (
-            id, user_id, provider, subject, issuer, claims, created_at, last_seen_at
-          ) VALUES (
-            gen_random_uuid(),
-            locked_intent.candidate_user_id,
-            'google',
-            google_subject,
-            google_issuer,
-            locked_intent.initiating_claims,
-            now(),
-            now()
-          )
-          ON CONFLICT (provider, subject) DO UPDATE
-          SET last_seen_at = EXCLUDED.last_seen_at,
-              claims = EXCLUDED.claims
-          WHERE {S}.user_identities.user_id = locked_intent.candidate_user_id;
+          IF existing_identity_user_id IS NULL THEN
+            INSERT INTO {S}.user_identities (
+              id, user_id, provider, subject, issuer, claims, created_at, last_seen_at
+            ) VALUES (
+              gen_random_uuid(), locked_intent.candidate_user_id, 'google',
+              google_subject, google_issuer, locked_intent.initiating_claims,
+              now(), now()
+            );
+          ELSE
+            UPDATE {S}.user_identities
+            SET claims = locked_intent.initiating_claims,
+                last_seen_at = now()
+            WHERE provider = 'google'
+              AND subject = google_subject
+              AND user_id = locked_intent.candidate_user_id;
+          END IF;
 
           UPDATE {S}.account_link_email_tokens
           SET used_at = now()
           WHERE id = consumed_token_id;
 
           UPDATE {S}.account_link_intents
-          SET status = 'completed',
-              completed_at = now(),
-              version = version + 1
-          WHERE id = locked_intent.id
-            AND status = 'pending_confirmation';
+          SET status = 'completed', completed_at = now(), version = version + 1
+          WHERE id = locked_intent.id AND status = 'pending_confirmation';
 
           RETURN locked_intent.candidate_user_id;
         END
@@ -200,9 +208,7 @@ def upgrade() -> None:
         """
     )
 
-    issue_sig = (
-        f"{S}.app_issue_link_email_token(uuid, text, text, timestamptz, text, text)"
-    )
+    issue_sig = f"{S}.app_issue_link_email_token(uuid, text, text, timestamptz, text, text)"
     consume_sig = f"{S}.app_consume_link_email_token(text, text, text)"
     for signature in (issue_sig, consume_sig):
         op.execute(f"ALTER FUNCTION {signature} OWNER TO {R}")
@@ -213,9 +219,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     consume_sig = f"{S}.app_consume_link_email_token(text, text, text)"
-    issue_sig = (
-        f"{S}.app_issue_link_email_token(uuid, text, text, timestamptz, text, text)"
-    )
+    issue_sig = f"{S}.app_issue_link_email_token(uuid, text, text, timestamptz, text, text)"
     for signature in (consume_sig, issue_sig):
         op.execute(f"REVOKE EXECUTE ON FUNCTION {signature} FROM {APP}")
         op.execute(f"DROP FUNCTION IF EXISTS {signature}")
