@@ -1,3 +1,13 @@
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     credentials: "include",
@@ -9,9 +19,9 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (response.status === 401) {
     window.location.assign("/login");
-    throw new Error("Authentication required");
+    throw new ApiError(401, "Authentication required");
   }
-  if (response.status === 403) throw new Error("Нет доступа к данным");
+  if (response.status === 403) throw new ApiError(403, "Нет доступа к данным");
   if (!response.ok) {
     let message = `API error ${response.status}`;
     try {
@@ -20,7 +30,7 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // Keep the status-based fallback.
     }
-    throw new Error(message);
+    throw new ApiError(response.status, message);
   }
   return response.json();
 }

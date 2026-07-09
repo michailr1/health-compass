@@ -146,6 +146,8 @@ jobs:
       - name: Lint changed frontend files
         run: >-
           npx eslint
+          src/pages/Dashboard.tsx
+          src/pages/Dashboard.test.ts
           src/pages/HealthProfile.tsx
           src/pages/AccountLink.tsx
           src/pages/SignInMethods.tsx
