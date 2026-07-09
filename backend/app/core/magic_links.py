@@ -33,26 +33,27 @@ def build_magic_link(token: str) -> str:
 
 def build_link_email_url(token: str) -> str:
     parts = urlsplit(settings.frontend_url)
-    path = "/api/auth/link/email/consume"
-    return urlunsplit((parts.scheme, parts.netloc, path, urlencode({"token": token}), ""))
+    return urlunsplit((parts.scheme, parts.netloc, "/api/auth/link/email/consume", urlencode({"token": token}), ""))
 
 
 def build_identity_removal_email_url(token: str) -> str:
     parts = urlsplit(settings.frontend_url)
-    path = "/api/auth/identities/remove/email/consume"
-    return urlunsplit((parts.scheme, parts.netloc, path, urlencode({"token": token}), ""))
+    return urlunsplit((parts.scheme, parts.netloc, "/api/auth/identities/remove/email/consume", urlencode({"token": token}), ""))
+
+
+def build_duplicate_resolution_email_url(token: str) -> str:
+    parts = urlsplit(settings.frontend_url)
+    return urlunsplit((parts.scheme, parts.netloc, "/api/auth/duplicates/email/consume", urlencode({"token": token}), ""))
 
 
 def _send_sync(recipient: str, subject: str, body: str) -> None:
     if not settings.smtp_host or not settings.smtp_from_email:
         raise RuntimeError("SMTP is not configured")
-
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = settings.smtp_from_email
     message["To"] = recipient
     message.set_content(body)
-
     smtp_class = smtplib.SMTP_SSL if settings.smtp_use_ssl else smtplib.SMTP
     with smtp_class(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
         if settings.smtp_starttls and not settings.smtp_use_ssl:
@@ -103,6 +104,20 @@ async def send_identity_removal_email(recipient: str, token: str, target_provide
     )
 
 
+async def send_duplicate_resolution_email(recipient: str, token: str) -> None:
+    link = build_duplicate_resolution_email_url(token)
+    await asyncio.to_thread(
+        _send_sync,
+        recipient,
+        "Подтверждение объединения пустого дубликата Health Compass",
+        "Найдены два аккаунта Health Compass с одним подтверждённым email. Один из них пуст и может быть безопасно поглощён.\n\n"
+        "Чтобы доказать владение вторым аккаунтом, откройте специальную ссылку:\n\n"
+        f"{link}\n\n"
+        "Ссылка имеет отдельное назначение resolve_duplicate_email. Она не подходит для обычного входа, "
+        "связывания способов входа или удаления identity. Если вы не запускали эту процедуру, проигнорируйте письмо.",
+    )
+
+
 async def send_identity_removed_notification(recipient: str, removed_provider: str) -> None:
     await asyncio.to_thread(
         _send_sync,
@@ -131,7 +146,6 @@ async def send_account_linked_notifications(
     recipients: tuple[str, ...],
     providers: tuple[str, ...],
 ) -> tuple[str, ...]:
-    """Notify each verified address independently and return failed recipients."""
     failures: list[str] = []
     for recipient in recipients:
         try:
