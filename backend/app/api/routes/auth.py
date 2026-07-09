@@ -14,6 +14,11 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.routes.duplicate_resolution import (
+    _create_canonical_session_response,
+    _notify_duplicate_resolution,
+    _record_duplicate_audit,
+)
 from app.core.account_linking import hash_secret, new_browser_binding
 from app.core.config import settings
 from app.core.magic_links import (
@@ -40,11 +45,13 @@ VERIFIER_COOKIE = "hc_oidc_verifier"
 PURPOSE_COOKIE = "hc_oidc_purpose"
 LINK_INTENT_COOKIE = "hc_oidc_link_intent"
 REMOVAL_INTENT_COOKIE = "hc_oidc_removal_intent"
+DUPLICATE_INTENT_COOKIE = "hc_oidc_duplicate_intent"
 GOOGLE_PROVIDER = "google"
 EMAIL_PROVIDER = "email"
 LOGIN_PURPOSE = "login"
 LINK_PURPOSE = "account_link"
 REMOVAL_PURPOSE = "identity_removal"
+DUPLICATE_PURPOSE = "duplicate_resolution"
 
 
 def _redirect_uri() -> str:
@@ -59,7 +66,15 @@ def _frontend_url(path: str, query: dict[str, str] | None = None) -> str:
 
 
 def _set_short_cookie(response: RedirectResponse, name: str, value: str) -> None:
-    response.set_cookie(name, value, max_age=600, secure=True, httponly=True, samesite="lax", path="/api/auth")
+    response.set_cookie(
+        name,
+        value,
+        max_age=600,
+        secure=True,
+        httponly=True,
+        samesite="lax",
+        path="/api/auth",
+    )
 
 
 def _set_account_link_cookie(response: RedirectResponse, value: str) -> None:
@@ -82,6 +97,7 @@ def _delete_oidc_cookies(response: RedirectResponse) -> None:
         PURPOSE_COOKIE,
         LINK_INTENT_COOKIE,
         REMOVAL_INTENT_COOKIE,
+        DUPLICATE_INTENT_COOKIE,
     ):
         response.delete_cookie(name, path="/api/auth")
 
@@ -108,7 +124,11 @@ async def _start_google_login() -> RedirectResponse:
     return response
 
 
-async def _lookup_identity_user_id(session: AsyncSession, provider: str, subject: str) -> uuid.UUID | None:
+async def _lookup_identity_user_id(
+    session: AsyncSession,
+    provider: str,
+    subject: str,
+) -> uuid.UUID | None:
     result = await session.execute(
         text("select health_compass.app_lookup_identity_user_id(:provider, :subject)"),
         {"provider": provider, "subject": subject},
@@ -129,7 +149,8 @@ async def _record_link_audit(
     await session.execute(
         text(
             "select health_compass.app_record_account_link_audit("
-            ":event_type, :result, :intent_id, :actor_user_id, :ip, :user_agent, cast(:metadata as jsonb))"
+            ":event_type, :result, :intent_id, :actor_user_id, :ip, :user_agent, "
+            "cast(:metadata as jsonb))"
         ),
         {
             "event_type": event_type,
@@ -156,7 +177,8 @@ async def _record_removal_audit(
     await session.execute(
         text(
             "select health_compass.app_record_identity_removal_audit("
-            ":event_type, :result, :intent_id, :actor_user_id, :ip, :user_agent, cast(:metadata as jsonb))"
+            ":event_type, :result, :intent_id, :actor_user_id, :ip, :user_agent, "
+            "cast(:metadata as jsonb))"
         ),
         {
             "event_type": event_type,
@@ -170,7 +192,11 @@ async def _record_removal_audit(
     )
 
 
-async def _create_session_response(session: AsyncSession, request: Request, user_id: uuid.UUID) -> RedirectResponse:
+async def _create_session_response(
+    session: AsyncSession,
+    request: Request,
+    user_id: uuid.UUID,
+) -> RedirectResponse:
     await apply_user_context(session, user_id)
     user_result = await session.execute(select(User).where(User.id == user_id))
     user = user_result.scalar_one_or_none()
@@ -185,7 +211,8 @@ async def _create_session_response(session: AsyncSession, request: Request, user
             session_token_hash=token_hash,
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
-            expires_at=datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=settings.session_ttl_seconds),
+            expires_at=datetime.datetime.now(datetime.UTC)
+            + datetime.timedelta(seconds=settings.session_ttl_seconds),
         )
     )
     response = RedirectResponse(settings.frontend_url, status_code=303)
@@ -211,7 +238,10 @@ async def _notify_linked_addresses(
     intent_id: uuid.UUID,
 ) -> None:
     recipients = await verified_notification_emails(session, user)
-    failures = await send_account_linked_notifications(recipients, ("Google", "Email Magic Link"))
+    failures = await send_account_linked_notifications(
+        recipients,
+        ("Google", "Email Magic Link"),
+    )
     if failures:
         await _record_link_audit(
             session,
@@ -339,6 +369,45 @@ async def start_google_identity_removal(
     return response
 
 
+@router.get("/duplicates/google/start")
+async def start_google_duplicate_resolution(
+    request: Request,
+    intent_id: uuid.UUID = Query(),
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    if not settings.account_linking_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+    browser_binding = request.cookies.get(settings.account_link_cookie_name)
+    if not browser_binding:
+        raise HTTPException(status_code=400, detail="Duplicate resolution session is missing")
+    try:
+        location, state, nonce, code_verifier = await _build_google_authorization()
+    except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail="Google authentication is temporarily unavailable") from exc
+    prepared = await session.execute(
+        text(
+            "select health_compass.app_prepare_duplicate_resolution_google("
+            ":intent_id, :browser_hash, :state_hash, :nonce_hash, :pkce_hash)"
+        ),
+        {
+            "intent_id": intent_id,
+            "browser_hash": hash_secret(browser_binding),
+            "state_hash": hash_secret(state),
+            "nonce_hash": hash_secret(nonce),
+            "pkce_hash": hash_secret(code_verifier),
+        },
+    )
+    if not bool(prepared.scalar_one()):
+        raise HTTPException(status_code=409, detail="Duplicate resolution is unavailable or expired")
+    response = RedirectResponse(location)
+    _set_short_cookie(response, STATE_COOKIE, state)
+    _set_short_cookie(response, NONCE_COOKIE, nonce)
+    _set_short_cookie(response, VERIFIER_COOKIE, code_verifier)
+    _set_short_cookie(response, PURPOSE_COOKIE, DUPLICATE_PURPOSE)
+    _set_short_cookie(response, DUPLICATE_INTENT_COOKIE, str(intent_id))
+    return response
+
+
 @router.get("/callback")
 async def callback(
     request: Request,
@@ -377,6 +446,72 @@ async def callback(
     if claims.get("email_verified") is not True:
         raise HTTPException(status_code=401, detail="OIDC email is not verified")
 
+    if purpose == DUPLICATE_PURPOSE:
+        browser_binding = request.cookies.get(settings.account_link_cookie_name)
+        intent_cookie = request.cookies.get(DUPLICATE_INTENT_COOKIE)
+        if not browser_binding or not intent_cookie:
+            raise HTTPException(status_code=400, detail="Duplicate resolution session is missing")
+        try:
+            intent_id = uuid.UUID(intent_cookie)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid duplicate resolution intent") from exc
+        completed = await session.execute(
+            text(
+                "select health_compass.app_complete_duplicate_resolution_google("
+                ":intent_id, :browser_hash, :state_hash, :nonce_hash, :pkce_hash, "
+                ":google_subject, :google_email)"
+            ),
+            {
+                "intent_id": intent_id,
+                "browser_hash": hash_secret(browser_binding),
+                "state_hash": hash_secret(state),
+                "nonce_hash": hash_secret(nonce),
+                "pkce_hash": hash_secret(code_verifier),
+                "google_subject": subject,
+                "google_email": email,
+            },
+        )
+        completion = completed.scalar_one_or_none()
+        if not completion:
+            response = RedirectResponse(
+                _frontend_url("/app/sign-in-methods", {"status": "duplicate-resolution-failed"}),
+                status_code=303,
+            )
+            _delete_oidc_cookies(response)
+            return response
+        canonical_user_id = uuid.UUID(str(completion["canonical_user_id"]))
+        real_intent_id = uuid.UUID(str(completion["intent_id"]))
+        replayed = bool(completion.get("replayed"))
+        await apply_user_context(session, canonical_user_id)
+        user_result = await session.execute(select(User).where(User.id == canonical_user_id))
+        canonical_user = user_result.scalar_one_or_none()
+        if canonical_user is None:
+            raise HTTPException(status_code=409, detail="Canonical account is unavailable")
+        await _record_duplicate_audit(
+            session,
+            request,
+            event_type="identity.duplicate_resolution_completed",
+            result="success",
+            intent_id=real_intent_id,
+            actor_user_id=canonical_user.id,
+            metadata={"confirmation": "google", "replayed": replayed},
+        )
+        if not replayed:
+            await _notify_duplicate_resolution(
+                session,
+                request,
+                canonical_user=canonical_user,
+                intent_id=real_intent_id,
+            )
+        response = await _create_canonical_session_response(
+            session,
+            request,
+            canonical_user.id,
+            "/app/sign-in-methods",
+        )
+        _delete_oidc_cookies(response)
+        return response
+
     if purpose == REMOVAL_PURPOSE:
         browser_binding = request.cookies.get(settings.account_link_cookie_name)
         intent_cookie = request.cookies.get(REMOVAL_INTENT_COOKIE)
@@ -389,7 +524,8 @@ async def callback(
         completed = await session.execute(
             text(
                 "select health_compass.app_complete_identity_removal_google("
-                ":intent_id, :browser_hash, :state_hash, :nonce_hash, :pkce_hash, :google_subject, :google_email)"
+                ":intent_id, :browser_hash, :state_hash, :nonce_hash, :pkce_hash, "
+                ":google_subject, :google_email)"
             ),
             {
                 "intent_id": intent_id,
@@ -455,7 +591,8 @@ async def callback(
         completed = await session.execute(
             text(
                 "select health_compass.app_complete_google_link_result("
-                ":intent_id, :browser_hash, :state_hash, :nonce_hash, :pkce_hash, :google_subject, :google_email)"
+                ":intent_id, :browser_hash, :state_hash, :nonce_hash, :pkce_hash, "
+                ":google_subject, :google_email)"
             ),
             {
                 "intent_id": intent_id,
@@ -492,7 +629,12 @@ async def callback(
             linked_user_result = await session.execute(select(User).where(User.id == linked_user_id))
             linked_user = linked_user_result.scalar_one_or_none()
             if linked_user is not None:
-                await _notify_linked_addresses(session, request, user=linked_user, intent_id=real_intent_id)
+                await _notify_linked_addresses(
+                    session,
+                    request,
+                    user=linked_user,
+                    intent_id=real_intent_id,
+                )
         return await _create_session_response(session, request, linked_user_id)
 
     identity_user_id = await _lookup_identity_user_id(session, GOOGLE_PROVIDER, subject)
@@ -500,7 +642,10 @@ async def callback(
         candidate = await lookup_verified_email_candidate(session, email)
         if candidate.has_existing_duplicates:
             response = RedirectResponse(
-                _frontend_url("/auth/link-account", {"status": "existing-duplicates", "required": EMAIL_PROVIDER}),
+                _frontend_url(
+                    "/auth/link-account",
+                    {"status": "existing-duplicates", "required": EMAIL_PROVIDER},
+                ),
                 status_code=303,
             )
             _delete_oidc_cookies(response)
@@ -523,7 +668,10 @@ async def callback(
                 user_agent=request.headers.get("user-agent"),
             )
             response = RedirectResponse(
-                _frontend_url("/auth/link-account", {"intent": str(intent_id), "required": EMAIL_PROVIDER}),
+                _frontend_url(
+                    "/auth/link-account",
+                    {"intent": str(intent_id), "required": EMAIL_PROVIDER},
+                ),
                 status_code=303,
             )
             _delete_oidc_cookies(response)
@@ -556,7 +704,10 @@ async def callback(
         user_result = await session.execute(select(User).where(User.id == identity_user_id))
         user = user_result.scalar_one()
         identity_result = await session.execute(
-            select(UserIdentity).where(UserIdentity.provider == GOOGLE_PROVIDER, UserIdentity.subject == subject)
+            select(UserIdentity).where(
+                UserIdentity.provider == GOOGLE_PROVIDER,
+                UserIdentity.subject == subject,
+            )
         )
         identity = identity_result.scalar_one()
         user.display_name = claims.get("name") or user.display_name
@@ -585,10 +736,16 @@ async def _logout_response(request: Request, session: AsyncSession) -> RedirectR
 
 
 @router.get("/logout")
-async def logout_get(request: Request, session: AsyncSession = Depends(get_session)) -> RedirectResponse:
+async def logout_get(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
     return await _logout_response(request, session)
 
 
 @router.post("/logout")
-async def logout_post(request: Request, session: AsyncSession = Depends(get_session)) -> RedirectResponse:
+async def logout_post(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
     return await _logout_response(request, session)
