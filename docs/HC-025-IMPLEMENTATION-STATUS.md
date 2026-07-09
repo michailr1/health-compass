@@ -35,13 +35,20 @@ PR: `#7`
 - verified Google email обязан совпадать с intent email;
 - транзакционное добавление Email identity к существующему Google user;
 - повторный callback разрешён идемпотентно только при полном совпадении browser/state/nonce/PKCE bindings;
-- после completion создаётся session существующего candidate user.
+- после completion создаётся session существующего candidate user;
+- отдельный endpoint отказа от linking;
+- отказ меняет intent на `declined` и сам по себе не создаёт user/workspace/profile;
+- separate-account разрешён только после decline и второго явного подтверждения;
+- claim declined intent выполняется транзакционно с browser-binding check;
+- отдельный user, identity, workspace и пустой profile создаются только после подтверждения `CREATE_SEPARATE_ACCOUNT`;
+- добавлены audit helpers и события `identity.link_declined`, `identity.link_failed`, `identity.separate_account_confirmed`;
+- frontend показывает последствия отдельного аккаунта и требует повторного подтверждения.
 
 ## Не завершено
 
+- completion audit с реальным `intent_id` для обоих успешных linking-flow;
 - идемпотентная обработка повторного `link_email` consume с безопасным UX;
-- decline и отдельное двойное подтверждение создания отдельного аккаунта;
-- audit events и security notifications;
+- security notifications после успешного linking;
 - UI «Способы входа» в настройках;
 - HC-026 для существующих дублей;
 - полный набор PostgreSQL/RLS/concurrency/API/frontend tests;
@@ -56,15 +63,16 @@ PR: `#7`
 → 0024 narrow intent creation function
 → 0025 purpose-specific link_email tokens + completion
 → 0026 Google link preparation + completion
+→ 0027 decline + explicit separate-account + audit helpers
 ```
 
 Миграции не применялись в production. Feature flag по умолчанию выключен.
 
 ## Следующий кодовый блок
 
-1. decline без создания аккаунта;
-2. отдельное повторное подтверждение create-separate-account;
-3. audit событий linking;
-4. security notifications;
-5. identities API и UI «Способы входа»;
-6. PostgreSQL/RLS/concurrency/API/frontend tests.
+1. возвращать реальный `intent_id` из completion functions;
+2. completion audit для обоих успешных flow;
+3. security notifications;
+4. identities API и UI «Способы входа»;
+5. PostgreSQL/RLS/concurrency/API/frontend tests;
+6. HC-026 для существующих дублей.
