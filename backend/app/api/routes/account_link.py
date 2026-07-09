@@ -198,7 +198,7 @@ async def consume_link_email(
 
     result = await session.execute(
         text(
-            "select health_compass.app_consume_link_email_token("
+            "select health_compass.app_consume_link_email_token_result("
             ":token_hash, :browser_hash, :issuer)"
         ),
         {
