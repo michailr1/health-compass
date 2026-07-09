@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import secrets
 import uuid
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -12,12 +13,15 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.account_linking import hash_secret, new_browser_binding
 from app.core.config import settings
+from app.core.magic_links import normalize_email
 from app.core.oidc import build_authorization_url, exchange_code, get_discovery, validate_id_token
 from app.core.session_tokens import hash_token, new_session_token
 from app.db.rls import apply_session_context, apply_user_context
 from app.db.session import get_session
 from app.models.user import AuthSession, User, UserIdentity
+from app.services.account_linking import create_account_link_intent, lookup_verified_email_candidate
 from app.services.bootstrap import ensure_personal_workspace
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -25,12 +29,18 @@ STATE_COOKIE = "hc_oidc_state"
 NONCE_COOKIE = "hc_oidc_nonce"
 VERIFIER_COOKIE = "hc_oidc_verifier"
 GOOGLE_PROVIDER = "google"
+EMAIL_PROVIDER = "email"
 
 
 def _redirect_uri() -> str:
     if not settings.oidc_redirect_uri:
         raise RuntimeError("OIDC_REDIRECT_URI is not configured")
     return settings.oidc_redirect_uri
+
+
+def _frontend_url(path: str, query: dict[str, str] | None = None) -> str:
+    parts = urlsplit(settings.frontend_url)
+    return urlunsplit((parts.scheme, parts.netloc, path, urlencode(query or {}), ""))
 
 
 def _set_short_cookie(response: RedirectResponse, name: str, value: str) -> None:
@@ -42,6 +52,18 @@ def _set_short_cookie(response: RedirectResponse, name: str, value: str) -> None
         httponly=True,
         samesite="lax",
         path="/api/auth",
+    )
+
+
+def _set_account_link_cookie(response: RedirectResponse, value: str) -> None:
+    response.set_cookie(
+        settings.account_link_cookie_name,
+        value,
+        max_age=settings.account_link_intent_ttl_seconds,
+        secure=True,
+        httponly=True,
+        samesite="lax",
+        path="/api/auth/link",
     )
 
 
@@ -133,19 +155,59 @@ async def callback(
         ) from exc
 
     subject = str(claims.get("sub") or "")
-    email = str(claims.get("email") or "")
+    email = normalize_email(str(claims.get("email") or ""))
     if not subject or not email:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC subject or email missing")
     if claims.get("email_verified") is not True:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC email is not verified")
 
     identity_user_id = await _lookup_identity_user_id(session, GOOGLE_PROVIDER, subject)
+    if identity_user_id is None and settings.account_linking_enabled:
+        candidate = await lookup_verified_email_candidate(session, email)
+        if candidate.has_existing_duplicates:
+            response = RedirectResponse(
+                _frontend_url(
+                    "/auth/link-account",
+                    {"status": "existing-duplicates", "required": EMAIL_PROVIDER},
+                ),
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+            _delete_oidc_cookies(response)
+            return response
+        if candidate.has_single_candidate:
+            browser_binding = new_browser_binding()
+            intent_id = await create_account_link_intent(
+                session,
+                flow_type="google_first_email_existing",
+                normalized_email=email,
+                candidate_user_id=candidate.user_id,
+                initiating_provider=GOOGLE_PROVIDER,
+                initiating_subject=subject,
+                required_provider=EMAIL_PROVIDER,
+                browser_binding_hash=hash_secret(browser_binding),
+                expires_at=datetime.datetime.now(datetime.UTC)
+                + datetime.timedelta(seconds=settings.account_link_intent_ttl_seconds),
+                initiating_claims=claims,
+                created_ip=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+            )
+            response = RedirectResponse(
+                _frontend_url(
+                    "/auth/link-account",
+                    {"intent": str(intent_id), "required": EMAIL_PROVIDER},
+                ),
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+            _delete_oidc_cookies(response)
+            _set_account_link_cookie(response, browser_binding)
+            return response
+
     if identity_user_id is None:
         user_id = uuid.uuid4()
         await apply_user_context(session, user_id)
         user = User(
             id=user_id,
-            email=email.strip().lower(),
+            email=email,
             display_name=claims.get("name") or claims.get("preferred_username") or email,
             status="active",
         )
@@ -168,8 +230,6 @@ async def callback(
             select(UserIdentity).where(UserIdentity.provider == GOOGLE_PROVIDER, UserIdentity.subject == subject)
         )
         identity = identity_result.scalar_one()
-        # Provider claims are refreshed, but ordinary sign-in must not silently
-        # replace the user's canonical contact email.
         user.display_name = claims.get("name") or user.display_name
         identity.claims = claims
         identity.last_seen_at = datetime.datetime.now(datetime.UTC)
