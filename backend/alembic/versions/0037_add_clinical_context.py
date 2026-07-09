@@ -42,6 +42,10 @@ def upgrade() -> None:
         SET row_security = off
         AS $$
         BEGIN
+          IF NOT {S}.app_can_edit_profile(target_profile_id) THEN
+            RETURN false;
+          END IF;
+
           RETURN EXISTS (
             SELECT 1
             FROM {S}.health_profiles hp
