@@ -149,7 +149,6 @@ async def consume_magic_link(
         await apply_user_context(session, user_id)
         user_result = await session.execute(select(User).where(User.id == user_id))
         user = user_result.scalar_one()
-        user.email = email
         identity_result = await session.execute(
             select(UserIdentity).where(
                 UserIdentity.provider == EMAIL_PROVIDER,
@@ -157,6 +156,8 @@ async def consume_magic_link(
             )
         )
         identity = identity_result.scalar_one()
+        # The identity subject remains the verified provider address. Ordinary
+        # sign-in must not silently replace the user's canonical contact email.
         identity.last_seen_at = datetime.datetime.now(datetime.UTC)
 
     await ensure_personal_workspace(session, user)
