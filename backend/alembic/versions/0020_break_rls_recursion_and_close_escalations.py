@@ -45,6 +45,7 @@ def upgrade() -> None:
     )
 
     op.execute(f"GRANT USAGE ON SCHEMA {S} TO {R}")
+    op.execute(f"GRANT CREATE ON SCHEMA {S} TO {R}")
     op.execute(
         f"""
         GRANT SELECT ON
@@ -83,10 +84,10 @@ def upgrade() -> None:
         """
     )
 
-    # PostgreSQL validates SQL function bodies as the creating role.  On a clean
+    # PostgreSQL validates SQL function bodies as the creating role. On a clean
     # database the migrator owns FORCE-RLS tables but deliberately has no
     # BYPASSRLS, so setting row_security=off inside CREATE FUNCTION is rejected
-    # before ownership can be transferred.  Create first, transfer ownership to
+    # before ownership can be transferred. Create first, transfer ownership to
     # the dedicated BYPASSRLS NOLOGIN role, and only then set row_security=off.
     op.execute(
         f"""
@@ -186,6 +187,8 @@ def upgrade() -> None:
         op.execute(f"ALTER FUNCTION {signature} SET row_security = off")
         op.execute(f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC")
         op.execute(f"GRANT EXECUTE ON FUNCTION {signature} TO health_compass_app")
+
+    op.execute(f"REVOKE CREATE ON SCHEMA {S} FROM {R}")
 
     for signature in [
         f"{S}.app_current_user_id()",
