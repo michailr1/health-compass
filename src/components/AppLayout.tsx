@@ -1,8 +1,20 @@
+import { useQuery } from "@tanstack/react-query";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  Activity, Dna, LayoutDashboard, ListChecks, Database, History, LogOut, HeartPulse, KeyRound,
+  Activity,
+  ChevronRight,
+  Database,
+  Dna,
+  HeartPulse,
+  History,
+  KeyRound,
+  LayoutDashboard,
+  ListChecks,
+  LogOut,
 } from "lucide-react";
+
 import { useAuth } from "@/context/AuthContext";
+import { apiGet, type HealthProfile } from "@/lib/api";
 
 const nav = [
   { to: "/app", label: "Дашборд", icon: LayoutDashboard, end: true },
@@ -13,10 +25,23 @@ const nav = [
   { to: "/app/history", label: "История", icon: History },
 ];
 
+export function resolveProfileDisplayName(
+  profiles: HealthProfile[] | undefined,
+  accountDisplayName: string | null | undefined,
+  email: string | null | undefined,
+): string {
+  return profiles?.[0]?.display_name || accountDisplayName || email || "Пользователь";
+}
+
 export default function AppLayout() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const displayName = user?.display_name || user?.email || "Пользователь";
+  const { data: profiles } = useQuery({
+    queryKey: ["health-profiles", "layout"],
+    queryFn: () => apiGet<HealthProfile[]>("/profiles"),
+    enabled: Boolean(user),
+  });
+  const displayName = resolveProfileDisplayName(profiles, user?.display_name, user?.email);
 
   async function onLogout() {
     await signOut();
@@ -59,21 +84,32 @@ export default function AppLayout() {
           </nav>
 
           <div className="border-t border-sidebar-border p-3">
-            <div className="rounded-xl bg-sidebar-accent/60 px-3 py-2.5">
-              <Link to="/app/profile" className="block rounded-lg hover:text-primary">
-                <div className="truncate text-sm font-medium">{displayName}</div>
-                <div className="truncate text-xs text-muted-foreground">{user?.email}</div>
-                <div className="mt-1 text-[11px] text-primary">Профиль здоровья</div>
+            <div className="rounded-xl bg-sidebar-accent/60 p-1.5">
+              <Link
+                to="/app/profile"
+                aria-label={`Открыть профиль здоровья: ${displayName}`}
+                className="group block cursor-pointer rounded-lg border border-transparent px-2.5 py-2 transition-all hover:border-primary/25 hover:bg-sidebar-accent hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-sidebar-foreground transition-colors group-hover:text-primary">
+                      {displayName}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">{user?.email}</div>
+                    <div className="mt-1 text-[11px] font-medium text-primary">Профиль здоровья</div>
+                  </div>
+                  <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+                </div>
               </Link>
               <Link
                 to="/app/sign-in-methods"
-                className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                className="mt-1 flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
               >
                 <KeyRound className="h-3.5 w-3.5" /> Способы входа
               </Link>
               <button
                 onClick={onLogout}
-                className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                className="mt-0.5 flex w-full items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
               >
                 <LogOut className="h-3.5 w-3.5" /> Выйти
               </button>
@@ -93,7 +129,10 @@ export default function AppLayout() {
               <Link to="/app/sign-in-methods" aria-label="Способы входа" className="text-muted-foreground">
                 <KeyRound className="h-4 w-4" />
               </Link>
-              <Link to="/app/profile" className="max-w-32 truncate text-xs text-primary">
+              <Link
+                to="/app/profile"
+                className="max-w-32 truncate rounded-md px-2 py-1 text-xs text-primary transition-colors hover:bg-primary/10"
+              >
                 {displayName}
               </Link>
               <button onClick={onLogout} className="text-xs text-muted-foreground">Выйти</button>
