@@ -135,7 +135,7 @@ def test_concurrent_link_email_completion_creates_one_identity() -> None:
               id, user_id, provider, subject, issuer, claims, last_seen_at
             ) VALUES (
               %s, %s, 'google', %s, 'https://accounts.google.com',
-              jsonb_build_object('email', %s, 'email_verified', true), now()
+              jsonb_build_object('email', %s::text, 'email_verified', true), now()
             )
             """,
             (google_identity_id, user_id, google_subject, email),
@@ -149,7 +149,7 @@ def test_concurrent_link_email_completion_creates_one_identity() -> None:
             ) VALUES (
               %s, 'settings_add_email', 'pending_confirmation', %s, %s,
               'google', %s, 'email',
-              jsonb_build_object('email', %s, 'email_verified', true),
+              jsonb_build_object('email', %s::text, 'email_verified', true),
               %s, now() + interval '15 minutes'
             )
             """,
