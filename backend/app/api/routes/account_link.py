@@ -19,12 +19,13 @@ from app.core.magic_links import (
     hash_magic_token,
     new_magic_token,
     send_account_link_email,
-    send_account_linked_notification,
+    send_account_linked_notifications,
 )
 from app.core.session_tokens import hash_token, new_session_token
 from app.db.rls import apply_session_context, apply_user_context
 from app.db.session import get_session
 from app.models.user import AuthSession, User, UserIdentity
+from app.services.account_linking import verified_notification_emails
 from app.services.bootstrap import ensure_personal_workspace
 
 router = APIRouter(prefix="/auth/link", tags=["auth"])
@@ -119,6 +120,33 @@ async def _create_authenticated_response(
     _set_session_cookie(response, session_token)
     response.delete_cookie(settings.account_link_cookie_name, path="/api/auth")
     return response
+
+
+async def _notify_linked_addresses(
+    session: AsyncSession,
+    request: Request,
+    *,
+    user: User,
+    intent_id: uuid.UUID,
+) -> None:
+    recipients = await verified_notification_emails(session, user)
+    failures = await send_account_linked_notifications(
+        recipients,
+        ("Google", "Email Magic Link"),
+    )
+    if failures:
+        await _record_link_audit(
+            session,
+            request,
+            event_type="identity.link_notification_failed",
+            result="partial" if len(failures) < len(recipients) else "error",
+            intent_id=intent_id,
+            actor_user_id=user.id,
+            metadata={
+                "recipient_count": len(recipients),
+                "failure_count": len(failures),
+            },
+        )
 
 
 @router.post("/email/request", response_model=LinkEmailAccepted, status_code=status.HTTP_202_ACCEPTED)
@@ -233,17 +261,7 @@ async def consume_link_email(
         metadata={"confirmation": "link_email", "replayed": replayed},
     )
     if not replayed:
-        try:
-            await send_account_linked_notification(user.email, ("Google", "Email Magic Link"))
-        except Exception:
-            await _record_link_audit(
-                session,
-                request,
-                event_type="identity.link_notification_failed",
-                result="error",
-                intent_id=intent_id,
-                actor_user_id=user.id,
-            )
+        await _notify_linked_addresses(session, request, user=user, intent_id=intent_id)
     return await _create_authenticated_response(session, request, user)
 
 
