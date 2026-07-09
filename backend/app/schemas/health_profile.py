@@ -56,6 +56,8 @@ class ProfileReadiness(BaseModel):
     sex_specific_references: bool
     bmi: bool
     local_time_context: bool
+    allergies_reviewed: bool
+    medications_reviewed: bool
     missing_fields: list[str]
 
 
