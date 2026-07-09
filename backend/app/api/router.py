@@ -11,6 +11,7 @@ from app.api.routes.health import router as health_router
 from app.api.routes.health_profile import router as health_profile_router
 from app.api.routes.identity import router as user_router
 from app.api.routes.private import router as private_router
+from app.api.routes.sign_in_methods import router as sign_in_methods_router
 from app.api.routes.version import router as version_router
 
 api_router = APIRouter()
@@ -23,3 +24,4 @@ api_router.include_router(health_profile_router)
 api_router.include_router(login_router)
 api_router.include_router(email_auth_router)
 api_router.include_router(account_link_router)
+api_router.include_router(sign_in_methods_router)
