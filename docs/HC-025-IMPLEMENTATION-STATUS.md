@@ -46,28 +46,28 @@ PR: `#7`
 - completion-функции возвращают реальный `intent_id`, `user_id` и признак replay;
 - successful completion audit пишется для обоих направлений linking;
 - повторный `link_email` consume получает безопасный идемпотентный результат;
-- после первого успешного linking отправляется security notification;
-- ошибка отправки уведомления не откатывает linking и фиксируется отдельным audit-событием;
+- security notification отправляется независимо на каждый уникальный подтверждённый адрес;
+- сбой одного mailbox не мешает отправке на остальные адреса и не откатывает linking;
+- partial/total notification failure фиксируется без записи адресов в audit metadata;
 - API `GET /api/auth/identities` показывает подключённые способы входа без раскрытия provider subject;
 - экран `/app/sign-in-methods` показывает Google и Email Magic Link, verified status и запрет удаления последнего способа;
 - authenticated settings flow запускает тот же account-link intent через `/api/auth/link/settings/start`;
 - settings flows `settings_add_google` и `settings_add_email` имеют отдельные purpose-aware completion branches;
 - из desktop и mobile profile UI добавлена ссылка «Способы входа»;
-- helper собирает все уникальные подтверждённые identity emails для security notifications;
-- recipient selection вынесен в чистую функцию и покрыт тестами дедупликации, нормализации и игнорирования unverified identity;
-- settings-aware completion перенесён в ещё не выпущенную миграцию `0028`;
-- временная миграция `0029` удалена;
-- `0028` снова имеет полноценный downgrade;
-- добавлены статические security tests для FORCE RLS, fixed purpose, PUBLIC EXECUTE revoke, flow coverage и downgrade.
+- recipient selection покрыт тестами дедупликации, нормализации и игнорирования unverified identity;
+- notification fan-out покрыт async-тестами с частичным SMTP failure;
+- settings-aware completion находится в миграции `0028`, временная `0029` удалена;
+- `0028` имеет полноценный downgrade;
+- добавлены backend tests mapping identities и settings link plans;
+- добавлен frontend Vitest для выбора отсутствующего способа входа;
+- добавлены статические security tests для FORCE RLS, fixed purpose, PUBLIC EXECUTE revoke, flow coverage и downgrade;
+- добавлены опциональные PostgreSQL integration tests для FORCE RLS, direct app-role denial, function ACL и SECURITY DEFINER configuration.
 
 ## Не завершено
 
-- подключение фактической рассылки уведомлений ко всем подтверждённым адресам вместо одного канонического;
-- endpoint отключения identity со step-up и запретом последней identity;
+- endpoint отключения identity со step-up и жёстким запретом последней identity;
 - HC-026 для существующих дублей;
-- полноценные PostgreSQL integration и concurrency tests;
-- API tests для identities/settings flow;
-- frontend tests для страницы способов входа;
+- PostgreSQL data-path и concurrency tests одновременного completion;
 - локальный Ruff, pytest, frontend test/build и Alembic up/down cycle;
 - CI review и deployment.
 
@@ -87,8 +87,8 @@ PR: `#7`
 
 ## Следующий кодовый блок
 
-1. подключить notification fan-out на все verified addresses;
-2. добавить API tests для identities и settings flow;
-3. добавить frontend tests страницы способов входа;
-4. полный PostgreSQL/RLS/concurrency test matrix;
-5. HC-026 для существующих дублей.
+1. добавить PostgreSQL data-path/concurrency tests;
+2. реализовать step-up removal с запретом последней identity;
+3. HC-026 для существующих дублей;
+4. выполнить Ruff, pytest, frontend test/build и Alembic cycle;
+5. security review перед снятием draft.
