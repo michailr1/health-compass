@@ -56,18 +56,28 @@ PR: `#7`
 - из desktop и mobile profile UI добавлена ссылка «Способы входа»;
 - recipient selection покрыт тестами дедупликации, нормализации и игнорирования unverified identity;
 - notification fan-out покрыт async-тестами с частичным SMTP failure;
-- settings-aware completion находится в миграции `0028`, временная `0029` удалена;
+- settings-aware completion находится в миграции `0028`;
 - `0028` имеет полноценный downgrade;
 - добавлены backend tests mapping identities и settings link plans;
 - добавлен frontend Vitest для выбора отсутствующего способа входа;
 - добавлены статические security tests для FORCE RLS, fixed purpose, PUBLIC EXECUTE revoke, flow coverage и downgrade;
 - добавлены опциональные PostgreSQL integration tests для FORCE RLS, direct app-role denial, function ACL и SECURITY DEFINER configuration;
-- добавлен исполняемый concurrency test: два одновременных consume одного `link_email` дают один initial completion, один replay, одну identity и один canonical `user_id`.
+- добавлен исполняемый concurrency test: два одновременных consume одного `link_email` дают один initial completion, один replay, одну identity и один canonical `user_id`;
+- добавлена миграция `0029` для step-up удаления identity;
+- removal использует отдельные RLS-таблицы и purpose `remove_identity_email`;
+- Google removal использует отдельный OIDC purpose `identity_removal`, state/nonce/PKCE и browser binding;
+- Email removal требует отдельную одноразовую ссылку через оставшийся Email Magic Link;
+- удаление разрешено только после подтверждения другого подключённого способа;
+- последняя identity блокируется и в UI, и внутри транзакционной SQL-функции;
+- removal intent сохраняется после удаления target identity через `ON DELETE SET NULL`, поэтому replay остаётся идемпотентным;
+- completion блокирует все identities пользователя в стабильном порядке перед повторным подсчётом;
+- audit и security notifications добавлены для успешного удаления и ошибок доставки;
+- страница «Способы входа» получила двухшаговое подтверждение отключения.
 
 ## Не завершено
 
-- endpoint отключения identity со step-up и жёстким запретом последней identity;
 - HC-026 для существующих дублей;
+- runtime API/integration tests step-up removal;
 - локальный Ruff, pytest, frontend test/build и Alembic up/down cycle;
 - CI review и deployment.
 
@@ -81,13 +91,14 @@ PR: `#7`
 → 0026 Google link preparation + completion
 → 0027 decline + explicit separate-account + audit helpers
 → 0028 result-returning completion + replay + settings flows
+→ 0029 step-up identity removal
 ```
 
 Миграции не применялись в production. Feature flag по умолчанию выключен.
 
 ## Следующий кодовый блок
 
-1. реализовать step-up removal с запретом последней identity;
-2. HC-026 для существующих дублей;
+1. HC-026: assessment пустого дубликата и безопасное absorption;
+2. runtime tests step-up removal;
 3. выполнить Ruff, pytest, frontend test/build и Alembic cycle;
 4. security review перед снятием draft.
