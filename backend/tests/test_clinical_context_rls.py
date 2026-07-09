@@ -111,4 +111,5 @@ def test_clinical_context_rls_and_consent_gate() -> None:
             db.execute("DELETE FROM health_compass.profile_permissions WHERE profile_id IN (%s,%s)", (profile, no_consent_profile))
             db.execute("DELETE FROM health_compass.health_profiles WHERE id IN (%s,%s)", (profile, no_consent_profile))
             db.execute("DELETE FROM health_compass.workspaces WHERE id IN (%s,%s)", (workspace, no_consent_workspace))
+            db.execute("DELETE FROM health_compass.user_consents WHERE user_id = ANY(%s)", (users,))
             db.execute("DELETE FROM health_compass.users WHERE id = ANY(%s)", (users,))
