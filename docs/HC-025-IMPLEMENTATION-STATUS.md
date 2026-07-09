@@ -1,9 +1,9 @@
-# HC-025 / HC-026 — статус реализации
+# HC-025 / HC-026 / HC-027 — статус реализации
 
 Дата: 2026-07-09  
 Ветка: `feat/account-linking-mvp`  
 PR: `#7`  
-Статус: `IN PROGRESS / DO NOT DEPLOY`
+Статус: `READY FOR REVIEW / NOT DEPLOYED`
 
 ## HC-025 реализовано
 
@@ -24,7 +24,7 @@ PR: `#7`
 - отдельные purpose `identity_removal` и `remove_identity_email`;
 - hard guard последней identity в UI и транзакционной SQL-функции;
 - audit, notifications и replay-safe removal intent;
-- PostgreSQL/RLS/static/unit/frontend/concurrency tests добавлены в код.
+- runtime PostgreSQL concurrency test удаления identity: один DELETE, один replay, последняя identity сохраняется.
 
 ## HC-026 реализовано
 
@@ -56,8 +56,16 @@ PR: `#7`
 - resolution intent сохраняется при удалении initiating/absorbed user через `ON DELETE SET NULL`;
 - после completion создаётся новая сессия canonical user;
 - email и Google completion идемпотентны;
-- candidate lookup использует portable `array_agg(uuid)` вместо `min(uuid)` и не создаёт temp tables;
-- добавлен PostgreSQL concurrency test полного absorption: один completion, один replay, один canonical user, две identities, отозванная сессия и удалённый пустой bootstrap-контур.
+- candidate lookup использует portable `array_agg(uuid)` и не создаёт temp tables;
+- PostgreSQL concurrency test подтверждает один completion, один replay, один canonical user, две identities, отозванную сессию и удалённый пустой bootstrap-контур.
+
+## HC-027 реализовано
+
+- Google callback и Email Magic Link consume проверяют verified email до bootstrap;
+- один существующий candidate запускает HC-025;
+- несколько существующих users направляют в HC-026 вместо молчаливого создания третьего user;
+- отказ от linking не создаёт отдельный аккаунт без второго явного подтверждения;
+- обычный вход по уже известной `(provider, subject)` identity остаётся прямым и идемпотентным.
 
 ## Migration chain
 
@@ -75,24 +83,36 @@ PR: `#7`
 → 0032 preserve intent when initiator is absorbed
 → 0033 restore protected initiator context during absorption
 → 0034 portable duplicate candidate lookup
+→ 0035 qualified identity-removal columns
 ```
 
 Миграции не применялись в production. Feature flag по умолчанию выключен.
 
-## Не завершено
+## Quality gate — пройден
 
-- фактический запуск Ruff и pytest;
-- фактический запуск frontend Vitest, lint и production build;
-- фактический Alembic `upgrade → downgrade → upgrade` cycle на отдельной PostgreSQL БД;
-- runtime integration tests step-up removal;
-- исправление найденных тестами дефектов;
-- CI и manual security review;
-- merge и deployment.
+- Python compile: success;
+- Ruff: success;
+- backend unit/static tests: success;
+- frontend ESLint: success;
+- frontend Vitest: success;
+- frontend production build: success;
+- исторический Alembic `0021 ↔ 0022` cycle: success;
+- current-head `upgrade → downgrade -1 → upgrade`: success;
+- FORCE RLS и app-role direct-access checks: success;
+- account-link concurrency: success;
+- identity-removal concurrency: success;
+- empty-duplicate absorption concurrency: success;
+- manual security review: blocker findings не обнаружены после исправления `0035`.
 
-## Следующий блок
+## До production
 
-1. запустить полный quality gate;
-2. исправить все ошибки;
-3. выполнить Alembic cycle и PostgreSQL integration/concurrency suite;
-4. провести security review;
-5. только после успешного gate подготовить PR к merge.
+1. review и merge PR #7;
+2. backup production БД;
+3. проверить роль `health_compass_rls_definer` и migration preconditions;
+4. применить миграции backend-first;
+5. задеплоить backend с feature flag выключенным;
+6. задеплоить frontend;
+7. smoke-test обычного Google и Email входа;
+8. включить feature flag;
+9. выполнить e2e link-on-login, settings linking, removal и HC-026 на контролируемых тестовых аккаунтах;
+10. при любом отклонении выключить feature flag и остановить rollout.
