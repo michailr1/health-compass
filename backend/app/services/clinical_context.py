@@ -92,9 +92,9 @@ async def _prepare_write(
     profile_id: uuid.UUID,
     current_user: User,
 ) -> None:
-    await get_visible_profile(session, profile_id)
+    profile = await get_visible_profile(session, profile_id)
     await require_profile_edit_access(session, profile_id)
-    await require_health_data_consent(session, current_user.id)
+    await require_health_data_consent(session, profile.owner_user_id)
 
 
 async def list_records(
@@ -139,7 +139,11 @@ async def create_record(
             entity_type=ACTION_PREFIX[section],
             entity_id=record.id,
             action=f"{ACTION_PREFIX[section]}.created",
-            changed_fields={key: {"old": None, "new": _serialize(value)} for key, value in values.items() if key not in {"id", "profile_id", "created_by_user_id"}},
+            changed_fields={
+                key: {"old": None, "new": _serialize(value)}
+                for key, value in values.items()
+                if key not in {"id", "profile_id", "created_by_user_id"}
+            },
             request_id=request_id,
         )
     )
@@ -169,10 +173,16 @@ async def update_record(
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clinical record not found")
 
-    values = payload.model_dump(exclude_unset=True, exclude={"expected_updated_at", "explicit_user_confirmation"})
+    values = payload.model_dump(
+        exclude_unset=True,
+        exclude={"expected_updated_at", "explicit_user_confirmation"},
+    )
     expected_updated_at = getattr(payload, "expected_updated_at", None)
     if expected_updated_at is not None and record.updated_at != expected_updated_at:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Clinical record was updated elsewhere")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Clinical record was updated elsewhere",
+        )
 
     if section == "conditions":
         onset = values.get("onset_date", record.onset_date)
