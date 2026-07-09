@@ -157,6 +157,7 @@ jobs:
           src/App.tsx
           src/components/AppLayout.tsx
           src/components/AppLayout.test.ts
+          src/components/ClinicalContextSection.tsx
       - name: Tests
         run: npm test
       - name: Build
