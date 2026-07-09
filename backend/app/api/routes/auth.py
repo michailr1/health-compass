@@ -1,4 +1,4 @@
-"""Direct Google OIDC authentication and Google-confirmed linking routes."""
+"""Direct Google OIDC authentication and step-up confirmation routes."""
 
 from __future__ import annotations
 
@@ -16,7 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.account_linking import hash_secret, new_browser_binding
 from app.core.config import settings
-from app.core.magic_links import normalize_email, send_account_linked_notifications
+from app.core.magic_links import (
+    normalize_email,
+    send_account_linked_notifications,
+    send_identity_removed_notification,
+)
 from app.core.oidc import build_authorization_url, exchange_code, get_discovery, validate_id_token
 from app.core.session_tokens import hash_token, new_session_token
 from app.db.rls import apply_session_context, apply_user_context
@@ -35,10 +39,12 @@ NONCE_COOKIE = "hc_oidc_nonce"
 VERIFIER_COOKIE = "hc_oidc_verifier"
 PURPOSE_COOKIE = "hc_oidc_purpose"
 LINK_INTENT_COOKIE = "hc_oidc_link_intent"
+REMOVAL_INTENT_COOKIE = "hc_oidc_removal_intent"
 GOOGLE_PROVIDER = "google"
 EMAIL_PROVIDER = "email"
 LOGIN_PURPOSE = "login"
 LINK_PURPOSE = "account_link"
+REMOVAL_PURPOSE = "identity_removal"
 
 
 def _redirect_uri() -> str:
@@ -69,7 +75,14 @@ def _set_account_link_cookie(response: RedirectResponse, value: str) -> None:
 
 
 def _delete_oidc_cookies(response: RedirectResponse) -> None:
-    for name in (STATE_COOKIE, NONCE_COOKIE, VERIFIER_COOKIE, PURPOSE_COOKIE, LINK_INTENT_COOKIE):
+    for name in (
+        STATE_COOKIE,
+        NONCE_COOKIE,
+        VERIFIER_COOKIE,
+        PURPOSE_COOKIE,
+        LINK_INTENT_COOKIE,
+        REMOVAL_INTENT_COOKIE,
+    ):
         response.delete_cookie(name, path="/api/auth")
 
 
@@ -130,6 +143,33 @@ async def _record_link_audit(
     )
 
 
+async def _record_removal_audit(
+    session: AsyncSession,
+    request: Request,
+    *,
+    event_type: str,
+    result: str,
+    intent_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+    metadata: dict | None = None,
+) -> None:
+    await session.execute(
+        text(
+            "select health_compass.app_record_identity_removal_audit("
+            ":event_type, :result, :intent_id, :actor_user_id, :ip, :user_agent, cast(:metadata as jsonb))"
+        ),
+        {
+            "event_type": event_type,
+            "result": result,
+            "intent_id": intent_id,
+            "actor_user_id": str(actor_user_id),
+            "ip": request.client.host if request.client else None,
+            "user_agent": request.headers.get("user-agent"),
+            "metadata": json.dumps(metadata or {}),
+        },
+    )
+
+
 async def _create_session_response(session: AsyncSession, request: Request, user_id: uuid.UUID) -> RedirectResponse:
     await apply_user_context(session, user_id)
     user_result = await session.execute(select(User).where(User.id == user_id))
@@ -171,10 +211,7 @@ async def _notify_linked_addresses(
     intent_id: uuid.UUID,
 ) -> None:
     recipients = await verified_notification_emails(session, user)
-    failures = await send_account_linked_notifications(
-        recipients,
-        ("Google", "Email Magic Link"),
-    )
+    failures = await send_account_linked_notifications(recipients, ("Google", "Email Magic Link"))
     if failures:
         await _record_link_audit(
             session,
@@ -183,10 +220,34 @@ async def _notify_linked_addresses(
             result="partial" if len(failures) < len(recipients) else "error",
             intent_id=intent_id,
             actor_user_id=user.id,
-            metadata={
-                "recipient_count": len(recipients),
-                "failure_count": len(failures),
-            },
+            metadata={"recipient_count": len(recipients), "failure_count": len(failures)},
+        )
+
+
+async def _notify_removed_identity(
+    session: AsyncSession,
+    request: Request,
+    *,
+    user: User,
+    intent_id: uuid.UUID,
+    removed_provider: str,
+) -> None:
+    recipients = await verified_notification_emails(session, user)
+    failures = 0
+    for recipient in recipients:
+        try:
+            await send_identity_removed_notification(recipient, removed_provider)
+        except Exception:
+            failures += 1
+    if failures:
+        await _record_removal_audit(
+            session,
+            request,
+            event_type="identity.removal_notification_failed",
+            result="partial" if failures < len(recipients) else "error",
+            intent_id=intent_id,
+            actor_user_id=user.id,
+            metadata={"recipient_count": len(recipients), "failure_count": failures},
         )
 
 
@@ -239,6 +300,45 @@ async def start_google_link(
     return response
 
 
+@router.get("/identities/remove/google/start")
+async def start_google_identity_removal(
+    request: Request,
+    intent_id: uuid.UUID = Query(),
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    if not settings.account_linking_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+    browser_binding = request.cookies.get(settings.account_link_cookie_name)
+    if not browser_binding:
+        raise HTTPException(status_code=400, detail="Removal session is missing")
+    try:
+        location, state, nonce, code_verifier = await _build_google_authorization()
+    except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail="Google authentication is temporarily unavailable") from exc
+    prepared = await session.execute(
+        text(
+            "select health_compass.app_prepare_identity_removal_google("
+            ":intent_id, :browser_hash, :state_hash, :nonce_hash, :pkce_hash)"
+        ),
+        {
+            "intent_id": intent_id,
+            "browser_hash": hash_secret(browser_binding),
+            "state_hash": hash_secret(state),
+            "nonce_hash": hash_secret(nonce),
+            "pkce_hash": hash_secret(code_verifier),
+        },
+    )
+    if not bool(prepared.scalar_one()):
+        raise HTTPException(status_code=409, detail="Removal request is unavailable or expired")
+    response = RedirectResponse(location)
+    _set_short_cookie(response, STATE_COOKIE, state)
+    _set_short_cookie(response, NONCE_COOKIE, nonce)
+    _set_short_cookie(response, VERIFIER_COOKIE, code_verifier)
+    _set_short_cookie(response, PURPOSE_COOKIE, REMOVAL_PURPOSE)
+    _set_short_cookie(response, REMOVAL_INTENT_COOKIE, str(intent_id))
+    return response
+
+
 @router.get("/callback")
 async def callback(
     request: Request,
@@ -276,6 +376,72 @@ async def callback(
         raise HTTPException(status_code=401, detail="OIDC subject or email missing")
     if claims.get("email_verified") is not True:
         raise HTTPException(status_code=401, detail="OIDC email is not verified")
+
+    if purpose == REMOVAL_PURPOSE:
+        browser_binding = request.cookies.get(settings.account_link_cookie_name)
+        intent_cookie = request.cookies.get(REMOVAL_INTENT_COOKIE)
+        if not browser_binding or not intent_cookie:
+            raise HTTPException(status_code=400, detail="Removal session is missing")
+        try:
+            intent_id = uuid.UUID(intent_cookie)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid removal intent") from exc
+        completed = await session.execute(
+            text(
+                "select health_compass.app_complete_identity_removal_google("
+                ":intent_id, :browser_hash, :state_hash, :nonce_hash, :pkce_hash, :google_subject, :google_email)"
+            ),
+            {
+                "intent_id": intent_id,
+                "browser_hash": hash_secret(browser_binding),
+                "state_hash": hash_secret(state),
+                "nonce_hash": hash_secret(nonce),
+                "pkce_hash": hash_secret(code_verifier),
+                "google_subject": subject,
+                "google_email": email,
+            },
+        )
+        completion = completed.scalar_one_or_none()
+        if not completion:
+            response = RedirectResponse(
+                _frontend_url("/app/sign-in-methods", {"status": "removal-confirmation-failed"}),
+                status_code=303,
+            )
+            _delete_oidc_cookies(response)
+            return response
+        user_id = uuid.UUID(str(completion["user_id"]))
+        real_intent_id = uuid.UUID(str(completion["intent_id"]))
+        removed_provider = str(completion["removed_provider"])
+        replayed = bool(completion.get("replayed"))
+        await apply_user_context(session, user_id)
+        user_result = await session.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
+        if user is None:
+            raise HTTPException(status_code=409, detail="Account is unavailable")
+        await _record_removal_audit(
+            session,
+            request,
+            event_type="identity.removal_completed",
+            result="success",
+            intent_id=real_intent_id,
+            actor_user_id=user.id,
+            metadata={"removed_provider": removed_provider, "replayed": replayed},
+        )
+        if not replayed:
+            await _notify_removed_identity(
+                session,
+                request,
+                user=user,
+                intent_id=real_intent_id,
+                removed_provider=removed_provider,
+            )
+        response = RedirectResponse(
+            _frontend_url("/app/sign-in-methods", {"status": "removed"}),
+            status_code=303,
+        )
+        _delete_oidc_cookies(response)
+        response.delete_cookie(settings.account_link_cookie_name, path="/api/auth")
+        return response
 
     if purpose == LINK_PURPOSE:
         browser_binding = request.cookies.get(settings.account_link_cookie_name)
@@ -326,12 +492,7 @@ async def callback(
             linked_user_result = await session.execute(select(User).where(User.id == linked_user_id))
             linked_user = linked_user_result.scalar_one_or_none()
             if linked_user is not None:
-                await _notify_linked_addresses(
-                    session,
-                    request,
-                    user=linked_user,
-                    intent_id=real_intent_id,
-                )
+                await _notify_linked_addresses(session, request, user=linked_user, intent_id=real_intent_id)
         return await _create_session_response(session, request, linked_user_id)
 
     identity_user_id = await _lookup_identity_user_id(session, GOOGLE_PROVIDER, subject)
