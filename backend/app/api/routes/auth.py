@@ -257,7 +257,7 @@ async def callback(
             raise HTTPException(status_code=400, detail="Invalid link intent") from exc
         completed = await session.execute(
             text(
-                "select health_compass.app_complete_google_link("
+                "select health_compass.app_complete_google_link_result("
                 ":intent_id, :browser_hash, :state_hash, :nonce_hash, :pkce_hash, :google_subject, :google_email)"
             ),
             {
