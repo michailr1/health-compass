@@ -37,6 +37,22 @@
 | `03.5-high-fidelity-mockups.pdf` | high-fidelity UX reference | reference design archive |
 | `03_5-frontend-next-steps.md` | ближайший frontend roadmap | `PRODUCT-UX-BASELINE.md`, `PROJECT-PLAN.md` |
 
+## Fable Stage 2.5 — Progressive Health Intake
+
+| Источник | Назначение | Каноническое отражение |
+|---|---|---|
+| `02.5-health-intake-spec.md` | спецификация прогрессивного intake и UX-интеграции | `docs/PROGRESSIVE-HEALTH-INTAKE.md`, `PROJECT-PLAN.md` |
+| `02.5-intake-fields.xlsx` | матрица полей IN-01…IN-16, privacy, provenance и точки сбора | `docs/PROGRESSIVE-HEALTH-INTAKE.md`, будущие API/data contracts |
+| `02.5-intake-wireframes.pdf` | Health Profile, contextual prompt, OCR import и dashboard hint | `PRODUCT-UX-BASELINE.md`, reference design archive |
+
+Принятые отклонения от исходных материалов:
+
+- PHASE-02.5 не является блокирующей анкетой;
+- для MVP используется одно поле «Пол» (`sex`), без разделения пола и гендера;
+- этническая принадлежность не входит в обычный MVP intake и запрашивается только будущим конкретным валидированным правилом;
+- основной UX полноты — contextual readiness, а не давление заполнить все поля;
+- исходные XLSX/PDF остаются неизменяемыми reference artifacts, а принятые решения отражаются в Markdown baseline.
+
 ## Внешние ревью
 
 | Источник | Темы | Отражение |
@@ -59,5 +75,6 @@
 2. Все принятые изменения переносятся в Markdown-документы репозитория.
 3. Внешняя рекомендация не считается реализованной без commit/test/production evidence.
 4. Product/UX baseline не считается current state, пока нет кода, API и тестов.
-5. При расхождении старого источника и фактической реализации отклонение фиксируется в `DEVELOPMENT-HISTORY.md` или ADR.
+5. При расхождении старого источника и фактической реализации отклонение фиксируется в `DEVELOPMENT-HISTORY.md`, ADR или каноническом baseline.
 6. Секреты, персональные медицинские данные и токены не сохраняются в этом реестре.
+7. Исходные артефакты Fable должны храниться в GitHub reference archive; чат/проект не является единственным долговременным хранилищем.
