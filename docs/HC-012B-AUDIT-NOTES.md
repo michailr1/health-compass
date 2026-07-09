@@ -1,52 +1,37 @@
-# HC-012b — audit starting point
+# HC-012b — audit result
 
-Статус: `AUDIT IN PROGRESS`  
+Статус: `COMPLETED`  
 Основание: актуальный `main`, production Alembic head `0036`.
 
-## Уже существующие опорные сущности
+Финальная техническая спецификация создана:
 
-- `health_compass.health_profiles` содержит идентичность профиля, имя, дату рождения, пол, рост и timezone;
-- `body_measurements` используется для исторических измерений веса;
-- `user_consents` хранит versioned consent records;
-- `profile_audit_events` — append-only audit для изменений медицинского профиля;
-- права профиля используют owner/edit/analyze/view;
-- запись разрешена owner/edit, view/analyze остаются read-only;
-- cross-user API должен возвращать `404`;
-- новые пользовательские таблицы обязаны получать ENABLE/FORCE RLS, политики и grants в той же миграции.
+```text
+docs/CLINICAL-CONTEXT-SLICE-2.md
+```
 
-## Предварительный scope HC-012b
+## Подтверждённые опорные механизмы
 
-- состояния и диагнозы, сообщённые пользователем;
-- аллергии и непереносимости;
-- лекарства;
-- витамины, минералы и БАДы;
-- статус active/inactive;
-- даты начала и окончания;
-- дозировка, единица и частота;
-- provenance manual/document;
-- user confirmation;
-- append-only audit;
-- soft validation без расчёта или рекомендации доз;
-- нейтральные empty states и явное «не заполнять сейчас».
+- `health_compass.health_profiles` остаётся корневой сущностью профиля;
+- `user_consents` переиспользуется для consent `health_data_processing`;
+- `profile_audit_events` переиспользуется как append-only audit;
+- `app_can_view_profile(uuid)` и `app_can_edit_profile(uuid)` задают permission matrix;
+- owner/edit могут записывать, view/analyze только читают;
+- cross-user API возвращает `404`;
+- новые таблицы создаются вместе с ENABLE/FORCE RLS, policies и grants.
 
-## Nutrition compatibility
+## Принятые решения
 
-HC-012b не создаёт nutrition-таблицы. Он должен сохранить совместимость с будущей PHASE-05.5:
+- отдельные типизированные таблицы для conditions, allergies, medications и supplements;
+- отдельная минимальная таблица clinical safety flags;
+- soft-delete/void вместо физического DELETE;
+- manual records в Slice 2 создаются как confirmed;
+- document/needs_review резервируются для будущего OCR flow;
+- существующий audit constraint расширяется новыми действиями;
+- migration `0037` обязана расширить HC-026 duplicate-user activity assessment;
+- любая clinical history, включая voided, блокирует автоматическое поглощение как пустого пользователя;
+- nutrition-таблицы в HC-012b не создаются;
+- будущий HC-032 использует явный safety flag `nutrition_calorie_feedback_suppressed`, а не свободный текст.
 
-- clinical context предоставляет аллергии, состояния и safety-флаги для будущей персонализации;
-- применяется общий паттерн `raw/machine proposal → human confirmation → normalized fact`;
-- расстройства пищевого поведения и аналогичные safety-флаги должны быть представлены так, чтобы будущий HC-032 мог отключить калорийные/весовые рекомендации;
-- физические `meal_capture`, `meal_analysis`, `meal`, `meal_item`, internal food ID и meal type создаются только в PHASE-05.5.
+## Следующий шаг
 
-## Вопросы, которые должен закрыть полный аудит
-
-1. Отдельные таблицы для каждого типа clinical context или единая polymorphic entity.
-2. Как представлять coded/uncoded значения без преждевременной привязки к одному медицинскому справочнику.
-3. Состав статусов и правила окончания курса/состояния.
-4. Гранулярность provenance и confirmation.
-5. Как использовать существующий `profile_audit_events` без дублирования аудита.
-6. Какие поля считать значимой активностью для HC-026 duplicate assessment.
-7. Полный API и frontend information architecture.
-8. Migration number после текущего head `0036`.
-
-Этот файл является промежуточной записью аудита, а не финальной технической спецификацией.
+После принятия документационного PR создать `feat/clinical-context-slice-2` от актуального `main` и начать с migration `0037` и PostgreSQL RLS tests.
