@@ -19,6 +19,7 @@ from app.schemas.identity import (
     UserResponse,
     WorkspaceResponse,
 )
+from app.services.health_profile import build_readiness
 
 router = APIRouter(tags=["identity"])
 
@@ -51,12 +52,23 @@ async def get_profile(
     profile_id: uuid.UUID,
     _: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> HealthProfile:
+) -> dict:
     result = await session.execute(select(HealthProfile).where(HealthProfile.id == profile_id))
     profile = result.scalar_one_or_none()
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
-    return profile
+    readiness = await build_readiness(session, profile)
+    return {
+        "id": profile.id,
+        "workspace_id": profile.workspace_id,
+        "owner_user_id": profile.owner_user_id,
+        "display_name": profile.display_name,
+        "date_of_birth": profile.date_of_birth,
+        "sex": profile.sex,
+        "height_cm": profile.height_cm,
+        "timezone": profile.timezone,
+        "readiness": readiness,
+    }
 
 
 @router.get("/profiles/{profile_id}/dashboard", response_model=DashboardSnapshotResponse)
