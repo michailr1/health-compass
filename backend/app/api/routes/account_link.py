@@ -163,5 +163,5 @@ async def consume_link_email(
 
     response = RedirectResponse(settings.frontend_url, status_code=status.HTTP_303_SEE_OTHER)
     _set_session_cookie(response, session_token)
-    response.delete_cookie(settings.account_link_cookie_name, path="/api/auth/link")
+    response.delete_cookie(settings.account_link_cookie_name, path="/api/auth")
     return response
