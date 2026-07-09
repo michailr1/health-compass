@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 SexValue = Literal["male", "female", "not_specified"]
+HEALTH_DATA_CONSENT_VERSION = "health-data-processing-v1"
 
 
 class ProfilePatchRequest(BaseModel):
@@ -20,6 +21,16 @@ class ProfilePatchRequest(BaseModel):
     sex: SexValue | None = None
     height_cm: Decimal | None = Field(default=None, gt=0, max_digits=5, decimal_places=2)
     timezone: str | None = Field(default=None, max_length=64)
+
+    @field_validator("display_name")
+    @classmethod
+    def validate_display_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("display_name cannot be blank")
+        return normalized
 
     @field_validator("date_of_birth")
     @classmethod
@@ -91,9 +102,17 @@ class BodyMeasurementResponse(BaseModel):
 class MeasurementVoidRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
 
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("reason cannot be blank")
+        return normalized
+
 
 class ConsentAcceptRequest(BaseModel):
-    document_version: str = Field(min_length=1, max_length=32)
+    document_version: Literal[HEALTH_DATA_CONSENT_VERSION]
 
 
 class ConsentResponse(BaseModel):
