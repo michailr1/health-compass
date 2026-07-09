@@ -1,17 +1,19 @@
-"""Identity, workspace, and profile APIs."""
+"""Identity, workspace, profile, and connected sign-in method APIs."""
 
 from __future__ import annotations
 
+import datetime
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.db.session import get_session
 from app.models.profile import DashboardSnapshot, HealthProfile
-from app.models.user import User
+from app.models.user import User, UserIdentity
 from app.models.workspace import Workspace
 from app.schemas.identity import (
     DashboardSnapshotResponse,
@@ -24,9 +26,57 @@ from app.services.health_profile import build_readiness
 router = APIRouter(tags=["identity"])
 
 
+class SignInMethodResponse(BaseModel):
+    id: uuid.UUID
+    provider: str
+    label: str
+    verified: bool
+    connected_at: datetime.datetime
+    last_seen_at: datetime.datetime | None
+    can_remove: bool
+
+
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)) -> User:
     return current_user
+
+
+@router.get("/auth/identities", response_model=list[SignInMethodResponse])
+async def list_sign_in_methods(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[SignInMethodResponse]:
+    result = await session.execute(
+        select(UserIdentity)
+        .where(UserIdentity.user_id == current_user.id)
+        .order_by(UserIdentity.created_at)
+    )
+    identities = list(result.scalars().all())
+    can_remove = len(identities) > 1
+    response: list[SignInMethodResponse] = []
+    for identity in identities:
+        claims = identity.claims or {}
+        if identity.provider == "google":
+            label = str(claims.get("email") or "Google")
+            verified = claims.get("email_verified") is True
+        elif identity.provider == "email":
+            label = identity.subject
+            verified = claims.get("email_verified") is True
+        else:
+            label = identity.provider
+            verified = False
+        response.append(
+            SignInMethodResponse(
+                id=identity.id,
+                provider=identity.provider,
+                label=label,
+                verified=verified,
+                connected_at=identity.created_at,
+                last_seen_at=identity.last_seen_at,
+                can_remove=can_remove,
+            )
+        )
+    return response
 
 
 @router.get("/workspaces", response_model=list[WorkspaceResponse])
