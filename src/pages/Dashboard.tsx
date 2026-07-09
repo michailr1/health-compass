@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Activity, Bed, CalendarClock, Dna, Gauge, AlertTriangle, ArrowRight, Info, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import { apiGet, type DashboardSnapshot, type HealthProfile } from "@/lib/api";
+import { ApiError, apiGet, type DashboardSnapshot, type HealthProfile } from "@/lib/api";
 
 const fmt = new Intl.NumberFormat("ru-RU");
 
@@ -31,12 +31,20 @@ const priorityIcon: Record<string, React.ComponentType<{ className?: string }>> 
   high: AlertTriangle, medium: AlertTriangle, info: Info,
 };
 
-async function loadDashboard() {
+export async function loadDashboard() {
   const profiles = await apiGet<HealthProfile[]>("/profiles");
   const profile = profiles[0];
   if (!profile) return { profile: null, dashboard: null };
-  const dashboard = await apiGet<DashboardSnapshot>(`/profiles/${profile.id}/dashboard`);
-  return { profile, dashboard };
+
+  try {
+    const dashboard = await apiGet<DashboardSnapshot>(`/profiles/${profile.id}/dashboard`);
+    return { profile, dashboard };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return { profile, dashboard: null };
+    }
+    throw error;
+  }
 }
 
 export default function Dashboard() {
@@ -58,11 +66,42 @@ export default function Dashboard() {
     );
   }
 
-  if (!data?.profile || !data.dashboard) {
+  if (!data?.profile) {
     return (
       <div className="hm-card p-6">
         <h1 className="font-display text-2xl font-semibold tracking-tight">Дашборд</h1>
         <p className="mt-2 text-sm text-muted-foreground">Профиль здоровья пока не создан.</p>
+      </div>
+    );
+  }
+
+  if (!data.dashboard) {
+    return (
+      <div className="space-y-6">
+        <header>
+          <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">Дашборд</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Профиль: {data.profile.display_name}</p>
+        </header>
+        <div className="hm-card p-6 md:p-8">
+          <h2 className="font-display text-xl font-semibold">Профиль создан</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Данных для дашборда пока нет. Подключите источник, добавьте измерения или заполните профиль — показатели появятся после первой обработки данных.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link
+              to="/app/sources"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-elegant hover:opacity-90"
+            >
+              Подключить источник <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link
+              to="/app/profile"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted/40"
+            >
+              Заполнить профиль
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
