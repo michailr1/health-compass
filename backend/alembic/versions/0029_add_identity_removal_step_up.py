@@ -24,7 +24,7 @@ def upgrade() -> None:
         CREATE TABLE {S}.identity_removal_intents (
           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
           user_id uuid NOT NULL REFERENCES {S}.users(id) ON DELETE CASCADE,
-          target_identity_id uuid NOT NULL REFERENCES {S}.user_identities(id) ON DELETE CASCADE,
+          target_identity_id uuid REFERENCES {S}.user_identities(id) ON DELETE SET NULL,
           target_provider varchar(64) NOT NULL,
           required_provider varchar(64) NOT NULL,
           status varchar(32) NOT NULL DEFAULT 'pending_confirmation',
@@ -101,19 +101,22 @@ def upgrade() -> None:
           identity_count integer;
           new_intent_id uuid;
         BEGIN
+          PERFORM 1
+          FROM {S}.user_identities ui
+          WHERE ui.user_id = actor_user_id
+          ORDER BY ui.id
+          FOR UPDATE;
+
           SELECT count(*) INTO identity_count
           FROM {S}.user_identities ui
           WHERE ui.user_id = actor_user_id;
 
-          IF identity_count <= 1 THEN
-            RETURN NULL;
-          END IF;
+          IF identity_count <= 1 THEN RETURN NULL; END IF;
 
           SELECT ui.* INTO target_identity
           FROM {S}.user_identities ui
           WHERE ui.id = target_identity_id
-            AND ui.user_id = actor_user_id
-          FOR UPDATE;
+            AND ui.user_id = actor_user_id;
 
           IF target_identity.id IS NULL
              OR target_identity.provider NOT IN ('google', 'email') THEN
@@ -125,14 +128,9 @@ def upgrade() -> None:
           WHERE ui.user_id = actor_user_id
             AND ui.id <> target_identity.id
             AND ui.provider IN ('google', 'email')
-            AND (
-              (ui.provider = 'email' AND ui.claims ->> 'email_verified' = 'true')
-              OR
-              (ui.provider = 'google' AND ui.claims ->> 'email_verified' = 'true')
-            )
+            AND ui.claims ->> 'email_verified' = 'true'
           ORDER BY CASE ui.provider WHEN 'google' THEN 1 ELSE 2 END
-          LIMIT 1
-          FOR UPDATE;
+          LIMIT 1;
 
           IF remaining_provider IS NULL OR remaining_provider = target_identity.provider THEN
             RETURN NULL;
@@ -229,18 +227,23 @@ def upgrade() -> None:
 
           IF i.status = 'completed' THEN
             RETURN jsonb_build_object(
-              'intent_id', i.id,
-              'user_id', i.user_id,
-              'removed_provider', i.target_provider,
-              'replayed', true
+              'intent_id', i.id, 'user_id', i.user_id,
+              'removed_provider', i.target_provider, 'replayed', true
             );
           END IF;
 
           IF i.status <> 'pending_confirmation'
              OR i.required_provider <> 'google'
-             OR i.expires_at <= now() THEN
+             OR i.expires_at <= now()
+             OR i.target_identity_id IS NULL THEN
             RETURN NULL;
           END IF;
+
+          PERFORM 1
+          FROM {S}.user_identities ui
+          WHERE ui.user_id = i.user_id
+          ORDER BY ui.id
+          FOR UPDATE;
 
           SELECT ui.user_id INTO confirmed_user_id
           FROM {S}.user_identities ui
@@ -248,8 +251,7 @@ def upgrade() -> None:
             AND ui.subject = confirmed_google_subject
             AND lower(btrim(ui.claims ->> 'email')) = lower(btrim(confirmed_google_email))
             AND ui.claims ->> 'email_verified' = 'true'
-            AND ui.id <> i.target_identity_id
-          FOR UPDATE;
+            AND ui.id <> i.target_identity_id;
 
           IF confirmed_user_id IS NULL OR confirmed_user_id <> i.user_id THEN
             RETURN NULL;
@@ -257,12 +259,9 @@ def upgrade() -> None:
 
           SELECT count(*) INTO identity_count
           FROM {S}.user_identities ui
-          WHERE ui.user_id = i.user_id
-          FOR UPDATE;
+          WHERE ui.user_id = i.user_id;
 
-          IF identity_count <= 1 THEN
-            RETURN NULL;
-          END IF;
+          IF identity_count <= 1 THEN RETURN NULL; END IF;
 
           DELETE FROM {S}.user_identities ui
           WHERE ui.id = i.target_identity_id
@@ -275,10 +274,8 @@ def upgrade() -> None:
           WHERE id = i.id AND status = 'pending_confirmation';
 
           RETURN jsonb_build_object(
-            'intent_id', i.id,
-            'user_id', i.user_id,
-            'removed_provider', i.target_provider,
-            'replayed', false
+            'intent_id', i.id, 'user_id', i.user_id,
+            'removed_provider', i.target_provider, 'replayed', false
           );
         END
         $$
@@ -380,18 +377,23 @@ def upgrade() -> None:
 
           IF i.status = 'completed' THEN
             RETURN jsonb_build_object(
-              'intent_id', i.id,
-              'user_id', i.user_id,
-              'removed_provider', i.target_provider,
-              'replayed', true
+              'intent_id', i.id, 'user_id', i.user_id,
+              'removed_provider', i.target_provider, 'replayed', true
             );
           END IF;
 
           IF i.status <> 'pending_confirmation'
              OR i.expires_at <= now()
-             OR token_row.used_at IS NOT NULL THEN
+             OR token_row.used_at IS NOT NULL
+             OR i.target_identity_id IS NULL THEN
             RETURN NULL;
           END IF;
+
+          PERFORM 1
+          FROM {S}.user_identities ui
+          WHERE ui.user_id = i.user_id
+          ORDER BY ui.id
+          FOR UPDATE;
 
           SELECT ui.user_id INTO confirmed_email_user_id
           FROM {S}.user_identities ui
@@ -399,15 +401,13 @@ def upgrade() -> None:
             AND ui.provider = 'email'
             AND ui.id <> i.target_identity_id
             AND ui.claims ->> 'email_verified' = 'true'
-          LIMIT 1
-          FOR UPDATE;
+          LIMIT 1;
 
           IF confirmed_email_user_id IS NULL THEN RETURN NULL; END IF;
 
           SELECT count(*) INTO identity_count
           FROM {S}.user_identities ui
-          WHERE ui.user_id = i.user_id
-          FOR UPDATE;
+          WHERE ui.user_id = i.user_id;
 
           IF identity_count <= 1 THEN RETURN NULL; END IF;
 
@@ -426,10 +426,8 @@ def upgrade() -> None:
           WHERE id = i.id AND status = 'pending_confirmation';
 
           RETURN jsonb_build_object(
-            'intent_id', i.id,
-            'user_id', i.user_id,
-            'removed_provider', i.target_provider,
-            'replayed', false
+            'intent_id', i.id, 'user_id', i.user_id,
+            'removed_provider', i.target_provider, 'replayed', false
           );
         END
         $$
