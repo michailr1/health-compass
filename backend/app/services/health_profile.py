@@ -103,8 +103,6 @@ async def build_readiness(
     sex_specific_references = profile.sex in {"male", "female"}
     bmi = profile.height_cm is not None and has_weight
     local_time_context = profile.timezone is not None
-    allergies_reviewed = profile.allergies_reviewed_at is not None
-    medications_reviewed = profile.medications_reviewed_at is not None
 
     missing: list[str] = []
     if not age_references:
@@ -117,18 +115,12 @@ async def build_readiness(
         missing.append("weight")
     if not local_time_context:
         missing.append("timezone")
-    if not allergies_reviewed:
-        missing.append("allergies")
-    if not medications_reviewed:
-        missing.append("medications")
 
     return ProfileReadiness(
         age_references=age_references,
         sex_specific_references=sex_specific_references,
         bmi=bmi,
         local_time_context=local_time_context,
-        allergies_reviewed=allergies_reviewed,
-        medications_reviewed=medications_reviewed,
         missing_fields=missing,
     )
 

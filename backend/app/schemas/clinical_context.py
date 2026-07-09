@@ -6,20 +6,11 @@ import datetime
 import uuid
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 AllergySeverity = Literal["unknown", "mild", "moderate", "severe"]
 AllergyStatus = Literal["active", "resolved", "entered_in_error"]
 MedicationStatus = Literal["active", "paused", "stopped", "entered_in_error"]
-
-
-def _strip_required(value: str | None, field_name: str) -> str | None:
-    if value is None:
-        return None
-    normalized = value.strip()
-    if not normalized:
-        raise ValueError(f"{field_name} cannot be blank")
-    return normalized
 
 
 class AllergyCreateRequest(BaseModel):
@@ -29,11 +20,6 @@ class AllergyCreateRequest(BaseModel):
     onset_date: datetime.date | None = None
     notes: str | None = Field(default=None, max_length=4000)
 
-    @field_validator("allergen")
-    @classmethod
-    def validate_allergen(cls, value: str) -> str:
-        return _strip_required(value, "allergen") or ""
-
 
 class AllergyPatchRequest(BaseModel):
     allergen: str | None = Field(default=None, min_length=1, max_length=255)
@@ -42,17 +28,6 @@ class AllergyPatchRequest(BaseModel):
     status: AllergyStatus | None = None
     onset_date: datetime.date | None = None
     notes: str | None = Field(default=None, max_length=4000)
-
-    @field_validator("allergen")
-    @classmethod
-    def validate_allergen(cls, value: str | None) -> str | None:
-        return _strip_required(value, "allergen")
-
-    @model_validator(mode="after")
-    def reject_explicit_null_name(self):
-        if "allergen" in self.model_fields_set and self.allergen is None:
-            raise ValueError("allergen cannot be null")
-        return self
 
 
 class AllergyResponse(BaseModel):
@@ -82,11 +57,6 @@ class MedicationCreateRequest(BaseModel):
     ended_on: datetime.date | None = None
     notes: str | None = Field(default=None, max_length=4000)
 
-    @field_validator("medication_name")
-    @classmethod
-    def validate_medication_name(cls, value: str) -> str:
-        return _strip_required(value, "medication_name") or ""
-
     @model_validator(mode="after")
     def validate_dates(self):
         if self.started_on and self.ended_on and self.ended_on < self.started_on:
@@ -104,15 +74,8 @@ class MedicationPatchRequest(BaseModel):
     ended_on: datetime.date | None = None
     notes: str | None = Field(default=None, max_length=4000)
 
-    @field_validator("medication_name")
-    @classmethod
-    def validate_medication_name(cls, value: str | None) -> str | None:
-        return _strip_required(value, "medication_name")
-
     @model_validator(mode="after")
-    def validate_payload(self):
-        if "medication_name" in self.model_fields_set and self.medication_name is None:
-            raise ValueError("medication_name cannot be null")
+    def validate_dates(self):
         if self.started_on and self.ended_on and self.ended_on < self.started_on:
             raise ValueError("ended_on cannot be before started_on")
         return self

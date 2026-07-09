@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, Scale, ShieldCheck, UserRound } from "lucide-react";
 
-import ClinicalContextSection from "@/components/ClinicalContextSection";
 import {
   apiGet,
   apiPatch,
@@ -174,8 +173,6 @@ export default function HealthProfilePage() {
       ["Референсы с учётом пола", readiness.sex_specific_references],
       ["Расчёт ИМТ", readiness.bmi],
       ["Локальное время событий", readiness.local_time_context],
-      ["Аллергии проверены", readiness.allergies_reviewed],
-      ["Лекарства проверены", readiness.medications_reviewed],
     ] as Array<[string, boolean]>;
   }, [profile?.readiness]);
 
@@ -198,7 +195,7 @@ export default function HealthProfilePage() {
       <header>
         <h1 className="font-display text-2xl font-semibold md:text-3xl">Профиль здоровья</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Базовые данные и клинический контекст для безопасных интерпретаций.
+          Базовые данные для референсов и динамики. Поля можно заполнить позже.
         </p>
       </header>
 
@@ -209,7 +206,7 @@ export default function HealthProfilePage() {
             <div className="flex-1">
               <h2 className="font-medium">Согласие на обработку данных здоровья</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Нужно перед сохранением медицинских полей, измерений и клинического контекста.
+                Нужно только перед сохранением медицинских полей и измерений.
               </p>
               <button
                 type="button"
@@ -303,8 +300,6 @@ export default function HealthProfilePage() {
           ))}
         </div>
       </section>
-
-      <ClinicalContextSection profileId={profile.id} consentActive={consentActive} />
 
       <section className="hm-card p-5 md:p-6">
         <div className="mb-4 flex items-center gap-2">

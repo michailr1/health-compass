@@ -15,8 +15,7 @@ depends_on = None
 
 S = "health_compass"
 APP = "health_compass_app"
-R = "health_compass_rls_definer"
-CONSENT_SIG = f"{S}.app_profile_has_active_health_consent(uuid)"
+MIGRATOR = "health_compass_migrator"
 
 
 def upgrade() -> None:
@@ -27,42 +26,6 @@ def upgrade() -> None:
           ADD COLUMN medications_reviewed_at timestamptz
         """
     )
-
-    op.execute(f"GRANT SELECT ON {S}.health_profiles, {S}.user_consents TO {R}")
-    op.execute(f"GRANT CREATE ON SCHEMA {S} TO {R}")
-    op.execute(
-        f"""
-        CREATE OR REPLACE FUNCTION {S}.app_profile_has_active_health_consent(
-          target_profile_id uuid
-        ) RETURNS boolean
-        LANGUAGE plpgsql
-        STABLE
-        SECURITY DEFINER
-        SET search_path = ''
-        SET row_security = off
-        AS $$
-        BEGIN
-          IF NOT {S}.app_can_edit_profile(target_profile_id) THEN
-            RETURN false;
-          END IF;
-
-          RETURN EXISTS (
-            SELECT 1
-            FROM {S}.health_profiles hp
-            JOIN {S}.user_consents uc ON uc.user_id = hp.owner_user_id
-            WHERE hp.id = target_profile_id
-              AND uc.consent_type = 'health_data_processing'
-              AND uc.revoked_at IS NULL
-          );
-        END
-        $$
-        """
-    )
-    op.execute(f"ALTER FUNCTION {CONSENT_SIG} OWNER TO {R}")
-    op.execute(f"REVOKE CREATE ON SCHEMA {S} FROM {R}")
-    op.execute(f"REVOKE ALL ON FUNCTION {CONSENT_SIG} FROM PUBLIC")
-    op.execute(f"REVOKE ALL ON FUNCTION {CONSENT_SIG} FROM {APP}")
-    op.execute(f"GRANT EXECUTE ON FUNCTION {CONSENT_SIG} TO {APP}")
 
     op.execute(
         f"""
@@ -158,7 +121,14 @@ def upgrade() -> None:
             TO {APP}
             WITH CHECK (
               {S}.app_can_edit_profile(profile_id)
-              AND {S}.app_profile_has_active_health_consent(profile_id)
+              AND EXISTS (
+                SELECT 1
+                FROM {S}.health_profiles hp
+                JOIN {S}.user_consents uc ON uc.user_id = hp.owner_user_id
+                WHERE hp.id = profile_id
+                  AND uc.consent_type = 'health_data_processing'
+                  AND uc.revoked_at IS NULL
+              )
             )
             """
         )
@@ -171,11 +141,19 @@ def upgrade() -> None:
             USING ({S}.app_can_edit_profile(profile_id))
             WITH CHECK (
               {S}.app_can_edit_profile(profile_id)
-              AND {S}.app_profile_has_active_health_consent(profile_id)
+              AND EXISTS (
+                SELECT 1
+                FROM {S}.health_profiles hp
+                JOIN {S}.user_consents uc ON uc.user_id = hp.owner_user_id
+                WHERE hp.id = profile_id
+                  AND uc.consent_type = 'health_data_processing'
+                  AND uc.revoked_at IS NULL
+              )
             )
             """
         )
 
+    op.execute(f"GRANT SELECT ON {S}.user_consents TO {APP}")
     op.execute(f"GRANT SELECT, UPDATE ON {S}.health_profiles TO {APP}")
 
 
@@ -183,7 +161,6 @@ def downgrade() -> None:
     for table in ("profile_medications", "profile_allergies"):
         op.execute(f"DROP TABLE IF EXISTS {S}.{table}")
 
-    op.execute(f"DROP FUNCTION IF EXISTS {CONSENT_SIG}")
     op.execute(
         f"""
         ALTER TABLE {S}.health_profiles
