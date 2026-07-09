@@ -20,6 +20,7 @@ from app.schemas.clinical_context import (
     MedicationCreateRequest,
     MedicationPatchRequest,
 )
+from app.services.health_profile import require_profile_edit_access
 
 
 def _normalize_optional(value: str | None) -> str | None:
@@ -55,6 +56,13 @@ async def _require_active_consent(session: AsyncSession, profile: HealthProfile)
         )
 
 
+async def _prepare_mutation(session: AsyncSession, profile_id: uuid.UUID) -> HealthProfile:
+    profile = await _get_profile(session, profile_id)
+    await require_profile_edit_access(session, profile_id)
+    await _require_active_consent(session, profile)
+    return profile
+
+
 async def list_allergies(session: AsyncSession, profile_id: uuid.UUID) -> list[ProfileAllergy]:
     await _get_profile(session, profile_id)
     result = await session.execute(
@@ -75,8 +83,7 @@ async def create_allergy(
     payload: AllergyCreateRequest,
     current_user: User,
 ) -> ProfileAllergy:
-    profile = await _get_profile(session, profile_id)
-    await _require_active_consent(session, profile)
+    profile = await _prepare_mutation(session, profile_id)
     allergy = ProfileAllergy(
         profile_id=profile_id,
         allergen=payload.allergen.strip(),
@@ -102,8 +109,7 @@ async def update_allergy(
     payload: AllergyPatchRequest,
     current_user: User,
 ) -> ProfileAllergy:
-    profile = await _get_profile(session, profile_id)
-    await _require_active_consent(session, profile)
+    profile = await _prepare_mutation(session, profile_id)
     result = await session.execute(
         select(ProfileAllergy).where(
             ProfileAllergy.id == allergy_id,
@@ -144,8 +150,7 @@ async def create_medication(
     payload: MedicationCreateRequest,
     current_user: User,
 ) -> ProfileMedication:
-    profile = await _get_profile(session, profile_id)
-    await _require_active_consent(session, profile)
+    profile = await _prepare_mutation(session, profile_id)
     medication = ProfileMedication(
         profile_id=profile_id,
         medication_name=payload.medication_name.strip(),
@@ -173,8 +178,7 @@ async def update_medication(
     payload: MedicationPatchRequest,
     current_user: User,
 ) -> ProfileMedication:
-    profile = await _get_profile(session, profile_id)
-    await _require_active_consent(session, profile)
+    profile = await _prepare_mutation(session, profile_id)
     result = await session.execute(
         select(ProfileMedication).where(
             ProfileMedication.id == medication_id,
@@ -189,11 +193,7 @@ async def update_medication(
     for field in ("medication_name", "dose_text", "schedule_text", "indication", "notes"):
         if field in changes:
             value = changes[field]
-            changes[field] = (
-                value.strip()
-                if field == "medication_name" and value is not None
-                else _normalize_optional(value)
-            )
+            changes[field] = value.strip() if field == "medication_name" and value is not None else _normalize_optional(value)
     started_on = changes.get("started_on", medication.started_on)
     ended_on = changes.get("ended_on", medication.ended_on)
     if started_on and ended_on and ended_on < started_on:
@@ -215,8 +215,7 @@ async def review_clinical_context_section(
     profile_id: uuid.UUID,
     section: str,
 ) -> ClinicalContextSummary:
-    profile = await _get_profile(session, profile_id)
-    await _require_active_consent(session, profile)
+    profile = await _prepare_mutation(session, profile_id)
     now = datetime.datetime.now(datetime.UTC)
     if section == "allergies":
         profile.allergies_reviewed_at = now
