@@ -45,6 +45,7 @@ def upgrade() -> None:
     )
 
     op.execute(f"GRANT USAGE ON SCHEMA {S} TO {R}")
+    op.execute(f"GRANT CREATE ON SCHEMA {S} TO {R}")
     op.execute(
         f"""
         GRANT SELECT ON
@@ -56,9 +57,7 @@ def upgrade() -> None:
         TO {R}
         """
     )
-    op.execute(
-        f"GRANT SELECT, INSERT, UPDATE ON {S}.email_login_tokens TO {R}"
-    )
+    op.execute(f"GRANT SELECT, INSERT, UPDATE ON {S}.email_login_tokens TO {R}")
 
     op.execute(
         f"""
@@ -85,6 +84,11 @@ def upgrade() -> None:
         """
     )
 
+    # PostgreSQL validates SQL function bodies as the creating role. On a clean
+    # database the migrator owns FORCE-RLS tables but deliberately has no
+    # BYPASSRLS, so setting row_security=off inside CREATE FUNCTION is rejected
+    # before ownership can be transferred. Create first, transfer ownership to
+    # the dedicated BYPASSRLS NOLOGIN role, and only then set row_security=off.
     op.execute(
         f"""
         CREATE OR REPLACE FUNCTION {S}.app_can_view_profile(target_profile_id uuid)
@@ -93,7 +97,6 @@ def upgrade() -> None:
         STABLE
         SECURITY DEFINER
         SET search_path = ''
-        SET row_security = off
         AS $$
           SELECT EXISTS (
             SELECT 1 FROM {S}.health_profiles hp
@@ -116,7 +119,6 @@ def upgrade() -> None:
         STABLE
         SECURITY DEFINER
         SET search_path = ''
-        SET row_security = off
         AS $$
           SELECT EXISTS (
             SELECT 1 FROM {S}.workspace_members wm
@@ -134,7 +136,6 @@ def upgrade() -> None:
         STABLE
         SECURITY DEFINER
         SET search_path = ''
-        SET row_security = off
         AS $$
           SELECT EXISTS (
             SELECT 1 FROM {S}.health_profiles hp
@@ -152,7 +153,6 @@ def upgrade() -> None:
         STABLE
         SECURITY DEFINER
         SET search_path = ''
-        SET row_security = off
         AS $$
           SELECT EXISTS (
             SELECT 1 FROM {S}.workspaces w
@@ -172,7 +172,6 @@ def upgrade() -> None:
         STABLE
         SECURITY DEFINER
         SET search_path = ''
-        SET row_security = off
         AS $$
           SELECT ui.user_id
           FROM {S}.user_identities ui
@@ -185,8 +184,11 @@ def upgrade() -> None:
 
     for signature in FUNCTIONS:
         op.execute(f"ALTER FUNCTION {signature} OWNER TO {R}")
+        op.execute(f"ALTER FUNCTION {signature} SET row_security = off")
         op.execute(f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC")
         op.execute(f"GRANT EXECUTE ON FUNCTION {signature} TO health_compass_app")
+
+    op.execute(f"REVOKE CREATE ON SCHEMA {S} FROM {R}")
 
     for signature in [
         f"{S}.app_current_user_id()",

@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   Activity, Dna, LayoutDashboard, ListChecks, Database, History, LogOut, HeartPulse,
 } from "lucide-react";
@@ -26,7 +26,6 @@ export default function AppLayout() {
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       <div className="flex min-h-screen w-full">
-        {/* Desktop sidebar */}
         <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar/80 backdrop-blur-md md:flex">
           <div className="flex items-center gap-2.5 px-5 py-5">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-primary shadow-elegant">
@@ -61,8 +60,11 @@ export default function AppLayout() {
 
           <div className="border-t border-sidebar-border p-3">
             <div className="rounded-xl bg-sidebar-accent/60 px-3 py-2.5">
-              <div className="truncate text-sm font-medium">{displayName}</div>
-              <div className="truncate text-xs text-muted-foreground">{user?.email}</div>
+              <Link to="/app/profile" className="block rounded-lg hover:text-primary">
+                <div className="truncate text-sm font-medium">{displayName}</div>
+                <div className="truncate text-xs text-muted-foreground">{user?.email}</div>
+                <div className="mt-1 text-[11px] text-primary">Профиль здоровья</div>
+              </Link>
               <button
                 onClick={onLogout}
                 className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
@@ -73,9 +75,7 @@ export default function AppLayout() {
           </div>
         </aside>
 
-        {/* Main */}
         <main className="flex min-w-0 flex-1 flex-col">
-          {/* Mobile top bar */}
           <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border/70 bg-background/80 px-4 py-3 backdrop-blur md:hidden">
             <div className="flex items-center gap-2">
               <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-primary">
@@ -83,12 +83,12 @@ export default function AppLayout() {
               </div>
               <span className="font-display text-sm font-semibold">Health Compass</span>
             </div>
-            <button
-              onClick={onLogout}
-              className="text-xs text-muted-foreground"
-            >
-              Выйти
-            </button>
+            <div className="flex items-center gap-3">
+              <Link to="/app/profile" className="max-w-32 truncate text-xs text-primary">
+                {displayName}
+              </Link>
+              <button onClick={onLogout} className="text-xs text-muted-foreground">Выйти</button>
+            </div>
           </header>
 
           <div className="mx-auto w-full max-w-6xl flex-1 space-y-5 px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">
@@ -97,7 +97,6 @@ export default function AppLayout() {
         </main>
       </div>
 
-      {/* Mobile bottom nav */}
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 backdrop-blur md:hidden">
         <ul className="mx-auto grid max-w-lg grid-cols-6">
           {nav.map((item) => (

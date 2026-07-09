@@ -37,6 +37,8 @@ def upgrade() -> None:
         """
     )
 
+    op.execute(f"GRANT CREATE ON SCHEMA {S} TO {R}")
+
     op.execute(
         f"""
         CREATE OR REPLACE FUNCTION {S}.app_current_user_id()
@@ -73,6 +75,8 @@ def upgrade() -> None:
         op.execute(f"ALTER FUNCTION {signature} OWNER TO {R}")
         op.execute(f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC")
         op.execute(f"GRANT EXECUTE ON FUNCTION {signature} TO health_compass_app")
+
+    op.execute(f"REVOKE CREATE ON SCHEMA {S} FROM {R}")
 
 
 def downgrade() -> None:
