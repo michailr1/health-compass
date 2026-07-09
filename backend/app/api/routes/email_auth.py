@@ -73,7 +73,7 @@ def _set_account_link_cookie(response: RedirectResponse, value: str) -> None:
         secure=True,
         httponly=True,
         samesite="lax",
-        path="/api/auth/link",
+        path="/api/auth",
     )
 
 
