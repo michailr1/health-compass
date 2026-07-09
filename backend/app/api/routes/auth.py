@@ -9,20 +9,24 @@ import uuid
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.account_linking import hash_secret, new_browser_binding
 from app.core.config import settings
-from app.core.magic_links import normalize_email, send_account_linked_notification
+from app.core.magic_links import normalize_email, send_account_linked_notifications
 from app.core.oidc import build_authorization_url, exchange_code, get_discovery, validate_id_token
 from app.core.session_tokens import hash_token, new_session_token
 from app.db.rls import apply_session_context, apply_user_context
 from app.db.session import get_session
 from app.models.user import AuthSession, User, UserIdentity
-from app.services.account_linking import create_account_link_intent, lookup_verified_email_candidate
+from app.services.account_linking import (
+    create_account_link_intent,
+    lookup_verified_email_candidate,
+    verified_notification_emails,
+)
 from app.services.bootstrap import ensure_personal_workspace
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -157,6 +161,33 @@ async def _create_session_response(session: AsyncSession, request: Request, user
         path="/api",
     )
     return response
+
+
+async def _notify_linked_addresses(
+    session: AsyncSession,
+    request: Request,
+    *,
+    user: User,
+    intent_id: uuid.UUID,
+) -> None:
+    recipients = await verified_notification_emails(session, user)
+    failures = await send_account_linked_notifications(
+        recipients,
+        ("Google", "Email Magic Link"),
+    )
+    if failures:
+        await _record_link_audit(
+            session,
+            request,
+            event_type="identity.link_notification_failed",
+            result="partial" if len(failures) < len(recipients) else "error",
+            intent_id=intent_id,
+            actor_user_id=user.id,
+            metadata={
+                "recipient_count": len(recipients),
+                "failure_count": len(failures),
+            },
+        )
 
 
 @router.get("/login")
@@ -295,17 +326,12 @@ async def callback(
             linked_user_result = await session.execute(select(User).where(User.id == linked_user_id))
             linked_user = linked_user_result.scalar_one_or_none()
             if linked_user is not None:
-                try:
-                    await send_account_linked_notification(linked_user.email, ("Google", "Email Magic Link"))
-                except Exception:
-                    await _record_link_audit(
-                        session,
-                        request,
-                        event_type="identity.link_notification_failed",
-                        result="error",
-                        intent_id=real_intent_id,
-                        actor_user_id=linked_user_id,
-                    )
+                await _notify_linked_addresses(
+                    session,
+                    request,
+                    user=linked_user,
+                    intent_id=real_intent_id,
+                )
         return await _create_session_response(session, request, linked_user_id)
 
     identity_user_id = await _lookup_identity_user_id(session, GOOGLE_PROVIDER, subject)
