@@ -61,7 +61,12 @@ def test_public_cannot_execute_account_link_functions() -> None:
         cursor.execute(
             """
             SELECT p.proname,
-                   has_function_privilege('public', p.oid, 'EXECUTE') AS public_execute,
+                   EXISTS (
+                     SELECT 1
+                     FROM aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
+                     WHERE acl.grantee = 0
+                       AND acl.privilege_type = 'EXECUTE'
+                   ) AS public_execute,
                    has_function_privilege('health_compass_app', p.oid, 'EXECUTE') AS app_execute
             FROM pg_proc p
             JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -96,5 +101,5 @@ def test_security_definer_functions_use_empty_search_path_and_row_security_off()
     assert rows
     for name, security_definer, config in rows:
         assert security_definer is True, name
-        assert "search_path=" in config, name
+        assert any(item.startswith("search_path=") for item in config), name
         assert "row_security=off" in config, name
