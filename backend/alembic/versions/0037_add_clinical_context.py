@@ -33,20 +33,22 @@ def upgrade() -> None:
         CREATE OR REPLACE FUNCTION {S}.app_profile_has_active_health_consent(
           target_profile_id uuid
         ) RETURNS boolean
-        LANGUAGE sql
+        LANGUAGE plpgsql
         STABLE
         SECURITY DEFINER
         SET search_path = ''
         SET row_security = off
         AS $$
-          SELECT EXISTS (
+        BEGIN
+          RETURN EXISTS (
             SELECT 1
             FROM {S}.health_profiles hp
             JOIN {S}.user_consents uc ON uc.user_id = hp.owner_user_id
             WHERE hp.id = target_profile_id
               AND uc.consent_type = 'health_data_processing'
               AND uc.revoked_at IS NULL
-          )
+          );
+        END
         $$
         """
     )
