@@ -37,6 +37,12 @@ def build_link_email_url(token: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, path, urlencode({"token": token}), ""))
 
 
+def build_identity_removal_email_url(token: str) -> str:
+    parts = urlsplit(settings.frontend_url)
+    path = "/api/auth/identities/remove/email/consume"
+    return urlunsplit((parts.scheme, parts.netloc, path, urlencode({"token": token}), ""))
+
+
 def _send_sync(recipient: str, subject: str, body: str) -> None:
     if not settings.smtp_host or not settings.smtp_from_email:
         raise RuntimeError("SMTP is not configured")
@@ -82,6 +88,32 @@ async def send_account_link_email(recipient: str, token: str) -> None:
     )
 
 
+async def send_identity_removal_email(recipient: str, token: str, target_provider: str) -> None:
+    link = build_identity_removal_email_url(token)
+    await asyncio.to_thread(
+        _send_sync,
+        recipient,
+        "Подтверждение отключения способа входа Health Compass",
+        f"Запрошено отключение способа входа: {target_provider}.\n\n"
+        "Для подтверждения через оставшийся Email Magic Link откройте ссылку:\n\n"
+        f"{link}\n\n"
+        "Ссылка имеет отдельное назначение remove_identity_email, действует ограниченное время "
+        "и не может использоваться для обычного входа или связывания аккаунтов. "
+        "Если вы не запрашивали отключение, проигнорируйте письмо.",
+    )
+
+
+async def send_identity_removed_notification(recipient: str, removed_provider: str) -> None:
+    await asyncio.to_thread(
+        _send_sync,
+        recipient,
+        "Способ входа Health Compass отключён",
+        f"Из вашего аккаунта Health Compass отключён способ входа: {removed_provider}.\n\n"
+        "Оставшийся способ входа продолжает открывать тот же профиль. Если вы не выполняли это действие, "
+        "завершите активные сессии и обратитесь в поддержку.",
+    )
+
+
 async def send_account_linked_notification(recipient: str, providers: tuple[str, ...]) -> None:
     provider_text = " и ".join(providers)
     await asyncio.to_thread(
@@ -99,11 +131,7 @@ async def send_account_linked_notifications(
     recipients: tuple[str, ...],
     providers: tuple[str, ...],
 ) -> tuple[str, ...]:
-    """Notify each verified address independently and return failed recipients.
-
-    One failed mailbox must not suppress notifications to the remaining verified
-    addresses and must never roll back an already completed account link.
-    """
+    """Notify each verified address independently and return failed recipients."""
     failures: list[str] = []
     for recipient in recipients:
         try:
