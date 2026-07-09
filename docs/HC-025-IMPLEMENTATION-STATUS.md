@@ -41,14 +41,18 @@ PR: `#7`
 - separate-account разрешён только после decline и второго явного подтверждения;
 - claim declined intent выполняется транзакционно с browser-binding check;
 - отдельный user, identity, workspace и пустой profile создаются только после подтверждения `CREATE_SEPARATE_ACCOUNT`;
-- добавлены audit helpers и события `identity.link_declined`, `identity.link_failed`, `identity.separate_account_confirmed`;
-- frontend показывает последствия отдельного аккаунта и требует повторного подтверждения.
+- audit helpers и события `identity.link_declined`, `identity.link_failed`, `identity.separate_account_confirmed`;
+- frontend показывает последствия отдельного аккаунта и требует повторного подтверждения;
+- обе completion-функции возвращают реальный `intent_id`, `user_id` и признак replay;
+- successful completion audit пишется для обоих направлений linking;
+- повторный `link_email` consume получает безопасный идемпотентный результат;
+- после первого успешного linking отправляется security notification;
+- ошибка отправки уведомления не откатывает linking и фиксируется отдельным audit-событием;
+- миграция `0028` сохраняет старые completion-функции и имеет штатный downgrade.
 
 ## Не завершено
 
-- completion audit с реальным `intent_id` для обоих успешных linking-flow;
-- идемпотентная обработка повторного `link_email` consume с безопасным UX;
-- security notifications после успешного linking;
+- отправка уведомлений на все подтверждённые связанные адреса, если они различаются;
 - UI «Способы входа» в настройках;
 - HC-026 для существующих дублей;
 - полный набор PostgreSQL/RLS/concurrency/API/frontend tests;
@@ -64,15 +68,16 @@ PR: `#7`
 → 0025 purpose-specific link_email tokens + completion
 → 0026 Google link preparation + completion
 → 0027 decline + explicit separate-account + audit helpers
+→ 0028 result-returning completion + replay context
 ```
 
 Миграции не применялись в production. Feature flag по умолчанию выключен.
 
 ## Следующий кодовый блок
 
-1. возвращать реальный `intent_id` из completion functions;
-2. completion audit для обоих успешных flow;
-3. security notifications;
-4. identities API и UI «Способы входа»;
+1. identities API;
+2. UI «Способы входа»;
+3. запрет отключения последней identity;
+4. уведомления на все подтверждённые адреса;
 5. PostgreSQL/RLS/concurrency/API/frontend tests;
 6. HC-026 для существующих дублей.
