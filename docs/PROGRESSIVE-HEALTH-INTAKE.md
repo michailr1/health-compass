@@ -1,10 +1,12 @@
 # Health Compass — Progressive Health Intake
 
-Версия: 1.0  
+Версия: 1.1  
 Дата: 2026-07-09  
 Статус: approved target design / planned implementation
 
-Этот документ фиксирует принятое решение по PHASE-02.5. Источники: материалы Fable `02.5-health-intake-spec.md`, `02.5-intake-fields.xlsx`, `02.5-intake-wireframes.pdf`, а также решения владельца проекта.
+Этот документ фиксирует принятое решение по PHASE-02.5. Источники: материалы Fable `02.5-health-intake-spec.md`, `02.5-intake-fields.xlsx`, `02.5-intake-wireframes.pdf`, фактический код `main`, production-состояние и решения владельца проекта.
+
+Техническая спецификация первого implementation slice: `docs/BASIC-HEALTH-PROFILE-SLICE-1.md`.
 
 ## 1. Основное решение
 
@@ -28,7 +30,8 @@ Login
 - каждое поле сопровождается объяснением, зачем оно нужно;
 - отсутствие данных снижает точность контекста, но не блокирует продукт;
 - intake не является самодиагностикой;
-- AI не изменяет профиль без подтверждения пользователя.
+- OCR и AI не изменяют профиль без подтверждения пользователя;
+- фактический код и миграции имеют приоритет над внешними baseline-материалами.
 
 ## 2. Поле «Пол»
 
@@ -84,7 +87,7 @@ not_specified
 
 ### Уровень 3 — образ жизни
 
-Не входит в первый scope PHASE-02.5:
+Не входит в PHASE-02.5:
 
 - курение и алкоголь;
 - активность;
@@ -102,23 +105,20 @@ not_specified
 
 ### Health Profile
 
-Планируемый маршрут:
+Маршрут Slice 1:
 
 ```text
-/p/:profileId/health-profile
+/app/profile
 ```
 
-Экран содержит:
+Текущий пользователь получает доступ к своему bootstrap-профилю через существующий API `/profiles`. Поддержка переключения нескольких профилей проектируется отдельно.
 
-- основные данные;
-- клинический контекст;
-- состояния;
-- аллергии;
-- лекарства и добавки;
-- provenance;
-- autosave;
-- удаление и редактирование;
-- объяснение «Почему мы спрашиваем?».
+Экран поэтапно расширяется:
+
+- Slice 1: основные данные, рост, история веса, readiness, consent summary, provenance и audit;
+- Slice 2: состояния, аллергии, лекарства и добавки;
+- Slice 3: contextual intake;
+- Slice 4: подтверждённый импорт из Documents/OCR.
 
 ### Контекстный дозапрос
 
@@ -130,6 +130,8 @@ not_specified
 - применить только к текущему анализу;
 - не сейчас;
 - открыть объяснение.
+
+Опция «только для текущего анализа» не создаёт постоянный медицинский факт. Временный context не входит в Slice 1.
 
 ### OCR Review
 
@@ -143,78 +145,143 @@ not_specified
 
 ```text
 Профиль готов для возрастных и половых референсов
+Для расчёта ИМТ добавьте рост и измерение веса
 Для интерпретации ферритина не хватает 1 уточнения
 ```
 
-Чувствительные и нерелевантные поля не должны искусственно снижать полноту профиля.
+Чувствительные и нерелевантные поля не должны искусственно снижать полноту профиля. Readiness не является health score или оценкой здоровья.
 
 ## 6. Навигация и компоненты
 
-Health Profile находится в группе «Профиль» desktop sidebar. На мобильном — в разделе «Ещё». Он не конкурирует с основным CTA «Загрузить анализ».
+Slice 1 не добавляет седьмой пункт в текущую mobile bottom navigation.
 
-Новые компоненты:
+Entry points:
 
+- desktop: кликабельная карточка пользователя в sidebar;
+- mobile: карточка/имя пользователя в top bar;
+- в будущем — группа «Профиль» на desktop и раздел «Ещё» на mobile.
+
+Компоненты Slice 1:
+
+- `HealthProfilePage`;
 - `HealthProfileForm`;
+- `ProfileReadinessCard`;
+- `WeightEntryForm`;
+- `WeightHistoryList`;
+- `WeightTrendChart`;
+- `WhyWeAskPopover`;
+- `ConsentGate`;
+- `AutosaveStatus`.
+
+Компоненты следующих slices:
+
 - `IntakePromptCard`;
-- `CompletenessMeter`;
-- `WhyWeAskPopover`.
-
-Переиспользуются:
-
-- `ConsentDialog`;
-- `DomainBadge`;
-- `ProvenancePopover`;
-- `UndoSnackbar`;
-- `PermissionGate`.
+- расширенный `ProvenancePopover`;
+- clinical context forms;
+- OCR confirmation controls.
 
 Human accent: `#0E7490`. Красный применяется только для подтверждённых red flags и destructive actions.
 
 ## 7. Данные, provenance и безопасность
 
-Для каждого значения сохраняются:
+Для каждого нового значения сохраняются:
 
 - значение;
-- источник: `manual`, `document`, `device`, `import`;
+- источник: `manual`, в будущем `document`, `device`, `import`;
 - статус подтверждения;
 - время создания и изменения;
 - actor/user;
 - profile ownership;
-- при необходимости связь с исходным документом.
+- при необходимости связь с исходным документом после появления Documents pipeline.
 
-Все таблицы PHASE-02.5 должны иметь RLS и negative cross-user tests.
+Фактическая таблица `health_compass.health_profiles` уже существует и расширяется. Новая таблица с тем же именем не создаётся.
+
+Вес хранится историей в `body_measurements`, а не перезаписываемым полем профиля.
+
+Все новые таблицы PHASE-02.5 должны получить `ENABLE ROW LEVEL SECURITY`, `FORCE ROW LEVEL SECURITY`, политики и grants в той же миграции, а также cross-user negative tests.
 
 AI получает только минимально необходимый intake-контекст и только при соответствующем consent. Свободный текст пользователя не считается подтверждённым диагнозом.
 
-## 8. Первый scope реализации
+## 8. Implementation slices
 
-В первый implementation slice входят:
+### Slice 1 — Basic Health Profile
 
-1. редактирование имени профиля, даты рождения и пола;
-2. экран Health Profile;
-3. базовые сущности состояний, аллергий, лекарств и добавок;
-4. provenance и audit trail;
-5. autosave и undo;
-6. мягкая contextual readiness;
-7. один reusable `IntakePromptCard`;
-8. API contracts, permissions, RLS и negative tests;
-9. подготовка интерфейса подтверждённого импорта из OCR.
+- редактирование имени профиля, даты рождения и пола;
+- рост и timezone;
+- история веса;
+- минимальный consent gate;
+- provenance;
+- append-only audit trail;
+- autosave стабильных полей;
+- contextual readiness;
+- API contracts;
+- permissions и RLS;
+- cross-user negative tests и регресс SQLSTATE `54001`;
+- soft validation необычных значений.
 
-Не входят:
+Каноническая техническая спецификация: `docs/BASIC-HEALTH-PROFILE-SLICE-1.md`.
+
+### Slice 2 — Clinical Context
+
+- хронические состояния;
+- аллергии;
+- лекарства;
+- витамины, минералы и БАДы;
+- дозировка, единица, частота, даты начала/окончания;
+- active/inactive;
+- provenance, confirmation и audit.
+
+### Slice 3 — Contextual Intake
+
+- `IntakePromptCard`;
+- «сохранить в профиль»;
+- «использовать только для текущего анализа»;
+- «не сейчас»;
+- `WhyWeAskPopover`;
+- suppression повторного вопроса в одной сессии.
+
+Analysis-only context не становится постоянным медицинским фактом.
+
+### Slice 4 — Documents & OCR transition
+
+```text
+Upload
+→ Processing
+→ OCR Review
+→ Confirm
+→ Lab Results
+→ Metric Dynamics
+→ Contextual Intake
+→ AI Explanation with Evidence
+→ Doctor Report
+```
+
+Slice 4 реализуется совместно со следующими фазами Documents/OCR/Labs и не входит в код Slice 1.
+
+## 9. Не входит в PHASE-02.5 Slice 1
 
 - большая обязательная анкета;
+- состояния, аллергии и лекарства;
+- `IntakePromptCard`;
 - полная emergency card;
 - семейный анамнез;
 - lifestyle-модули;
+- давление как generic measurement;
 - автоматическая диагностика;
 - автоматическое добавление фактов из OCR;
-- Pet intake.
+- Pet intake;
+- imperial unit preferences.
 
-## 9. Связь с этапами
+## 10. Связь с этапами
 
 ```text
 PHASE-01/02 — Auth MVP ✅
 PHASE-02.5 — Progressive Health Intake
-PHASE-03 — Documents, OCR, Labs, Dynamics, AI Evidence, Doctor Report
+  Slice 1 — Basic Health Profile
+  Slice 2 — Clinical Context
+  Slice 3 — Contextual Intake
+  Slice 4 — transition to Documents/OCR
+PHASE-03+ — Documents, OCR, Labs, Dynamics, AI Evidence, Doctor Report
 ```
 
 PHASE-02.5 является связующим UX- и data-layer, а не отдельным изолированным медицинским доменом.
