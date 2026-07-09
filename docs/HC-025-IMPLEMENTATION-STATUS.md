@@ -1,87 +1,65 @@
-# HC-025 — статус реализации
+# HC-025 / HC-026 — статус реализации
 
 Дата: 2026-07-09  
 Ветка: `feat/account-linking-mvp`  
 PR: `#7`  
 Статус: `IN PROGRESS / DO NOT DEPLOY`
 
-## Реализовано
+## HC-025 реализовано
 
-- аудит Google callback, Email Magic Link consume и bootstrap;
+- symmetric link-on-login для Google и Email Magic Link;
+- pre-bootstrap interception без создания второго user/workspace/profile;
+- `account_link_intents` и purpose-specific `link_email` tokens с ENABLE/FORCE RLS;
+- browser binding, hash-only storage, TTL, rate limit, state/nonce/PKCE;
+- transactional identity attachment в обоих направлениях;
+- idempotent callback/consume с реальными `intent_id`, `user_id`, `replayed`;
+- explicit decline без создания аккаунта;
+- отдельный аккаунт только после второго явного подтверждения;
+- audit и security notifications на все verified addresses;
+- authenticated API и UI «Способы входа»;
+- settings flows `settings_add_google` и `settings_add_email`;
+- запрет скрытой перезаписи `users.email`;
 - удаление синтетических медицинских данных из bootstrap;
-- запрет скрытой перезаписи `users.email` при обычном входе;
-- `account_link_intents` с ENABLE/FORCE RLS;
-- scalar lookup кандидатов по verified email;
-- browser binding, hash-only storage и feature flag;
-- pre-bootstrap interception в обоих обычных auth-потоках;
-- один verified-email candidate → link intent вместо нового user/workspace/profile;
-- несколько candidate users → статус HC-026 вместо создания нового дубля;
-- экран `/auth/link-account`;
-- отдельная таблица `account_link_email_tokens`;
-- жёсткий purpose `link_email`;
-- отдельные issue/consume SECURITY DEFINER functions;
-- TTL, одноразовость, rate limit и browser-binding check;
-- транзакционное добавление Google identity к существующему Email user;
-- блокировка token и intent через `FOR UPDATE`;
-- проверка ownership конфликтующей `(provider, subject)` identity;
-- создание сессии существующего пользователя только после успешного completion;
-- frontend-кнопка отправки специальной ссылки подтверждения;
-- endpoint `/api/auth/link/google/start`;
-- отдельный OIDC purpose `account_link`;
-- state/nonce/PKCE hashes записываются в intent до redirect к Google;
-- Google callback различает обычный login и account-linking;
-- browser binding доступен start и callback через общую HttpOnly cookie область `/api/auth`;
-- подтверждённый Google `sub` обязан принадлежать candidate user;
-- verified Google email обязан совпадать с intent email;
-- транзакционное добавление Email identity к существующему Google user;
-- повторный callback разрешён идемпотентно только при полном совпадении browser/state/nonce/PKCE bindings;
-- после completion создаётся session существующего candidate user;
-- отдельный endpoint отказа от linking;
-- отказ меняет intent на `declined` и сам по себе не создаёт user/workspace/profile;
-- separate-account разрешён только после decline и второго явного подтверждения;
-- claim declined intent выполняется транзакционно с browser-binding check;
-- отдельный user, identity, workspace и пустой profile создаются только после подтверждения `CREATE_SEPARATE_ACCOUNT`;
-- audit helpers и события `identity.link_declined`, `identity.link_failed`, `identity.separate_account_confirmed`;
-- frontend показывает последствия отдельного аккаунта и требует повторного подтверждения;
-- completion-функции возвращают реальный `intent_id`, `user_id` и признак replay;
-- successful completion audit пишется для обоих направлений linking;
-- повторный `link_email` consume получает безопасный идемпотентный результат;
-- security notification отправляется независимо на каждый уникальный подтверждённый адрес;
-- сбой одного mailbox не мешает отправке на остальные адреса и не откатывает linking;
-- partial/total notification failure фиксируется без записи адресов в audit metadata;
-- API `GET /api/auth/identities` показывает подключённые способы входа без раскрытия provider subject;
-- экран `/app/sign-in-methods` показывает Google и Email Magic Link, verified status и запрет удаления последнего способа;
-- authenticated settings flow запускает тот же account-link intent через `/api/auth/link/settings/start`;
-- settings flows `settings_add_google` и `settings_add_email` имеют отдельные purpose-aware completion branches;
-- из desktop и mobile profile UI добавлена ссылка «Способы входа»;
-- recipient selection покрыт тестами дедупликации, нормализации и игнорирования unverified identity;
-- notification fan-out покрыт async-тестами с частичным SMTP failure;
-- settings-aware completion находится в миграции `0028`;
-- `0028` имеет полноценный downgrade;
-- добавлены backend tests mapping identities и settings link plans;
-- добавлен frontend Vitest для выбора отсутствующего способа входа;
-- добавлены статические security tests для FORCE RLS, fixed purpose, PUBLIC EXECUTE revoke, flow coverage и downgrade;
-- добавлены опциональные PostgreSQL integration tests для FORCE RLS, direct app-role denial, function ACL и SECURITY DEFINER configuration;
-- добавлен исполняемый concurrency test: два одновременных consume одного `link_email` дают один initial completion, один replay, одну identity и один canonical `user_id`;
-- добавлена миграция `0029` для step-up удаления identity;
-- removal использует отдельные RLS-таблицы и purpose `remove_identity_email`;
-- Google removal использует отдельный OIDC purpose `identity_removal`, state/nonce/PKCE и browser binding;
-- Email removal требует отдельную одноразовую ссылку через оставшийся Email Magic Link;
-- удаление разрешено только после подтверждения другого подключённого способа;
-- последняя identity блокируется и в UI, и внутри транзакционной SQL-функции;
-- removal intent сохраняется после удаления target identity через `ON DELETE SET NULL`, поэтому replay остаётся идемпотентным;
-- completion блокирует все identities пользователя в стабильном порядке перед повторным подсчётом;
-- audit и security notifications добавлены для успешного удаления и ошибок доставки;
-- страница «Способы входа» получила двухшаговое подтверждение отключения.
+- step-up отключение identity через другой подключённый способ;
+- отдельные purpose `identity_removal` и `remove_identity_email`;
+- hard guard последней identity в UI и транзакционной SQL-функции;
+- audit, notifications и replay-safe removal intent;
+- PostgreSQL/RLS/static/unit/frontend/concurrency tests добавлены в код.
 
-## Не завершено
+## HC-026 реализовано
 
-- HC-026 для существующих дублей;
-- runtime API/integration tests step-up removal;
-- локальный Ruff, pytest, frontend test/build и Alembic up/down cycle;
-- CI review и deployment.
+- консервативная оценка существующей пары дублей;
+- assessment доступен только для пары, содержащей текущий `app.current_user_id`;
+- внутренний activity helper недоступен app-role;
+- автоматическое поглощение допускается только для пустого bootstrap-user;
+- значимыми считаются:
+  - настройки профиля;
+  - dashboard snapshots;
+  - body measurements;
+  - profile audit events;
+  - user consents;
+  - внешние/shared workspace memberships;
+  - внешние/shared profile permissions;
+- если оба аккаунта пусты, каноническим становится более старый;
+- если данные есть в обоих профилях, автоматический merge блокируется;
+- отдельные RLS-таблицы `duplicate_resolution_intents` и `duplicate_resolution_email_tokens`;
+- отдельный email purpose `resolve_duplicate_email`;
+- отдельный Google OIDC purpose `duplicate_resolution`;
+- второй аккаунт подтверждается именно его отличающейся identity;
+- перед absorption assessment выполняется повторно внутри той же транзакции;
+- helper absorption недоступен app-role и вызывается только через completion-функции;
+- identities пустого дубля переносятся на canonical user;
+- сессии поглощаемого user отзываются;
+- пустые workspace/profile поглощаемого user удаляются;
+- медицинские записи не переносятся и общий data merge отсутствует;
+- absorbed user удаляется;
+- resolution intent сохраняется при удалении initiating/absorbed user через `ON DELETE SET NULL`;
+- после completion создаётся новая сессия canonical user;
+- email и Google completion идемпотентны;
+- candidate lookup использует portable `array_agg(uuid)` вместо `min(uuid)` и не создаёт temp tables;
+- добавлен PostgreSQL concurrency test полного absorption: один completion, один replay, один canonical user, две identities, отозванная сессия и удалённый пустой bootstrap-контур.
 
-## Текущая migration chain
+## Migration chain
 
 ```text
 0022
@@ -92,13 +70,29 @@ PR: `#7`
 → 0027 decline + explicit separate-account + audit helpers
 → 0028 result-returning completion + replay + settings flows
 → 0029 step-up identity removal
+→ 0030 conservative duplicate assessment
+→ 0031 duplicate resolution intents + absorption
+→ 0032 preserve intent when initiator is absorbed
+→ 0033 restore protected initiator context during absorption
+→ 0034 portable duplicate candidate lookup
 ```
 
 Миграции не применялись в production. Feature flag по умолчанию выключен.
 
-## Следующий кодовый блок
+## Не завершено
 
-1. HC-026: assessment пустого дубликата и безопасное absorption;
-2. runtime tests step-up removal;
-3. выполнить Ruff, pytest, frontend test/build и Alembic cycle;
-4. security review перед снятием draft.
+- фактический запуск Ruff и pytest;
+- фактический запуск frontend Vitest, lint и production build;
+- фактический Alembic `upgrade → downgrade → upgrade` cycle на отдельной PostgreSQL БД;
+- runtime integration tests step-up removal;
+- исправление найденных тестами дефектов;
+- CI и manual security review;
+- merge и deployment.
+
+## Следующий блок
+
+1. запустить полный quality gate;
+2. исправить все ошибки;
+3. выполнить Alembic cycle и PostgreSQL integration/concurrency suite;
+4. провести security review;
+5. только после успешного gate подготовить PR к merge.
