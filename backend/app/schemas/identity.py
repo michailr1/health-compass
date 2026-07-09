@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, EmailStr
+
+from app.schemas.health_profile import ProfileReadiness
 
 
 class UserResponse(BaseModel):
@@ -35,6 +38,9 @@ class ProfileResponse(BaseModel):
     display_name: str
     date_of_birth: datetime.date | None = None
     sex: str | None = None
+    height_cm: Decimal | None = None
+    timezone: str | None = None
+    readiness: ProfileReadiness | None = None
 
 
 class DashboardSnapshotResponse(BaseModel):
