@@ -1,11 +1,14 @@
-# HC-025 / HC-026 / HC-027 — статус реализации
+# HC-025 / HC-026 / HC-027 — итоговый статус
 
-Дата: 2026-07-09  
-Ветка: `feat/account-linking-mvp`  
-PR: `#7`  
-Статус: `READY FOR REVIEW / NOT DEPLOYED`
+Дата завершения: 2026-07-09  
+Production branch: `main`  
+Production commit: `1f80932e74c4ddb03b8d4cd93bbcf70bb8cc0d20`  
+Alembic head: `0036`  
+Статус: `COMPLETED / DEPLOYED / VERIFIED`
 
-## HC-025 реализовано
+## HC-025 — account linking
+
+Реализовано и проверено в production:
 
 - symmetric link-on-login для Google и Email Magic Link;
 - pre-bootstrap interception без создания второго user/workspace/profile;
@@ -13,59 +16,54 @@ PR: `#7`
 - browser binding, hash-only storage, TTL, rate limit, state/nonce/PKCE;
 - transactional identity attachment в обоих направлениях;
 - idempotent callback/consume с реальными `intent_id`, `user_id`, `replayed`;
-- explicit decline без создания аккаунта;
+- explicit decline без автоматического создания отдельного аккаунта;
 - отдельный аккаунт только после второго явного подтверждения;
-- audit и security notifications на все verified addresses;
+- audit и security notifications на verified addresses;
 - authenticated API и UI «Способы входа»;
 - settings flows `settings_add_google` и `settings_add_email`;
 - запрет скрытой перезаписи `users.email`;
-- удаление синтетических медицинских данных из bootstrap;
 - step-up отключение identity через другой подключённый способ;
-- отдельные purpose `identity_removal` и `remove_identity_email`;
-- hard guard последней identity в UI и транзакционной SQL-функции;
-- audit, notifications и replay-safe removal intent;
-- runtime PostgreSQL concurrency test удаления identity: один DELETE, один replay, последняя identity сохраняется.
+- hard guard последней identity;
+- replay-safe removal intent;
+- runtime PostgreSQL concurrency tests для linking и removal.
 
-## HC-026 реализовано
+## HC-026 — устранение старых дублей
 
-- консервативная оценка существующей пары дублей;
+Реализовано и вручную проверено в production:
+
+- консервативная оценка пары дублей;
 - assessment доступен только для пары, содержащей текущий `app.current_user_id`;
 - внутренний activity helper недоступен app-role;
 - автоматическое поглощение допускается только для пустого bootstrap-user;
-- значимыми считаются:
-  - настройки профиля;
-  - dashboard snapshots;
-  - body measurements;
-  - profile audit events;
-  - user consents;
-  - внешние/shared workspace memberships;
-  - внешние/shared profile permissions;
+- значимые profile settings, dashboard snapshots, body measurements, audit events, consents и shared access блокируют автоматический merge;
 - если оба аккаунта пусты, каноническим становится более старый;
-- если данные есть в обоих профилях, автоматический merge блокируется;
 - отдельные RLS-таблицы `duplicate_resolution_intents` и `duplicate_resolution_email_tokens`;
-- отдельный email purpose `resolve_duplicate_email`;
-- отдельный Google OIDC purpose `duplicate_resolution`;
-- второй аккаунт подтверждается именно его отличающейся identity;
-- перед absorption assessment выполняется повторно внутри той же транзакции;
-- helper absorption недоступен app-role и вызывается только через completion-функции;
-- identities пустого дубля переносятся на canonical user;
-- сессии поглощаемого user отзываются;
-- пустые workspace/profile поглощаемого user удаляются;
-- медицинские записи не переносятся и общий data merge отсутствует;
-- absorbed user удаляется;
-- resolution intent сохраняется при удалении initiating/absorbed user через `ON DELETE SET NULL`;
-- после completion создаётся новая сессия canonical user;
-- email и Google completion идемпотентны;
-- candidate lookup использует portable `array_agg(uuid)` и не создаёт temp tables;
-- PostgreSQL concurrency test подтверждает один completion, один replay, один canonical user, две identities, отозванную сессию и удалённый пустой bootstrap-контур.
+- отдельные purpose `resolve_duplicate_email` и `duplicate_resolution`;
+- обязательное доказательство второй identity;
+- повторный assessment непосредственно перед absorption;
+- identities переносятся на canonical user;
+- сессии absorbed user отзываются;
+- удаляются только пустые workspace/profile absorbed user;
+- медицинские данные не переносятся;
+- completion идемпотентен;
+- production-проверка подтвердила, что Google и Email Magic Link открывают один и тот же профиль.
 
-## HC-027 реализовано
+## HC-027 — bootstrap integration
 
 - Google callback и Email Magic Link consume проверяют verified email до bootstrap;
 - один существующий candidate запускает HC-025;
-- несколько существующих users направляют в HC-026 вместо молчаливого создания третьего user;
-- отказ от linking не создаёт отдельный аккаунт без второго явного подтверждения;
-- обычный вход по уже известной `(provider, subject)` identity остаётся прямым и идемпотентным.
+- несколько существующих users направляются в HC-026;
+- silent third account не создаётся;
+- обычный вход по известной `(provider, subject)` identity остаётся прямым и идемпотентным;
+- новый профиль создаётся пустым, без синтетических медицинских данных.
+
+## Исправления после production rollout
+
+- `0036`: исправлен переход `declined → cancelled` — `declined_at` очищается атомарно;
+- отсутствующий `dashboard_snapshot` теперь отображается как нормальное onboarding-состояние, а не ошибка 404;
+- карточка «Профиль здоровья» стала полностью кликабельной и визуально реагирует на hover/focus;
+- меню показывает `health_profile.display_name`, а не техническое имя Email-аккаунта;
+- мобильный header использует то же имя профиля.
 
 ## Migration chain
 
@@ -84,35 +82,39 @@ PR: `#7`
 → 0033 restore protected initiator context during absorption
 → 0034 portable duplicate candidate lookup
 → 0035 qualified identity-removal columns
+→ 0036 clear declined_at during separate-account claim
 ```
 
-Миграции не применялись в production. Feature flag по умолчанию выключен.
+## Quality gate
 
-## Quality gate — пройден
+Пройдено:
 
-- Python compile: success;
-- Ruff: success;
-- backend unit/static tests: success;
-- frontend ESLint: success;
-- frontend Vitest: success;
-- frontend production build: success;
-- исторический Alembic `0021 ↔ 0022` cycle: success;
-- current-head `upgrade → downgrade -1 → upgrade`: success;
-- FORCE RLS и app-role direct-access checks: success;
-- account-link concurrency: success;
-- identity-removal concurrency: success;
-- empty-duplicate absorption concurrency: success;
-- manual security review: blocker findings не обнаружены после исправления `0035`.
+- Python compile;
+- Ruff;
+- backend unit/static tests;
+- frontend ESLint;
+- frontend Vitest;
+- frontend production build;
+- исторический Alembic `0021 ↔ 0022` cycle;
+- current-head `upgrade → downgrade -1 → upgrade` cycle;
+- FORCE RLS и app-role direct-access checks;
+- account-link concurrency;
+- identity-removal concurrency;
+- empty-duplicate absorption concurrency;
+- regression tests для `0036`, пустого dashboard и имени профиля в меню;
+- ручная production-проверка Google + Email Magic Link + HC-026.
 
-## До production
+## Production result
 
-1. review и merge PR #7;
-2. backup production БД;
-3. проверить роль `health_compass_rls_definer` и migration preconditions;
-4. применить миграции backend-first;
-5. задеплоить backend с feature flag выключенным;
-6. задеплоить frontend;
-7. smoke-test обычного Google и Email входа;
-8. включить feature flag;
-9. выполнить e2e link-on-login, settings linking, removal и HC-026 на контролируемых тестовых аккаунтах;
-10. при любом отклонении выключить feature flag и остановить rollout.
+- direct Google OIDC работает;
+- Email Magic Link работает;
+- оба способа входа открывают один аккаунт и один профиль;
+- старый пустой дубль корректно поглощён;
+- новый пустой профиль отображается без dashboard error;
+- интерфейс профиля исправлен;
+- account-linking feature включён и работает штатно;
+- блок HC-025 / HC-026 / HC-027 закрыт.
+
+## Следующий этап
+
+Вернуться к roadmap после identity foundation. Ближайший функциональный блок — Clinical Context / HC-012b и дальнейшее развитие медицинского профиля, затем источники данных и пользовательские wow-сценарии, включая питание по фотографии.
