@@ -14,6 +14,25 @@ import {
 const CONSENT_VERSION = "health-data-processing-v1";
 const WEIGHT_WARNING_MIN_KG = 20;
 const WEIGHT_WARNING_MAX_KG = 400;
+const COMMON_TIMEZONES = [
+  "Europe/Moscow",
+  "Europe/Paris",
+  "Europe/London",
+  "Asia/Dubai",
+  "Asia/Bangkok",
+  "Asia/Shanghai",
+  "America/New_York",
+  "America/Los_Angeles",
+  "UTC",
+];
+
+function detectBrowserTimezone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
 
 async function loadProfilePage() {
   const profiles = await apiGet<HealthProfile[]>("/profiles");
@@ -35,9 +54,12 @@ export default function HealthProfilePage() {
   });
   const profile = data?.profile ?? null;
   const consentActive = Boolean(data?.consent?.active);
+  const detectedTimezone = useMemo(detectBrowserTimezone, []);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [weight, setWeight] = useState("");
+  const [timezoneEditing, setTimezoneEditing] = useState(false);
+  const [timezoneValue, setTimezoneValue] = useState("");
 
   useEffect(() => {
     if (!profile) return;
@@ -46,9 +68,9 @@ export default function HealthProfilePage() {
       date_of_birth: profile.date_of_birth ?? "",
       sex: profile.sex ?? "",
       height_cm: profile.height_cm ?? "",
-      timezone: profile.timezone ?? "",
     });
-  }, [profile?.id]);
+    setTimezoneValue(profile.timezone ?? detectedTimezone ?? "");
+  }, [detectedTimezone, profile?.id]);
 
   const patchMutation = useMutation({
     mutationFn: (payload: Record<string, unknown>) =>
@@ -71,20 +93,22 @@ export default function HealthProfilePage() {
         payload.date_of_birth = draft.date_of_birth || null;
         payload.sex = draft.sex || null;
         payload.height_cm = draft.height_cm || null;
-        payload.timezone = draft.timezone || null;
+        if (!profile.timezone && detectedTimezone) payload.timezone = detectedTimezone;
       }
 
+      const timezoneUnchanged =
+        !("timezone" in payload) || payload.timezone === profile.timezone;
       const medicalUnchanged =
         !consentActive ||
         (payload.date_of_birth === profile.date_of_birth &&
           payload.sex === profile.sex &&
           String(payload.height_cm ?? "") === String(profile.height_cm ?? "") &&
-          payload.timezone === profile.timezone);
+          timezoneUnchanged);
       const unchanged = payload.display_name === profile.display_name && medicalUnchanged;
       if (!unchanged && draft.display_name.trim()) patchMutation.mutate(payload);
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [consentActive, draft, profile?.id]);
+  }, [consentActive, detectedTimezone, draft, profile?.id, profile?.timezone]);
 
   const consentMutation = useMutation({
     mutationFn: () =>
@@ -120,6 +144,25 @@ export default function HealthProfilePage() {
       if (!confirmed) return;
     }
     weightMutation.mutate(unusual);
+  };
+
+  const saveTimezone = () => {
+    const value = timezoneValue.trim();
+    if (!value || value === profile?.timezone) {
+      setTimezoneEditing(false);
+      return;
+    }
+    patchMutation.mutate({ timezone: value });
+    setTimezoneEditing(false);
+  };
+
+  const useDetectedTimezone = () => {
+    if (!detectedTimezone) return;
+    setTimezoneValue(detectedTimezone);
+    if (detectedTimezone !== profile?.timezone) {
+      patchMutation.mutate({ timezone: detectedTimezone });
+    }
+    setTimezoneEditing(false);
   };
 
   const readinessItems = useMemo(() => {
@@ -196,8 +239,49 @@ export default function HealthProfilePage() {
             </select>
           </label>
           <Field label="Рост, см" type="number" value={draft.height_cm ?? ""} disabled={!consentActive} onChange={(value) => setDraft((state) => ({ ...state, height_cm: value }))} />
-          <Field label="Часовой пояс" value={draft.timezone ?? ""} disabled={!consentActive} onChange={(value) => setDraft((state) => ({ ...state, timezone: value }))} />
         </div>
+
+        {consentActive && (
+          <div className="mt-4 rounded-xl border border-border/60 p-3 text-sm">
+            {!timezoneEditing ? (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="text-muted-foreground">Часовой пояс: </span>
+                  <span>{profile.timezone ?? detectedTimezone ?? "не определён"}</span>
+                  {!profile.timezone && detectedTimezone && (
+                    <span className="ml-2 text-xs text-muted-foreground">определён автоматически</span>
+                  )}
+                </div>
+                <button type="button" onClick={() => setTimezoneEditing(true)} className="text-primary hover:underline">
+                  Изменить
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <label className="block text-muted-foreground" htmlFor="timezone-input">Часовой пояс</label>
+                <input
+                  id="timezone-input"
+                  list="common-timezones"
+                  value={timezoneValue}
+                  onChange={(event) => setTimezoneValue(event.target.value)}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2.5"
+                  placeholder="Europe/Moscow"
+                />
+                <datalist id="common-timezones">
+                  {COMMON_TIMEZONES.map((timezone) => <option key={timezone} value={timezone} />)}
+                </datalist>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={saveTimezone} className="rounded-lg bg-primary px-3 py-2 text-primary-foreground">Сохранить</button>
+                  {detectedTimezone && (
+                    <button type="button" onClick={useDetectedTimezone} className="rounded-lg border border-border px-3 py-2">Использовать текущий</button>
+                  )}
+                  <button type="button" onClick={() => setTimezoneEditing(false)} className="px-3 py-2 text-muted-foreground">Отмена</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="mt-3 text-xs text-muted-foreground">
           {saveState === "saving" && "Сохраняется…"}
           {saveState === "saved" && "Сохранено"}
