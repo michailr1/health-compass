@@ -32,7 +32,8 @@ export default function HealthProfilePage() {
     queryFn: loadProfilePage,
   });
   const profile = data?.profile ?? null;
-  const [draft, setDraft] = useState<Record<string, string>>( {} );
+  const consentActive = Boolean(data?.consent?.active);
+  const [draft, setDraft] = useState<Record<string, string>>({});
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [weight, setWeight] = useState("");
 
@@ -43,7 +44,7 @@ export default function HealthProfilePage() {
       date_of_birth: profile.date_of_birth ?? "",
       sex: profile.sex ?? "not_specified",
       height_cm: profile.height_cm ?? "",
-      timezone: profile.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timezone: profile.timezone ?? "",
     });
   }, [profile?.id]);
 
@@ -61,23 +62,27 @@ export default function HealthProfilePage() {
   useEffect(() => {
     if (!profile || Object.keys(draft).length === 0) return;
     const timer = window.setTimeout(() => {
-      const payload = {
+      const payload: Record<string, unknown> = {
         display_name: draft.display_name,
-        date_of_birth: draft.date_of_birth || null,
-        sex: draft.sex || null,
-        height_cm: draft.height_cm || null,
-        timezone: draft.timezone || null,
       };
-      const unchanged =
-        payload.display_name === profile.display_name &&
-        payload.date_of_birth === profile.date_of_birth &&
-        payload.sex === (profile.sex ?? "not_specified") &&
-        String(payload.height_cm ?? "") === String(profile.height_cm ?? "") &&
-        payload.timezone === profile.timezone;
-      if (!unchanged) patchMutation.mutate(payload);
+      if (consentActive) {
+        payload.date_of_birth = draft.date_of_birth || null;
+        payload.sex = draft.sex || null;
+        payload.height_cm = draft.height_cm || null;
+        payload.timezone = draft.timezone || null;
+      }
+
+      const medicalUnchanged =
+        !consentActive ||
+        (payload.date_of_birth === profile.date_of_birth &&
+          payload.sex === (profile.sex ?? "not_specified") &&
+          String(payload.height_cm ?? "") === String(profile.height_cm ?? "") &&
+          payload.timezone === profile.timezone);
+      const unchanged = payload.display_name === profile.display_name && medicalUnchanged;
+      if (!unchanged && draft.display_name.trim()) patchMutation.mutate(payload);
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [draft, profile?.id]);
+  }, [consentActive, draft, profile?.id]);
 
   const consentMutation = useMutation({
     mutationFn: () =>
@@ -114,7 +119,11 @@ export default function HealthProfilePage() {
   }, [profile?.readiness]);
 
   if (isLoading) {
-    return <div className="hm-card grid min-h-64 place-items-center"><Loader2 className="h-5 w-5 animate-spin" /></div>;
+    return (
+      <div className="hm-card grid min-h-64 place-items-center">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    );
   }
   if (error) {
     return <div className="hm-card p-6 text-destructive">Не удалось загрузить профиль.</div>;
@@ -123,13 +132,13 @@ export default function HealthProfilePage() {
     return <div className="hm-card p-6">Профиль пока не создан.</div>;
   }
 
-  const consentActive = Boolean(data?.consent?.active);
-
   return (
     <div className="space-y-6">
       <header>
         <h1 className="font-display text-2xl font-semibold md:text-3xl">Профиль здоровья</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Базовые данные для референсов и динамики. Поля можно заполнить позже.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Базовые данные для референсов и динамики. Поля можно заполнить позже.
+        </p>
       </header>
 
       {!consentActive && (
@@ -138,11 +147,14 @@ export default function HealthProfilePage() {
             <ShieldCheck className="mt-0.5 h-5 w-5 text-primary" />
             <div className="flex-1">
               <h2 className="font-medium">Согласие на обработку данных здоровья</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Нужно только перед сохранением медицинских полей и измерений.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Нужно только перед сохранением медицинских полей и измерений.
+              </p>
               <button
                 type="button"
                 onClick={() => consentMutation.mutate()}
-                className="mt-3 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                disabled={consentMutation.isPending}
+                className="mt-3 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
               >
                 Принять и продолжить
               </button>
@@ -152,13 +164,23 @@ export default function HealthProfilePage() {
       )}
 
       <section className="hm-card p-5 md:p-6">
-        <div className="mb-4 flex items-center gap-2"><UserRound className="h-5 w-5 text-primary" /><h2 className="font-display text-lg font-semibold">Основные сведения</h2></div>
+        <div className="mb-4 flex items-center gap-2">
+          <UserRound className="h-5 w-5 text-primary" />
+          <h2 className="font-display text-lg font-semibold">Основные сведения</h2>
+        </div>
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Имя профиля" value={draft.display_name ?? ""} onChange={(value) => setDraft((s) => ({ ...s, display_name: value }))} />
-          <Field label="Дата рождения" type="date" value={draft.date_of_birth ?? ""} disabled={!consentActive} onChange={(value) => setDraft((s) => ({ ...s, date_of_birth: value }))} />
-          <label className="space-y-1.5 text-sm"><span className="text-muted-foreground">Пол</span><select disabled={!consentActive} value={draft.sex ?? "not_specified"} onChange={(e) => setDraft((s) => ({ ...s, sex: e.target.value }))} className="w-full rounded-xl border border-border bg-background px-3 py-2.5"><option value="male">Мужской</option><option value="female">Женский</option><option value="not_specified">Не указано</option></select></label>
-          <Field label="Рост, см" type="number" value={draft.height_cm ?? ""} disabled={!consentActive} onChange={(value) => setDraft((s) => ({ ...s, height_cm: value }))} />
-          <Field label="Часовой пояс" value={draft.timezone ?? ""} disabled={!consentActive} onChange={(value) => setDraft((s) => ({ ...s, timezone: value }))} />
+          <Field label="Имя профиля" value={draft.display_name ?? ""} onChange={(value) => setDraft((state) => ({ ...state, display_name: value }))} />
+          <Field label="Дата рождения" type="date" value={draft.date_of_birth ?? ""} disabled={!consentActive} onChange={(value) => setDraft((state) => ({ ...state, date_of_birth: value }))} />
+          <label className="space-y-1.5 text-sm">
+            <span className="text-muted-foreground">Пол</span>
+            <select disabled={!consentActive} value={draft.sex ?? "not_specified"} onChange={(event) => setDraft((state) => ({ ...state, sex: event.target.value }))} className="w-full rounded-xl border border-border bg-background px-3 py-2.5">
+              <option value="male">Мужской</option>
+              <option value="female">Женский</option>
+              <option value="not_specified">Не указано</option>
+            </select>
+          </label>
+          <Field label="Рост, см" type="number" value={draft.height_cm ?? ""} disabled={!consentActive} onChange={(value) => setDraft((state) => ({ ...state, height_cm: value }))} />
+          <Field label="Часовой пояс" value={draft.timezone ?? ""} disabled={!consentActive} onChange={(value) => setDraft((state) => ({ ...state, timezone: value }))} />
         </div>
         <div className="mt-3 text-xs text-muted-foreground">
           {saveState === "saving" && "Сохраняется…"}
@@ -180,14 +202,23 @@ export default function HealthProfilePage() {
       </section>
 
       <section className="hm-card p-5 md:p-6">
-        <div className="mb-4 flex items-center gap-2"><Scale className="h-5 w-5 text-primary" /><h2 className="font-display text-lg font-semibold">Вес</h2></div>
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <input disabled={!consentActive} type="number" step="0.1" min="0" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="Вес, кг" className="rounded-xl border border-border bg-background px-3 py-2.5" />
-          <button disabled={!consentActive || !weight || weightMutation.isPending} onClick={() => weightMutation.mutate()} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">Добавить измерение</button>
+        <div className="mb-4 flex items-center gap-2">
+          <Scale className="h-5 w-5 text-primary" />
+          <h2 className="font-display text-lg font-semibold">Вес</h2>
         </div>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <input disabled={!consentActive} type="number" step="0.1" min="0" value={weight} onChange={(event) => setWeight(event.target.value)} placeholder="Вес, кг" className="rounded-xl border border-border bg-background px-3 py-2.5" />
+          <button disabled={!consentActive || !weight || weightMutation.isPending} onClick={() => weightMutation.mutate()} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
+            Добавить измерение
+          </button>
+        </div>
+        {weightMutation.error && <p className="mt-2 text-sm text-destructive">{weightMutation.error.message}</p>}
         <div className="mt-4 space-y-2">
           {(data?.measurements ?? []).map((item) => (
-            <div key={item.id} className="flex items-center justify-between rounded-xl border border-border/60 p-3 text-sm"><span>{Number(item.value).toLocaleString("ru-RU")} кг</span><span className="text-muted-foreground">{new Date(item.measured_at).toLocaleString("ru-RU")}</span></div>
+            <div key={item.id} className="flex items-center justify-between rounded-xl border border-border/60 p-3 text-sm">
+              <span>{Number(item.value).toLocaleString("ru-RU")} кг</span>
+              <span className="text-muted-foreground">{new Date(item.measured_at).toLocaleString("ru-RU")}</span>
+            </div>
           ))}
           {(data?.measurements ?? []).length === 0 && <p className="text-sm text-muted-foreground">Измерений пока нет.</p>}
         </div>
@@ -197,5 +228,10 @@ export default function HealthProfilePage() {
 }
 
 function Field({ label, value, onChange, type = "text", disabled = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; disabled?: boolean }) {
-  return <label className="space-y-1.5 text-sm"><span className="text-muted-foreground">{label}</span><input disabled={disabled} type={type} value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-2.5 disabled:opacity-60" /></label>;
+  return (
+    <label className="space-y-1.5 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <input disabled={disabled} type={type} value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-2.5 disabled:opacity-60" />
+    </label>
+  );
 }
