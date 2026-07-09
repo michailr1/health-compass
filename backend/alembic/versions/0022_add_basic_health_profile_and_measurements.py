@@ -152,6 +152,7 @@ def upgrade() -> None:
         f"ON {S}.user_consents (user_id, accepted_at DESC)"
     )
 
+    op.execute(f"GRANT CREATE ON SCHEMA {S} TO {R}")
     op.execute(
         f"""
         CREATE OR REPLACE FUNCTION {S}.app_can_edit_profile(target_profile_id uuid)
@@ -160,7 +161,6 @@ def upgrade() -> None:
         STABLE
         SECURITY DEFINER
         SET search_path = ''
-        SET row_security = off
         AS $$
           SELECT EXISTS (
             SELECT 1
@@ -178,6 +178,8 @@ def upgrade() -> None:
         """
     )
     op.execute(f"ALTER FUNCTION {S}.app_can_edit_profile(uuid) OWNER TO {R}")
+    op.execute(f"ALTER FUNCTION {S}.app_can_edit_profile(uuid) SET row_security = off")
+    op.execute(f"REVOKE CREATE ON SCHEMA {S} FROM {R}")
     op.execute(f"REVOKE ALL ON FUNCTION {S}.app_can_edit_profile(uuid) FROM PUBLIC")
     op.execute(f"GRANT EXECUTE ON FUNCTION {S}.app_can_edit_profile(uuid) TO {APP}")
 
