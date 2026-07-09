@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import json
 import secrets
 import uuid
 from urllib.parse import urlencode, urlsplit, urlunsplit
@@ -15,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.account_linking import hash_secret, new_browser_binding
 from app.core.config import settings
-from app.core.magic_links import normalize_email
+from app.core.magic_links import normalize_email, send_account_linked_notification
 from app.core.oidc import build_authorization_url, exchange_code, get_discovery, validate_id_token
 from app.core.session_tokens import hash_token, new_session_token
 from app.db.rls import apply_session_context, apply_user_context
@@ -48,15 +49,7 @@ def _frontend_url(path: str, query: dict[str, str] | None = None) -> str:
 
 
 def _set_short_cookie(response: RedirectResponse, name: str, value: str) -> None:
-    response.set_cookie(
-        name,
-        value,
-        max_age=600,
-        secure=True,
-        httponly=True,
-        samesite="lax",
-        path="/api/auth",
-    )
+    response.set_cookie(name, value, max_age=600, secure=True, httponly=True, samesite="lax", path="/api/auth")
 
 
 def _set_account_link_cookie(response: RedirectResponse, value: str) -> None:
@@ -72,13 +65,7 @@ def _set_account_link_cookie(response: RedirectResponse, value: str) -> None:
 
 
 def _delete_oidc_cookies(response: RedirectResponse) -> None:
-    for name in (
-        STATE_COOKIE,
-        NONCE_COOKIE,
-        VERIFIER_COOKIE,
-        PURPOSE_COOKIE,
-        LINK_INTENT_COOKIE,
-    ):
+    for name in (STATE_COOKIE, NONCE_COOKIE, VERIFIER_COOKIE, PURPOSE_COOKIE, LINK_INTENT_COOKIE):
         response.delete_cookie(name, path="/api/auth")
 
 
@@ -95,11 +82,7 @@ async def _start_google_login() -> RedirectResponse:
     try:
         location, state, nonce, code_verifier = await _build_google_authorization()
     except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Google authentication is temporarily unavailable",
-        ) from exc
-
+        raise HTTPException(status_code=503, detail="Google authentication is temporarily unavailable") from exc
     response = RedirectResponse(location)
     _set_short_cookie(response, STATE_COOKIE, state)
     _set_short_cookie(response, NONCE_COOKIE, nonce)
@@ -108,11 +91,7 @@ async def _start_google_login() -> RedirectResponse:
     return response
 
 
-async def _lookup_identity_user_id(
-    session: AsyncSession,
-    provider: str,
-    subject: str,
-) -> uuid.UUID | None:
+async def _lookup_identity_user_id(session: AsyncSession, provider: str, subject: str) -> uuid.UUID | None:
     result = await session.execute(
         text("select health_compass.app_lookup_identity_user_id(:provider, :subject)"),
         {"provider": provider, "subject": subject},
@@ -120,17 +99,39 @@ async def _lookup_identity_user_id(
     return result.scalar_one_or_none()
 
 
-async def _create_session_response(
+async def _record_link_audit(
     session: AsyncSession,
     request: Request,
-    user_id: uuid.UUID,
-) -> RedirectResponse:
+    *,
+    event_type: str,
+    result: str,
+    intent_id: uuid.UUID,
+    actor_user_id: uuid.UUID | None = None,
+    metadata: dict | None = None,
+) -> None:
+    await session.execute(
+        text(
+            "select health_compass.app_record_account_link_audit("
+            ":event_type, :result, :intent_id, :actor_user_id, :ip, :user_agent, cast(:metadata as jsonb))"
+        ),
+        {
+            "event_type": event_type,
+            "result": result,
+            "intent_id": intent_id,
+            "actor_user_id": str(actor_user_id) if actor_user_id else None,
+            "ip": request.client.host if request.client else None,
+            "user_agent": request.headers.get("user-agent"),
+            "metadata": json.dumps(metadata or {}),
+        },
+    )
+
+
+async def _create_session_response(session: AsyncSession, request: Request, user_id: uuid.UUID) -> RedirectResponse:
     await apply_user_context(session, user_id)
     user_result = await session.execute(select(User).where(User.id == user_id))
     user = user_result.scalar_one_or_none()
     if user is None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Account is unavailable")
-
+        raise HTTPException(status_code=409, detail="Account is unavailable")
     token = new_session_token()
     token_hash = hash_token(token)
     await apply_session_context(session, token_hash)
@@ -140,12 +141,10 @@ async def _create_session_response(
             session_token_hash=token_hash,
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
-            expires_at=datetime.datetime.now(datetime.UTC)
-            + datetime.timedelta(seconds=settings.session_ttl_seconds),
+            expires_at=datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=settings.session_ttl_seconds),
         )
     )
-
-    response = RedirectResponse(settings.frontend_url, status_code=status.HTTP_303_SEE_OTHER)
+    response = RedirectResponse(settings.frontend_url, status_code=303)
     _delete_oidc_cookies(response)
     response.delete_cookie(settings.account_link_cookie_name, path="/api/auth")
     response.set_cookie(
@@ -177,20 +176,14 @@ async def start_google_link(
     session: AsyncSession = Depends(get_session),
 ) -> RedirectResponse:
     if not settings.account_linking_enabled:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-
+        raise HTTPException(status_code=404, detail="Not found")
     browser_binding = request.cookies.get(settings.account_link_cookie_name)
     if not browser_binding:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Link session is missing")
-
+        raise HTTPException(status_code=400, detail="Link session is missing")
     try:
         location, state, nonce, code_verifier = await _build_google_authorization()
     except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Google authentication is temporarily unavailable",
-        ) from exc
-
+        raise HTTPException(status_code=503, detail="Google authentication is temporarily unavailable") from exc
     prepared = await session.execute(
         text(
             "select health_compass.app_prepare_google_link("
@@ -205,11 +198,7 @@ async def start_google_link(
         },
     )
     if not bool(prepared.scalar_one()):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Link request is unavailable or expired",
-        )
-
+        raise HTTPException(status_code=409, detail="Link request is unavailable or expired")
     response = RedirectResponse(location)
     _set_short_cookie(response, STATE_COOKIE, state)
     _set_short_cookie(response, NONCE_COOKIE, nonce)
@@ -229,18 +218,15 @@ async def callback(
     session: AsyncSession = Depends(get_session),
 ) -> RedirectResponse:
     if error:
-        detail = error_description or error
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"OIDC error: {detail}")
+        raise HTTPException(status_code=400, detail=f"OIDC error: {error_description or error}")
     if not code or not state:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OIDC code or state missing")
-
+        raise HTTPException(status_code=400, detail="OIDC code or state missing")
     expected_state = request.cookies.get(STATE_COOKIE)
     nonce = request.cookies.get(NONCE_COOKIE)
     code_verifier = request.cookies.get(VERIFIER_COOKIE)
     purpose = request.cookies.get(PURPOSE_COOKIE) or LOGIN_PURPOSE
     if not expected_state or not nonce or not code_verifier or not secrets.compare_digest(expected_state, state):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OIDC state")
-
+        raise HTTPException(status_code=400, detail="Invalid OIDC state")
     try:
         discovery = await get_discovery()
         token_response = await exchange_code(discovery, code, _redirect_uri(), code_verifier)
@@ -249,38 +235,30 @@ async def callback(
             raise ValueError("OIDC id_token missing")
         claims = await validate_id_token(discovery, id_token, nonce)
     except (ValueError, KeyError, TypeError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Google authentication response is invalid",
-        ) from exc
+        raise HTTPException(status_code=401, detail="Google authentication response is invalid") from exc
     except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Google authentication provider request failed",
-        ) from exc
+        raise HTTPException(status_code=502, detail="Google authentication provider request failed") from exc
 
     subject = str(claims.get("sub") or "")
     email = normalize_email(str(claims.get("email") or ""))
     if not subject or not email:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC subject or email missing")
+        raise HTTPException(status_code=401, detail="OIDC subject or email missing")
     if claims.get("email_verified") is not True:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="OIDC email is not verified")
+        raise HTTPException(status_code=401, detail="OIDC email is not verified")
 
     if purpose == LINK_PURPOSE:
         browser_binding = request.cookies.get(settings.account_link_cookie_name)
         intent_cookie = request.cookies.get(LINK_INTENT_COOKIE)
         if not browser_binding or not intent_cookie:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Link session is missing")
+            raise HTTPException(status_code=400, detail="Link session is missing")
         try:
             intent_id = uuid.UUID(intent_cookie)
         except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid link intent") from exc
-
+            raise HTTPException(status_code=400, detail="Invalid link intent") from exc
         completed = await session.execute(
             text(
                 "select health_compass.app_complete_google_link("
-                ":intent_id, :browser_hash, :state_hash, :nonce_hash, :pkce_hash, "
-                ":google_subject, :google_email)"
+                ":intent_id, :browser_hash, :state_hash, :nonce_hash, :pkce_hash, :google_subject, :google_email)"
             ),
             {
                 "intent_id": intent_id,
@@ -292,14 +270,42 @@ async def callback(
                 "google_email": email,
             },
         )
-        linked_user_id = completed.scalar_one_or_none()
-        if linked_user_id is None:
+        completion = completed.scalar_one_or_none()
+        if not completion:
             response = RedirectResponse(
                 _frontend_url("/auth/link-account", {"status": "confirmation-failed"}),
-                status_code=status.HTTP_303_SEE_OTHER,
+                status_code=303,
             )
             _delete_oidc_cookies(response)
             return response
+        linked_user_id = uuid.UUID(str(completion["user_id"]))
+        real_intent_id = uuid.UUID(str(completion["intent_id"]))
+        replayed = bool(completion.get("replayed"))
+        await _record_link_audit(
+            session,
+            request,
+            event_type="identity.link_completed",
+            result="success",
+            intent_id=real_intent_id,
+            actor_user_id=linked_user_id,
+            metadata={"confirmation": "google", "replayed": replayed},
+        )
+        if not replayed:
+            await apply_user_context(session, linked_user_id)
+            linked_user_result = await session.execute(select(User).where(User.id == linked_user_id))
+            linked_user = linked_user_result.scalar_one_or_none()
+            if linked_user is not None:
+                try:
+                    await send_account_linked_notification(linked_user.email, ("Google", "Email Magic Link"))
+                except Exception:
+                    await _record_link_audit(
+                        session,
+                        request,
+                        event_type="identity.link_notification_failed",
+                        result="error",
+                        intent_id=real_intent_id,
+                        actor_user_id=linked_user_id,
+                    )
         return await _create_session_response(session, request, linked_user_id)
 
     identity_user_id = await _lookup_identity_user_id(session, GOOGLE_PROVIDER, subject)
@@ -307,11 +313,8 @@ async def callback(
         candidate = await lookup_verified_email_candidate(session, email)
         if candidate.has_existing_duplicates:
             response = RedirectResponse(
-                _frontend_url(
-                    "/auth/link-account",
-                    {"status": "existing-duplicates", "required": EMAIL_PROVIDER},
-                ),
-                status_code=status.HTTP_303_SEE_OTHER,
+                _frontend_url("/auth/link-account", {"status": "existing-duplicates", "required": EMAIL_PROVIDER}),
+                status_code=303,
             )
             _delete_oidc_cookies(response)
             return response
@@ -333,11 +336,8 @@ async def callback(
                 user_agent=request.headers.get("user-agent"),
             )
             response = RedirectResponse(
-                _frontend_url(
-                    "/auth/link-account",
-                    {"intent": str(intent_id), "required": EMAIL_PROVIDER},
-                ),
-                status_code=status.HTTP_303_SEE_OTHER,
+                _frontend_url("/auth/link-account", {"intent": str(intent_id), "required": EMAIL_PROVIDER}),
+                status_code=303,
             )
             _delete_oidc_cookies(response)
             _set_account_link_cookie(response, browser_binding)
@@ -390,7 +390,7 @@ async def _logout_response(request: Request, session: AsyncSession) -> RedirectR
             .where(AuthSession.session_token_hash == token_hash)
             .values(revoked_at=datetime.datetime.now(datetime.UTC))
         )
-    response = RedirectResponse(settings.frontend_url, status_code=status.HTTP_303_SEE_OTHER)
+    response = RedirectResponse(settings.frontend_url, status_code=303)
     response.delete_cookie(settings.session_cookie_name, path="/api")
     response.delete_cookie(settings.account_link_cookie_name, path="/api/auth")
     _delete_oidc_cookies(response)
