@@ -1,5 +1,15 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, KeyRound, Link2, Loader2, Mail, ShieldCheck } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import {
+  CheckCircle2,
+  KeyRound,
+  Link2,
+  Loader2,
+  Mail,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { apiGet } from "@/lib/api";
@@ -12,6 +22,14 @@ export type SignInMethod = {
   connected_at: string;
   last_seen_at: string | null;
   can_remove: boolean;
+};
+
+type RemovalStartResponse = {
+  intent_id: string;
+  target_provider: string;
+  required_provider: string;
+  confirmation_url: string | null;
+  message: string;
 };
 
 export const providerTitles: Record<string, string> = {
@@ -27,12 +45,56 @@ export function getMissingProvider(methods: SignInMethod[]): "google" | "email" 
 }
 
 export default function SignInMethodsPage() {
+  const [searchParams] = useSearchParams();
+  const status = searchParams.get("status");
+  const [confirmRemovalId, setConfirmRemovalId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removalMessage, setRemovalMessage] = useState<string | null>(null);
+  const [removalError, setRemovalError] = useState<string | null>(null);
+
   const { data = [], isLoading, error } = useQuery({
     queryKey: ["sign-in-methods"],
     queryFn: () => apiGet<SignInMethod[]>("/auth/identities"),
   });
 
   const missingProvider = getMissingProvider(data);
+
+  async function startRemoval(method: SignInMethod) {
+    if (removingId) return;
+    setRemovingId(method.id);
+    setRemovalError(null);
+    setRemovalMessage(null);
+    try {
+      const response = await fetch(
+        `/api/auth/identities/remove/${encodeURIComponent(method.id)}/start`,
+        {
+          method: "POST",
+          credentials: "include",
+        },
+      );
+      const payload = (await response.json()) as RemovalStartResponse | { detail?: string };
+      if (!response.ok) {
+        throw new Error("detail" in payload && payload.detail ? payload.detail : "Removal request failed");
+      }
+      const removal = payload as RemovalStartResponse;
+      if (removal.confirmation_url) {
+        window.location.assign(removal.confirmation_url);
+        return;
+      }
+      setRemovalMessage(
+        `Письмо подтверждения отправлено. Откройте его в этом же браузере, чтобы отключить ${providerTitles[method.provider] ?? method.provider}.`,
+      );
+      setConfirmRemovalId(null);
+    } catch (requestError) {
+      setRemovalError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Не удалось начать отключение способа входа.",
+      );
+    } finally {
+      setRemovingId(null);
+    }
+  }
 
   return (
     <section className="space-y-6">
@@ -45,6 +107,27 @@ export default function SignInMethodsPage() {
           Подключённые способы входа всегда открывают один и тот же профиль. Новый способ добавляется только после отдельного подтверждения владения им.
         </p>
       </div>
+
+      {status === "removed" && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-primary">
+          Способ входа отключён. Оставшийся способ продолжает открывать тот же профиль.
+        </div>
+      )}
+      {status?.includes("removal") && status !== "removed" && (
+        <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+          Не удалось подтвердить отключение. Запустите процедуру заново.
+        </div>
+      )}
+      {removalMessage && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-primary">
+          {removalMessage}
+        </div>
+      )}
+      {removalError && (
+        <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+          {removalError}
+        </div>
+      )}
 
       {isLoading && (
         <div className="hm-card flex items-center gap-3 p-6 text-sm text-muted-foreground">
@@ -62,6 +145,8 @@ export default function SignInMethodsPage() {
         <div className="grid gap-4 md:grid-cols-2">
           {data.map((method) => {
             const Icon = method.provider === "google" ? Link2 : Mail;
+            const isConfirming = confirmRemovalId === method.id;
+            const isRemoving = removingId === method.id;
             return (
               <article key={method.id} className="hm-card p-5">
                 <div className="flex items-start justify-between gap-4">
@@ -83,9 +168,47 @@ export default function SignInMethodsPage() {
                 <div className="mt-4 text-xs text-muted-foreground">
                   Подключён {new Date(method.connected_at).toLocaleDateString("ru-RU")}
                 </div>
+
                 {!method.can_remove && (
                   <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
                     Это единственный способ входа. Его нельзя отключить.
+                  </div>
+                )}
+
+                {method.can_remove && !isConfirming && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="mt-4 w-full text-destructive hover:text-destructive"
+                    onClick={() => setConfirmRemovalId(method.id)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" /> Отключить
+                  </Button>
+                )}
+
+                {method.can_remove && isConfirming && (
+                  <div className="mt-4 space-y-3 rounded-xl border border-destructive/20 bg-destructive/5 p-3">
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      Для отключения потребуется заново подтвердить другой подключённый способ входа. До подтверждения ничего не изменится.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      className="w-full"
+                      disabled={isRemoving}
+                      onClick={() => startRemoval(method)}
+                    >
+                      {isRemoving ? "Начинаем проверку…" : "Продолжить и подтвердить"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-full"
+                      disabled={isRemoving}
+                      onClick={() => setConfirmRemovalId(null)}
+                    >
+                      Отмена
+                    </Button>
                   </div>
                 )}
               </article>
@@ -117,7 +240,7 @@ export default function SignInMethodsPage() {
       <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
         <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
         <span>
-          Последний способ входа отключить нельзя. Удаление подключённого способа будет добавлено только вместе с повторным подтверждением личности.
+          Последний способ входа отключить нельзя. Любое отключение требует повторного подтверждения через другой уже подключённый способ.
         </span>
       </div>
     </section>
