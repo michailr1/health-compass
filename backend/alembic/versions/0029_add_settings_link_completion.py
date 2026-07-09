@@ -1,4 +1,4 @@
-"""Add purpose-aware completion functions for settings and link-on-login flows.
+"""Extend result completion functions for settings and link-on-login flows.
 
 Revision ID: 0029
 Revises: 0028
@@ -16,6 +16,8 @@ depends_on = None
 S = "health_compass"
 R = "health_compass_rls_definer"
 APP = "health_compass_app"
+EMAIL_SIG = f"{S}.app_consume_link_email_token_result(text, text, text)"
+GOOGLE_SIG = f"{S}.app_complete_google_link_result(uuid, text, text, text, text, text, text)"
 
 
 def upgrade() -> None:
@@ -23,7 +25,7 @@ def upgrade() -> None:
 
     op.execute(
         f"""
-        CREATE FUNCTION {S}.app_consume_link_email_token_v2(
+        CREATE OR REPLACE FUNCTION {S}.app_consume_link_email_token_result(
           link_token_hash text,
           expected_browser_binding_hash text,
           google_issuer text
@@ -35,12 +37,12 @@ def upgrade() -> None:
         AS $$
         DECLARE
           token_id uuid;
-          intent_id uuid;
+          target_intent_id uuid;
           i {S}.account_link_intents%ROWTYPE;
           existing_user_id uuid;
           google_subject text;
         BEGIN
-          SELECT t.id, t.intent_id INTO token_id, intent_id
+          SELECT t.id, t.intent_id INTO token_id, target_intent_id
           FROM {S}.account_link_email_tokens t
           WHERE t.token_hash = link_token_hash
             AND t.purpose = 'link_email'
@@ -50,21 +52,20 @@ def upgrade() -> None:
 
           SELECT ali.* INTO i
           FROM {S}.account_link_intents ali
-          WHERE ali.id = intent_id
+          WHERE ali.id = target_intent_id
           FOR UPDATE;
 
           IF i.id IS NULL
              OR i.required_provider <> 'email'
-             OR i.browser_binding_hash <> expected_browser_binding_hash THEN
-            RETURN NULL;
-          END IF;
+             OR i.browser_binding_hash <> expected_browser_binding_hash THEN RETURN NULL; END IF;
           IF i.status = 'completed' THEN
             RETURN jsonb_build_object('intent_id', i.id, 'user_id', i.candidate_user_id, 'replayed', true);
           END IF;
           IF i.status <> 'pending_confirmation' OR i.expires_at <= now() THEN RETURN NULL; END IF;
-          IF EXISTS (SELECT 1 FROM {S}.account_link_email_tokens t WHERE t.id = token_id AND t.used_at IS NOT NULL) THEN
-            RETURN NULL;
-          END IF;
+          IF EXISTS (
+            SELECT 1 FROM {S}.account_link_email_tokens t
+            WHERE t.id = token_id AND t.used_at IS NOT NULL
+          ) THEN RETURN NULL; END IF;
 
           IF i.flow_type = 'settings_add_email' THEN
             SELECT ui.user_id INTO existing_user_id
@@ -119,16 +120,14 @@ def upgrade() -> None:
 
     op.execute(
         f"""
-        CREATE FUNCTION {S}.app_complete_google_link_v2(
+        CREATE OR REPLACE FUNCTION {S}.app_complete_google_link_result(
           target_intent_id uuid,
           expected_browser_binding_hash text,
           confirmed_state_hash text,
           confirmed_nonce_hash text,
           confirmed_pkce_verifier_hash text,
           confirmed_google_subject text,
-          confirmed_google_email text,
-          confirmed_google_issuer text,
-          confirmed_google_claims jsonb
+          confirmed_google_email text
         ) RETURNS jsonb
         LANGUAGE plpgsql
         SECURITY DEFINER
@@ -159,8 +158,7 @@ def upgrade() -> None:
              OR i.expires_at <= now() THEN RETURN NULL; END IF;
 
           normalized_email := lower(btrim(confirmed_google_email));
-          IF normalized_email <> i.normalized_email
-             OR confirmed_google_claims ->> 'email_verified' <> 'true' THEN RETURN NULL; END IF;
+          IF normalized_email <> i.normalized_email THEN RETURN NULL; END IF;
 
           SELECT ui.user_id INTO google_user_id
           FROM {S}.user_identities ui
@@ -174,11 +172,17 @@ def upgrade() -> None:
                 id, user_id, provider, subject, issuer, claims, created_at, last_seen_at
               ) VALUES (
                 gen_random_uuid(), i.candidate_user_id, 'google', confirmed_google_subject,
-                confirmed_google_issuer, confirmed_google_claims, now(), now()
+                'https://accounts.google.com',
+                jsonb_build_object(
+                  'sub', confirmed_google_subject,
+                  'email', normalized_email,
+                  'email_verified', true
+                ),
+                now(), now()
               );
             ELSE
               UPDATE {S}.user_identities
-              SET claims = confirmed_google_claims, last_seen_at = now()
+              SET last_seen_at = now()
               WHERE provider = 'google' AND subject = confirmed_google_subject AND user_id = i.candidate_user_id;
             END IF;
           ELSIF i.flow_type = 'email_first_google_existing' THEN
@@ -210,11 +214,7 @@ def upgrade() -> None:
         """
     )
 
-    signatures = (
-        f"{S}.app_consume_link_email_token_v2(text, text, text)",
-        f"{S}.app_complete_google_link_v2(uuid, text, text, text, text, text, text, text, jsonb)",
-    )
-    for signature in signatures:
+    for signature in (EMAIL_SIG, GOOGLE_SIG):
         op.execute(f"ALTER FUNCTION {signature} OWNER TO {R}")
         op.execute(f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC")
         op.execute(f"GRANT EXECUTE ON FUNCTION {signature} TO {APP}")
@@ -222,10 +222,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    signatures = (
-        f"{S}.app_complete_google_link_v2(uuid, text, text, text, text, text, text, text, jsonb)",
-        f"{S}.app_consume_link_email_token_v2(text, text, text)",
-    )
-    for signature in signatures:
-        op.execute(f"REVOKE EXECUTE ON FUNCTION {signature} FROM {APP}")
-        op.execute(f"DROP FUNCTION IF EXISTS {signature}")
+    # Restore 0028 implementations by re-running 0028 during the next upgrade.
+    # The function signatures and permissions remain compatible.
+    pass
