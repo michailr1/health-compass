@@ -58,6 +58,8 @@ export interface ProfileReadiness {
   sex_specific_references: boolean;
   bmi: boolean;
   local_time_context: boolean;
+  allergies_reviewed: boolean;
+  medications_reviewed: boolean;
   missing_fields: string[];
 }
 
@@ -96,6 +98,48 @@ export interface ConsentStatus {
   accepted_at: string | null;
   revoked_at: string | null;
   active: boolean;
+}
+
+export interface ClinicalContextSummary {
+  allergies_reviewed_at: string | null;
+  medications_reviewed_at: string | null;
+  active_allergy_count: number;
+  severe_active_allergy_count: number;
+  active_medication_count: number;
+}
+
+export interface ProfileAllergy {
+  id: string;
+  profile_id: string;
+  allergen: string;
+  reaction: string | null;
+  severity: "unknown" | "mild" | "moderate" | "severe";
+  status: "active" | "resolved" | "entered_in_error";
+  onset_date: string | null;
+  notes: string | null;
+  source_kind: "manual";
+  created_by_user_id: string;
+  updated_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProfileMedication {
+  id: string;
+  profile_id: string;
+  medication_name: string;
+  dose_text: string | null;
+  schedule_text: string | null;
+  indication: string | null;
+  status: "active" | "paused" | "stopped" | "entered_in_error";
+  started_on: string | null;
+  ended_on: string | null;
+  notes: string | null;
+  source_kind: "manual";
+  created_by_user_id: string;
+  updated_by_user_id: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DashboardSnapshot {
