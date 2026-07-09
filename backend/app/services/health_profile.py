@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import desc, select
+from sqlalchemy import desc, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.body_measurement import BodyMeasurement
@@ -37,6 +37,25 @@ async def get_visible_profile(
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
     return profile
+
+
+async def can_edit_profile(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+) -> bool:
+    result = await session.execute(
+        text("SELECT health_compass.app_can_edit_profile(:profile_id)"),
+        {"profile_id": profile_id},
+    )
+    return bool(result.scalar_one())
+
+
+async def require_profile_edit_access(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+) -> None:
+    if not await can_edit_profile(session, profile_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
 
 
 async def has_active_health_data_consent(
@@ -114,9 +133,16 @@ async def patch_profile(
     request_id: str | None,
 ) -> HealthProfile:
     profile = await get_visible_profile(session, profile_id)
+    await require_profile_edit_access(session, profile_id)
+
     changes = payload.model_dump(exclude_unset=True)
     if not changes:
         return profile
+    if "display_name" in changes and changes["display_name"] is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="display_name cannot be null",
+        )
 
     if MEDICAL_FIELDS.intersection(changes):
         await require_health_data_consent(session, current_user.id)
