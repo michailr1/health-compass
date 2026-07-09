@@ -27,6 +27,8 @@ class HealthProfile(Base):
     sex: Mapped[str | None] = mapped_column(String(32), nullable=True)
     height_cm: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    allergies_reviewed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    medications_reviewed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
