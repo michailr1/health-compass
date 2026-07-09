@@ -227,15 +227,6 @@ async def consume_link_email(
     if user is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Linked account is unavailable")
 
-    await _record_link_audit(
-        session,
-        request,
-        event_type="identity.link_completed",
-        result="success",
-        intent_id=uuid.UUID(int(str(user_id), 16).to_bytes(16, "big").hex()) if False else uuid.uuid4(),
-        actor_user_id=user.id,
-        metadata={"confirmation": "link_email"},
-    )
     return await _create_authenticated_response(session, request, user)
 
 
