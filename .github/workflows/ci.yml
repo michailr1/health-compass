@@ -75,6 +75,10 @@ jobs:
           CREATE DATABASE health_compass_test OWNER health_compass_migrator;
           GRANT CONNECT ON DATABASE health_compass_test TO health_compass_app;
           SQL
+          psql -h 127.0.0.1 -U postgres -d health_compass_test -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA health_compass AUTHORIZATION health_compass_migrator;
+          GRANT USAGE ON SCHEMA health_compass TO health_compass_app;
+          SQL
       - name: Install backend
         run: python -m pip install -e ".[dev]"
       - name: Migration upgrade/downgrade/upgrade
