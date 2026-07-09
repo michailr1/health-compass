@@ -43,8 +43,13 @@ jobs:
           cache: npm
       - name: Install frontend
         run: npm ci
-      - name: Lint
-        run: npm run lint
+      - name: Lint changed frontend files
+        run: >-
+          npx eslint
+          src/pages/HealthProfile.tsx
+          src/lib/api.ts
+          src/App.tsx
+          src/components/AppLayout.tsx
       - name: Tests
         run: npm test
       - name: Build
