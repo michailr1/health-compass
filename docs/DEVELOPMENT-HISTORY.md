@@ -72,28 +72,20 @@ Root cause:
 - negative policies/tests;
 - session context перед AuthSession insert.
 
-Результат: `22 PASS, 0 FAIL`; production Google и email login работают, cross-user проверки пройдены.
-
-## 2026-07 — демонстрационные данные
-
-Каждый новый пользователь получает отдельные workspace/profile/dashboard records, но стартовые показатели пока одинаковые. Решение: временно оставить демоданные до появления реального импорта, обязательно маркируя их как демонстрационные.
+Результат: production Google и email login работают, cross-user проверки пройдены.
 
 ## 2026-07 — перенос на поддомен
 
-Принято решение перенести портал с:
+Портал перенесён с:
 
-`https://funti.cc/health`
+```text
+https://funti.cc/health
+```
 
 на:
 
-`https://health.funti.cc`
-
-DNS и новый Google redirect URI добавлены владельцем.
-
-Production deployment выполнен из commit:
-
 ```text
-4e7df2bdeb313cd788165c182b64ef83487720bc
+https://health.funti.cc
 ```
 
 Подтверждено:
@@ -101,33 +93,150 @@ Production deployment выполнен из commit:
 - DNS `health.funti.cc → 172.245.108.154`;
 - отдельный Let's Encrypt certificate;
 - Apache VirtualHost и SPA fallback;
-- backend без legacy root path;
-- frontend/API paths от корня поддомена;
-- `/`, `/login`, `/api/health` → 200;
-- Google start endpoint → 307 с новым callback и `prompt=select_account`;
-- SPA routes → 200;
-- старый `/health` пока остаётся доступен;
-- свежие логи без 500/503/54001/Traceback.
+- backend и frontend используют пути от корня поддомена;
+- старый `/health` отдаёт 301 на production-поддомен;
+- Google callback: `https://health.funti.cc/api/auth/callback`.
 
-Проверки на VPS:
+## 2026-07 — Auth MVP завершён
 
-- compileall: OK;
-- Ruff: all checks passed;
-- frontend build: successful;
-- pytest: `14 PASS, 4 FAIL`.
+Auth MVP объединён в `main` и выпущен как:
 
-Четыре pytest failures сохранены как release debt: три migration-теста запускались без тестовой PostgreSQL, один health test ожидает старое поведение. Они должны быть закрыты до merge в `main`.
+```text
+v0.1.0-auth-mvp
+```
 
-Новый Authorized redirect URI уже был добавлен владельцем до деплоя. Сообщение агента о необходимости его добавить признано устаревшим пунктом чек-листа.
-
-Ручная проверка владельцем подтвердила на новом production URL:
+Подтверждены:
 
 - Google login;
-- Email Magic Link request/consume;
+- Email Magic Link;
 - logout;
-- повторный вход.
+- повторный вход;
+- повторное использование Magic Link;
+- friendly invalid-link page;
+- tenant isolation;
+- cross-user API responses `404`;
+- FORCE RLS;
+- чистые production smoke tests и логи.
 
-Открыты только дополнительные acceptance/security проверки: одноразовость использованной magic link, маркировка демонстрационных данных и двухпользовательская изоляция на новом URL.
+Архивная ветка `feat/identity-and-profile-access` и бывшая auth-ветка `feat/direct-google-and-email-auth` сохранены.
+
+## 2026-07 — решение о Progressive Health Intake
+
+Отказались от большой блокирующей анкеты до первого анализа.
+
+Принятый путь:
+
+```text
+Login
+→ минимальный onboarding
+→ Empty Dashboard / первое полезное действие
+→ добровольное заполнение Health Profile
+→ контекстные вопросы при необходимости
+→ подтверждённый импорт фактов из документов
+```
+
+Зафиксированы инварианты:
+
+- медицинская анкета не блокирует активацию;
+- большинство полей опциональны;
+- каждое поле объясняет назначение;
+- OCR и AI не меняют профиль без подтверждения;
+- intake не является самодиагностикой;
+- временные совпадения не объявляются причинностью.
+
+PHASE-02.5 поставлена перед PHASE-03 и поглощает прежнюю задачу HC-012.
+
+## 2026-07 — Slice 1 Basic Health Profile
+
+Подготовлена спецификация:
+
+```text
+docs/BASIC-HEALTH-PROFILE-SLICE-1.md
+```
+
+Фактический аудит кода показал, что таблица `health_compass.health_profiles` уже существует. Поэтому Slice 1 расширил её, а не создавал второй профиль поверх существующего.
+
+Реализовано:
+
+- миграция `0022`;
+- `height_cm`, `timezone`, `updated_at` в существующем профиле;
+- история веса в `body_measurements`;
+- минимальная consent-модель;
+- append-only audit;
+- `app_can_edit_profile(uuid)`;
+- owner/edit write access, view/analyze read-only;
+- FORCE RLS и column-level privileges;
+- profile PATCH API;
+- endpoints истории веса и void;
+- экран `/app/profile`;
+- autosave основных полей;
+- contextual readiness без health score;
+- soft validation;
+- cross-user matrix и регресс `54001`.
+
+PR #5 прошёл полный CI и был слит squash-merge в `main`.
+
+Production deployment Slice 1:
+
+- commit `bea8bd448ad6f6ada60c1a7f8b7aca5eebd12af7`;
+- Alembic `0022 (head)`;
+- backup `/opt/health-compass/backups/health_compass_20260709T122531Z.sql.gz`;
+- frontend release `/opt/health-compass/releases/main-20260709T122807Z`;
+- `/api/health`, `/`, `/app/profile` → 200;
+- Google auth start → 307 на `accounts.google.com`;
+- логи без ERROR, CRITICAL и Traceback.
+
+Ручная проверка выявила UX-недочёт: timezone был показан как обязательное текстовое поле, что провоцировало ввод `+3`, хотя backend ожидает IANA timezone.
+
+## 2026-07 — timezone UX и favicon
+
+В PR #6 исправлено:
+
+- timezone автоматически определяется браузером;
+- сохраняется IANA-значение, например `Europe/Moscow`;
+- сохранённое значение не перезаписывается при каждом открытии;
+- есть ручная корректировка через отдельную ненавязчивую настройку;
+- поле timezone удалено из основной формы;
+- Lovable favicon заменён на иконку Health Compass;
+- title и метаданные очищены от старых `HealthMonitor`/demo-формулировок.
+
+PR #6 слит в `main`, production deployment принят владельцем.
+
+Развёрнутый commit после UX-fix:
+
+```text
+77453af7c5cb6aae77ff4164069131737981f208
+```
+
+## 2026-07 — Slice 2 Clinical Context начат
+
+Создана ветка:
+
+```text
+feat/clinical-context-slice-2
+```
+
+Добавлена спецификация:
+
+```text
+docs/CLINICAL-CONTEXT-SLICE-2.md
+```
+
+Планируется:
+
+- хронические состояния;
+- аллергии и непереносимости;
+- лекарства;
+- витамины, минералы и БАДы;
+- active/inactive;
+- дозировки, единицы, частота и даты;
+- confirmation и provenance;
+- audit;
+- FORCE RLS;
+- миграция `0023`;
+- API, UI и cross-user tests.
+
+На момент этой записи Slice 2 ещё не реализован и не развёрнут.
 
 ## 2026-07 — Fable Stage 3 и 3.5
 
