@@ -16,9 +16,12 @@ if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
 import app.models.audit_event  # noqa: E402, F401
+import app.models.body_measurement  # noqa: E402, F401
+import app.models.consent  # noqa: E402, F401
 import app.models.invitation  # noqa: E402, F401
 import app.models.processing_job  # noqa: E402, F401
 import app.models.profile  # noqa: E402, F401
+import app.models.profile_audit_event  # noqa: E402, F401
 import app.models.service_metadata  # noqa: E402, F401
 import app.models.user  # noqa: E402, F401
 import app.models.workspace  # noqa: E402, F401
