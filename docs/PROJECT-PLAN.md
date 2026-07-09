@@ -1,6 +1,6 @@
 # Health Compass — канонический план проекта
 
-Версия: 1.2  
+Версия: 1.3  
 Дата: 2026-07-09  
 Основная ветка: `main`
 
@@ -25,14 +25,14 @@
 - Fable Stage 2.5 Progressive Health Intake artifacts;
 - фактического кода, миграций, тестов и production-результатов.
 
-Принятые продуктовые решения вынесены в `PRODUCT-UX-BASELINE.md` и `PROGRESSIVE-HEALTH-INTAKE.md`, AI-ограничения — в `AI-PRODUCT-SAFETY.md`.
+Принятые продуктовые решения вынесены в `PRODUCT-UX-BASELINE.md` и `PROGRESSIVE-HEALTH-INTAKE.md`, техническая спецификация Slice 1 — в `BASIC-HEALTH-PROFILE-SLICE-1.md`, AI-ограничения — в `AI-PRODUCT-SAFETY.md`.
 
 При расхождении приоритет источников:
 
 1. код, миграции и тесты;
 2. подтверждённое production-состояние;
 3. ADR и security-инварианты;
-4. этот план, `CURRENT-STATE.md`, `PRODUCT-UX-BASELINE.md`, `PROGRESSIVE-HEALTH-INTAKE.md` и `AI-PRODUCT-SAFETY.md`;
+4. этот план и канонические документы в `docs/`;
 5. исходные PDF/XLSX/PPTX и внешние ревью.
 
 ## 3. Принципы
@@ -93,7 +93,7 @@
 
 ### PHASE-02.5 — Progressive Health Intake
 
-Статус: `APPROVED / PLANNED`
+Статус: `SLICE 1 SPECIFIED / IMPLEMENTATION PENDING`
 
 Цель: дать анализам и AI минимально необходимый контекст без блокирующей анкеты перед первым полезным действием.
 
@@ -119,28 +119,72 @@ Login
 - intake не используется для самодиагностики;
 - OCR и AI не меняют профиль без подтверждения пользователя.
 
-Первый scope:
+#### Slice 1 — Basic Health Profile
 
-- редактирование имени профиля, даты рождения и пола;
-- экран `/p/:profileId/health-profile`;
+- расширение существующей `health_compass.health_profiles`, без создания второй таблицы профиля;
+- редактирование имени, даты рождения и пола;
+- рост и timezone;
+- история веса в `body_measurements`;
+- минимальный consent gate перед сохранением медицинских данных;
+- provenance и append-only audit trail;
+- autosave стабильных полей;
+- contextual readiness вместо health score;
+- маршрут `/app/profile`;
+- `app_can_edit_profile(uuid)`;
+- RLS, column-level privileges и cross-user negative tests;
+- регресс SQLSTATE `54001`;
+- migration head `0021`, планируемая миграция `0022`.
+
+Каноническая спецификация Slice 1: `docs/BASIC-HEALTH-PROFILE-SLICE-1.md`.
+
+#### Slice 2 — Clinical Context
+
+- состояния;
+- аллергии;
+- лекарства;
+- витамины, минералы и БАДы;
+- дозировки, единицы, частота, даты и статус;
+- provenance, confirmation и audit.
+
+#### Slice 3 — Contextual Intake
+
+- `IntakePromptCard`;
+- сохранить в профиль;
+- использовать только для текущего анализа;
+- не сейчас;
+- `WhyWeAskPopover`;
+- suppression повторного вопроса в одной сессии.
+
+Analysis-only context не сохраняется как постоянный медицинский факт.
+
+#### Slice 4 — переход к Documents/OCR
+
+```text
+Upload
+→ Processing
+→ OCR Review
+→ Confirm
+→ Lab Results
+→ Metric Dynamics
+→ Contextual Intake
+→ AI Explanation with Evidence
+→ Doctor Report
+```
+
+Не входят в Slice 1:
+
 - состояния, аллергии, лекарства и добавки;
-- provenance и audit trail;
-- autosave и undo;
-- contextual readiness вместо давления общим процентом;
-- `IntakePromptCard` и `WhyWeAskPopover`;
-- API contracts, permissions, RLS и cross-user negative tests;
-- интерфейс подтверждённого добавления фактов из OCR.
-
-Не входят в первый scope:
-
+- `IntakePromptCard`;
 - большая обязательная анкета;
 - lifestyle-модули;
 - семейный анамнез;
 - полная emergency card;
+- давление как generic measurement;
 - автоматическая диагностика;
+- автоматический импорт фактов из OCR;
 - Pet intake.
 
-Каноническая спецификация: `docs/PROGRESSIVE-HEALTH-INTAKE.md`.
+Канонический продуктовый документ: `docs/PROGRESSIVE-HEALTH-INTAKE.md`.
 
 ### PHASE-03 — Human Documents, OCR и Labs
 
@@ -228,7 +272,7 @@ Frontend baseline:
 
 Статус: `PLANNED`
 
-- consents;
+- полноценный consent center и версии текстов;
 - управление активными сессиями;
 - экспорт данных;
 - удаление профиля;
@@ -236,6 +280,8 @@ Frontend baseline:
 - аудит доступа;
 - удаление raw, normalized, derived data и embeddings;
 - отдельный consent для внешнего LLM.
+
+Минимальный consent gate для записи базовых медицинских данных реализуется раньше, в Slice 1, и затем расширяется в PHASE-07.
 
 ### PHASE-08 — AI Health Assistant
 
@@ -268,15 +314,16 @@ Frontend baseline:
 
 ## 5. Ближайший план
 
-1. Зафиксировать API contracts PHASE-02.5.
-2. Спроектировать таблицы Health Profile, conditions, allergies, medications, supplements и provenance.
-3. Утвердить RLS policies и negative tests.
-4. Реализовать редактирование базового профиля: имя, дата рождения, пол.
-5. Реализовать экран Health Profile и contextual readiness.
-6. Реализовать reusable `IntakePromptCard`.
-7. После PHASE-02.5 перейти к Upload → Processing → OCR Review.
-8. Реализовать Lab Results → Metric Dynamics → Doctor Report.
-9. AI explanation подключать только после evidence enforcement и consent model.
+1. Создать feature-ветку Slice 1 от актуального `main`.
+2. Реализовать migration `0022` и DB/RLS tests.
+3. Расширить существующую модель профиля и добавить measurements/audit/consent models.
+4. Реализовать API contracts Slice 1.
+5. Реализовать `/app/profile`, autosave, readiness и историю веса.
+6. Выполнить backend/frontend тесты и security review.
+7. Обновить `CURRENT-STATE.md` и `DEVELOPMENT-HISTORY.md` после завершения реализации.
+8. Не выполнять deployment до отдельного решения.
+9. После Slice 1 перейти к Clinical Context.
+10. После PHASE-02.5 перейти к Upload → Processing → OCR Review.
 
 ## 6. Правило обновления
 
@@ -289,6 +336,7 @@ Frontend baseline:
 - `docs/source-index/SOURCE-REGISTER.md`;
 - `docs/PRODUCT-UX-BASELINE.md`, если изменился продуктовый или интерфейсный baseline;
 - `docs/PROGRESSIVE-HEALTH-INTAKE.md`, если изменились intake-решения;
+- `docs/BASIC-HEALTH-PROFILE-SLICE-1.md`, если изменились решения Slice 1;
 - `docs/AI-PRODUCT-SAFETY.md`, если изменились AI-функции или safety rules;
 - README, если изменились публичные URL, архитектура или запуск;
 - ADR, если принято архитектурное решение.
