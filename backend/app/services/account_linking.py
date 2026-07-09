@@ -12,8 +12,11 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.magic_links import normalize_email
+from app.models.user import User, UserIdentity
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +50,29 @@ async def lookup_verified_email_candidate(
         {"email": normalized_email},
     )
     return VerifiedEmailCandidate(count=count, user_id=user_result.scalar_one_or_none())
+
+
+async def verified_notification_emails(
+    session: AsyncSession,
+    user: User,
+) -> tuple[str, ...]:
+    """Return unique verified identity emails plus the canonical contact email."""
+    result = await session.execute(
+        select(UserIdentity).where(UserIdentity.user_id == user.id)
+    )
+    recipients: set[str] = {normalize_email(user.email)}
+    for identity in result.scalars().all():
+        claims = identity.claims or {}
+        if claims.get("email_verified") is not True:
+            continue
+        if identity.provider == "email":
+            address = identity.subject
+        else:
+            address = str(claims.get("email") or "")
+        normalized = normalize_email(address)
+        if normalized:
+            recipients.add(normalized)
+    return tuple(sorted(recipients))
 
 
 async def create_account_link_intent(
