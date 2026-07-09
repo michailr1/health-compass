@@ -19,6 +19,7 @@ APP = "health_compass_app"
 
 
 def upgrade() -> None:
+    op.execute(f"GRANT SELECT ON {S}.users TO {R}")
     op.execute(f"GRANT CREATE ON SCHEMA {S} TO {R}")
     op.execute(
         f"""
@@ -122,3 +123,4 @@ def downgrade() -> None:
         f"DROP FUNCTION IF EXISTS {S}.app_create_account_link_intent("
         "text, text, uuid, text, text, text, text, timestamptz, jsonb, text, text)"
     )
+    op.execute(f"REVOKE SELECT ON {S}.users FROM {R}")
