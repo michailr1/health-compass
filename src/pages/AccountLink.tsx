@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { HeartPulse, Link2, MailCheck, ShieldCheck, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,10 +9,28 @@ export default function AccountLink() {
   const required = searchParams.get("required");
   const status = searchParams.get("status");
   const hasExistingDuplicates = status === "existing-duplicates";
+  const [emailState, setEmailState] = useState<"idle" | "sending" | "sent" | "error">("idle");
 
   const googleConfirmationUrl = intent
     ? `/api/auth/link/google/start?intent_id=${encodeURIComponent(intent)}`
     : "/login";
+
+  async function requestLinkEmail() {
+    if (!intent || emailState === "sending") return;
+    setEmailState("sending");
+    try {
+      const response = await fetch("/api/auth/link/email/request", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intent_id: intent }),
+      });
+      if (!response.ok) throw new Error("request failed");
+      setEmailState("sent");
+    } catch {
+      setEmailState("error");
+    }
+  }
 
   return (
     <div className="grid min-h-screen w-full place-items-center px-4 py-10">
@@ -53,16 +72,36 @@ export default function AccountLink() {
           )}
 
           {!hasExistingDuplicates && required === "email" && (
-            <div className="mt-6 rounded-xl border border-primary/20 bg-primary/5 p-4 text-left">
-              <div className="flex items-start gap-3">
-                <MailCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                <div>
-                  <div className="text-sm font-medium">Подтвердите email</div>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    Мы отправим специальную одноразовую ссылку с назначением link_email. Обычная ссылка для входа не сможет связать аккаунты.
-                  </p>
+            <div className="mt-6 space-y-3">
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-left">
+                <div className="flex items-start gap-3">
+                  <MailCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                  <div>
+                    <div className="text-sm font-medium">Подтвердите email</div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Мы отправим специальную одноразовую ссылку с назначением link_email. Обычная ссылка для входа не сможет связать аккаунты.
+                    </p>
+                  </div>
                 </div>
               </div>
+              <Button
+                type="button"
+                className="w-full"
+                disabled={!intent || emailState === "sending" || emailState === "sent"}
+                onClick={requestLinkEmail}
+              >
+                {emailState === "sending"
+                  ? "Отправляем…"
+                  : emailState === "sent"
+                    ? "Ссылка отправлена"
+                    : "Отправить ссылку подтверждения"}
+              </Button>
+              {emailState === "sent" && (
+                <p className="text-xs text-muted-foreground">Откройте письмо в этом же браузере.</p>
+              )}
+              {emailState === "error" && (
+                <p className="text-xs text-destructive">Не удалось отправить ссылку. Повторите попытку позже.</p>
+              )}
             </div>
           )}
 
