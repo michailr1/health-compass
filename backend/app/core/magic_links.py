@@ -1,4 +1,4 @@
-"""Email magic-link helpers."""
+"""Email magic-link and account-security notification helpers."""
 
 from __future__ import annotations
 
@@ -79,4 +79,17 @@ async def send_account_link_email(recipient: str, token: str) -> None:
         f"{link}\n\n"
         "Эта ссылка имеет назначение link_email, действует ограниченное время и не может использоваться для обычного входа. "
         "Если вы не начинали связывание, проигнорируйте письмо.",
+    )
+
+
+async def send_account_linked_notification(recipient: str, providers: tuple[str, ...]) -> None:
+    provider_text = " и ".join(providers)
+    await asyncio.to_thread(
+        _send_sync,
+        recipient,
+        "Способы входа Health Compass связаны",
+        "В вашем аккаунте Health Compass успешно связаны способы входа: "
+        f"{provider_text}.\n\n"
+        "Теперь они открывают один и тот же профиль. Если вы не выполняли это действие, "
+        "завершите активные сессии и обратитесь в поддержку.",
     )
