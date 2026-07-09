@@ -106,7 +106,7 @@ def test_migration_upgrade():
 
         public_execute = conn.execute(
             text(
-                "SELECT has_function_privilege(" 
+                "SELECT has_function_privilege("
                 "'public', "
                 "'health_compass.app_can_edit_profile(uuid)', "
                 "'EXECUTE')"
