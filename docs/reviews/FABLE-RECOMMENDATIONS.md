@@ -42,6 +42,20 @@
 | Offline Emergency Card | DEFERRED | post-MVP |
 | Caregiver mode and profile transfer | DEFERRED | PHASE-06/09 |
 | Первый MVP vertical slice: login → upload → OCR → labs → chart → AI evidence → doctor report | ACCEPTED | `PRODUCT-UX-BASELINE.md` |
+| Не делать большую блокирующую health-анкету перед первым анализом | ACCEPTED | PHASE-02.5 progressive intake |
+| Собирать health context прогрессивно и по необходимости | ACCEPTED | `PROGRESSIVE-HEALTH-INTAKE.md` |
+| Сохранить активацию ≤ 5 минут и пустой dashboard с основным CTA | ACCEPTED | minimal onboarding baseline |
+| Добавить отдельный экран Health Profile | PLANNED | `/p/:profileId/health-profile` |
+| Добавить contextual intake prompt в момент интерпретации | PLANNED | `IntakePromptCard` |
+| Импортировать состояния/аллергии/лекарства из OCR только с подтверждением | ACCEPTED | PHASE-03 invariant |
+| Использовать provenance manual/document/device/import | ACCEPTED | data contract requirement |
+| Показывать нейтральную полноту без тревожного красного | ACCEPTED | contextual readiness |
+| Intake не должен превращаться в самодиагностику | ACCEPTED | AI/product safety invariant |
+| Внешний LLM получает intake context только по согласию | ACCEPTED | consent requirement |
+| Для MVP разделить пол и гендер | REJECTED | владелец принял одно поле «Пол»; усложнение только при доказанном клиническом сценарии |
+| Для MVP использовать одно поле `sex` | ACCEPTED | `male`, `female`, `not_specified`; поле опционально |
+| Включить этническую принадлежность в обычный intake | REJECTED | только будущий конкретный валидированный алгоритм; не входит в completeness |
+| Хранить исходные Fable artifacts только в чате проекта | REJECTED | исходники должны быть в GitHub reference archive |
 
 ## Правило обработки новых ревью
 
@@ -53,4 +67,5 @@
 4. `REJECTED` требует письменного обоснования.
 5. Изменения плана переносятся в `docs/PROJECT-PLAN.md`.
 6. Product/UX-рекомендации переносятся в `docs/PRODUCT-UX-BASELINE.md`.
-7. AI safety-рекомендации переносятся в `docs/AI-PRODUCT-SAFETY.md` и при необходимости в `SECURITY-INVARIANTS.md`.
+7. Intake-рекомендации переносятся в `docs/PROGRESSIVE-HEALTH-INTAKE.md`.
+8. AI safety-рекомендации переносятся в `docs/AI-PRODUCT-SAFETY.md` и при необходимости в `SECURITY-INVARIANTS.md`.
