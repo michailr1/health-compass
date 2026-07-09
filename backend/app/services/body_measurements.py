@@ -14,7 +14,11 @@ from app.models.body_measurement import BodyMeasurement
 from app.models.profile_audit_event import ProfileAuditEvent
 from app.models.user import User
 from app.schemas.health_profile import BodyMeasurementCreateRequest
-from app.services.health_profile import get_visible_profile, require_health_data_consent
+from app.services.health_profile import (
+    get_visible_profile,
+    require_health_data_consent,
+    require_profile_edit_access,
+)
 
 WEIGHT_WARNING_MIN_KG = Decimal("20")
 WEIGHT_WARNING_MAX_KG = Decimal("400")
@@ -27,6 +31,9 @@ async def list_measurements(
     include_voided: bool,
 ) -> list[BodyMeasurement]:
     await get_visible_profile(session, profile_id)
+    if include_voided:
+        await require_profile_edit_access(session, profile_id)
+
     statement = select(BodyMeasurement).where(
         BodyMeasurement.profile_id == profile_id,
         BodyMeasurement.measurement_type == "weight",
@@ -49,6 +56,7 @@ async def create_measurement(
     request_id: str | None,
 ) -> BodyMeasurement:
     await get_visible_profile(session, profile_id)
+    await require_profile_edit_access(session, profile_id)
     await require_health_data_consent(session, current_user.id)
 
     unusual = payload.value < WEIGHT_WARNING_MIN_KG or payload.value > WEIGHT_WARNING_MAX_KG
@@ -97,6 +105,8 @@ async def void_measurement(
     request_id: str | None,
 ) -> BodyMeasurement:
     await get_visible_profile(session, profile_id)
+    await require_profile_edit_access(session, profile_id)
+
     result = await session.execute(
         select(BodyMeasurement).where(
             BodyMeasurement.id == measurement_id,
