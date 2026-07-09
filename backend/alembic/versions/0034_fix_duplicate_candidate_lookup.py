@@ -19,18 +19,7 @@ APP = "health_compass_app"
 SIG = f"{S}.app_create_duplicate_resolution_intent(uuid, text, timestamptz)"
 
 
-def _create_function(use_uuid_aggregate: bool) -> None:
-    candidate_sql = (
-        "SELECT count(*), min(user_id) INTO candidate_count, candidate_user_id FROM candidates;"
-        if use_uuid_aggregate
-        else """
-          SELECT count(*) INTO candidate_count FROM candidates;
-          SELECT c.user_id INTO candidate_user_id
-          FROM candidates c
-          ORDER BY c.user_id
-          LIMIT 1;
-        """
-    )
+def _create_function() -> None:
     op.execute(
         f"""
         CREATE OR REPLACE FUNCTION {S}.app_create_duplicate_resolution_intent(
@@ -45,6 +34,7 @@ def _create_function(use_uuid_aggregate: bool) -> None:
         AS $$
         DECLARE
           context_user_id uuid;
+          candidate_user_ids uuid[];
           candidate_user_id uuid;
           candidate_count integer;
           assessment jsonb;
@@ -60,12 +50,6 @@ def _create_function(use_uuid_aggregate: bool) -> None:
             RETURN NULL;
           END IF;
 
-          CREATE TEMP TABLE IF NOT EXISTS pg_temp.hc_duplicate_candidates (
-            user_id uuid PRIMARY KEY
-          ) ON COMMIT DROP;
-          TRUNCATE pg_temp.hc_duplicate_candidates;
-
-          INSERT INTO pg_temp.hc_duplicate_candidates (user_id)
           WITH actor_emails AS (
             SELECT lower(btrim(ui.subject)) AS email
             FROM {S}.user_identities ui
@@ -78,22 +62,27 @@ def _create_function(use_uuid_aggregate: bool) -> None:
             WHERE ui.user_id = actor_user_id
               AND ui.provider = 'google'
               AND ui.claims ->> 'email_verified' = 'true'
+          ),
+          candidates AS (
+            SELECT DISTINCT ui.user_id
+            FROM {S}.user_identities ui
+            JOIN actor_emails ae ON ae.email = CASE
+              WHEN ui.provider = 'email' THEN lower(btrim(ui.subject))
+              WHEN ui.provider = 'google' THEN lower(btrim(ui.claims ->> 'email'))
+              ELSE NULL
+            END
+            WHERE ui.user_id <> actor_user_id
+              AND ui.provider IN ('google', 'email')
+              AND ui.claims ->> 'email_verified' = 'true'
           )
-          SELECT DISTINCT ui.user_id
-          FROM {S}.user_identities ui
-          JOIN actor_emails ae ON ae.email = CASE
-            WHEN ui.provider = 'email' THEN lower(btrim(ui.subject))
-            WHEN ui.provider = 'google' THEN lower(btrim(ui.claims ->> 'email'))
-            ELSE NULL
-          END
-          WHERE ui.user_id <> actor_user_id
-            AND ui.provider IN ('google', 'email')
-            AND ui.claims ->> 'email_verified' = 'true';
+          SELECT coalesce(array_agg(c.user_id ORDER BY c.user_id), ARRAY[]::uuid[])
+          INTO candidate_user_ids
+          FROM candidates c;
 
-          WITH candidates AS (
-            SELECT user_id FROM pg_temp.hc_duplicate_candidates
-          )
-          {candidate_sql}
+          candidate_count := cardinality(candidate_user_ids);
+          IF candidate_count = 1 THEN
+            candidate_user_id := candidate_user_ids[1];
+          END IF;
 
           IF candidate_count <> 1 OR candidate_user_id IS NULL THEN
             RETURN jsonb_build_object(
@@ -176,8 +165,10 @@ def _create_function(use_uuid_aggregate: bool) -> None:
 
 
 def upgrade() -> None:
-    _create_function(use_uuid_aggregate=False)
+    _create_function()
 
 
 def downgrade() -> None:
-    _create_function(use_uuid_aggregate=True)
+    # Keep the portable implementation during downgrade; the function signature
+    # and behavior remain compatible with revision 0031.
+    _create_function()
