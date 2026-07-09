@@ -8,6 +8,7 @@ import psycopg
 import pytest
 from psycopg import errors
 
+ADMIN_DSN = os.getenv("HC_TEST_DATABASE_ADMIN_DSN")
 APP_DSN = os.getenv("HC_TEST_DATABASE_APP_DSN")
 MIGRATOR_DSN = os.getenv("HC_TEST_DATABASE_MIGRATOR_DSN")
 
@@ -108,8 +109,8 @@ def test_security_definer_functions_use_empty_search_path_and_row_security_off()
 
 
 def test_concurrent_link_email_completion_creates_one_identity() -> None:
+    admin_dsn = require_dsn(ADMIN_DSN, "HC_TEST_DATABASE_ADMIN_DSN")
     app_dsn = require_dsn(APP_DSN, "HC_TEST_DATABASE_APP_DSN")
-    migrator_dsn = require_dsn(MIGRATOR_DSN, "HC_TEST_DATABASE_MIGRATOR_DSN")
 
     user_id = uuid.uuid4()
     google_identity_id = uuid.uuid4()
@@ -120,8 +121,7 @@ def test_concurrent_link_email_completion_creates_one_identity() -> None:
     browser_hash = "b" * 64
     token_hash = "t" * 64
 
-    with psycopg.connect(migrator_dsn) as connection, connection.cursor() as cursor:
-        cursor.execute("SET ROLE health_compass_rls_definer")
+    with psycopg.connect(admin_dsn) as connection, connection.cursor() as cursor:
         cursor.execute(
             """
             INSERT INTO health_compass.users (id, email, display_name, status)
@@ -182,8 +182,7 @@ def test_concurrent_link_email_completion_creates_one_identity() -> None:
         assert all(result["intent_id"] == str(intent_id) for result in results)
         assert sorted(result["replayed"] for result in results) == [False, True]
 
-        with psycopg.connect(migrator_dsn) as connection, connection.cursor() as cursor:
-            cursor.execute("SET ROLE health_compass_rls_definer")
+        with psycopg.connect(admin_dsn) as connection, connection.cursor() as cursor:
             cursor.execute(
                 """
                 SELECT count(*)
@@ -199,6 +198,5 @@ def test_concurrent_link_email_completion_creates_one_identity() -> None:
             )
             assert cursor.fetchone()[0] == "completed"
     finally:
-        with psycopg.connect(migrator_dsn) as connection, connection.cursor() as cursor:
-            cursor.execute("SET ROLE health_compass_rls_definer")
+        with psycopg.connect(admin_dsn) as connection, connection.cursor() as cursor:
             cursor.execute("DELETE FROM health_compass.users WHERE id = %s", (user_id,))
