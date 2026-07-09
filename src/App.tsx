@@ -10,6 +10,7 @@ import MagicLinkStatus from "./pages/MagicLinkStatus";
 import AccountLink from "./pages/AccountLink";
 import Dashboard from "./pages/Dashboard";
 import HealthProfilePage from "./pages/HealthProfile";
+import SignInMethodsPage from "./pages/SignInMethods";
 import Oura from "./pages/Oura";
 import Genetics from "./pages/Genetics";
 import ActionPlan from "./pages/ActionPlan";
@@ -43,6 +44,7 @@ const App = () => (
             >
               <Route index element={<Dashboard />} />
               <Route path="profile" element={<HealthProfilePage />} />
+              <Route path="sign-in-methods" element={<SignInMethodsPage />} />
               <Route path="oura" element={<Oura />} />
               <Route path="genetics" element={<Genetics />} />
               <Route path="plan" element={<ActionPlan />} />
