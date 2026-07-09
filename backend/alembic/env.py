@@ -15,6 +15,7 @@ _backend_dir = str(Path(__file__).resolve().parent.parent)
 if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
+import app.models.account_link  # noqa: E402, F401
 import app.models.audit_event  # noqa: E402, F401
 import app.models.body_measurement  # noqa: E402, F401
 import app.models.consent  # noqa: E402, F401
