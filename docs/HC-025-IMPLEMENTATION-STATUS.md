@@ -61,13 +61,13 @@ PR: `#7`
 - добавлены backend tests mapping identities и settings link plans;
 - добавлен frontend Vitest для выбора отсутствующего способа входа;
 - добавлены статические security tests для FORCE RLS, fixed purpose, PUBLIC EXECUTE revoke, flow coverage и downgrade;
-- добавлены опциональные PostgreSQL integration tests для FORCE RLS, direct app-role denial, function ACL и SECURITY DEFINER configuration.
+- добавлены опциональные PostgreSQL integration tests для FORCE RLS, direct app-role denial, function ACL и SECURITY DEFINER configuration;
+- добавлен исполняемый concurrency test: два одновременных consume одного `link_email` дают один initial completion, один replay, одну identity и один canonical `user_id`.
 
 ## Не завершено
 
 - endpoint отключения identity со step-up и жёстким запретом последней identity;
 - HC-026 для существующих дублей;
-- PostgreSQL data-path и concurrency tests одновременного completion;
 - локальный Ruff, pytest, frontend test/build и Alembic up/down cycle;
 - CI review и deployment.
 
@@ -87,8 +87,7 @@ PR: `#7`
 
 ## Следующий кодовый блок
 
-1. добавить PostgreSQL data-path/concurrency tests;
-2. реализовать step-up removal с запретом последней identity;
-3. HC-026 для существующих дублей;
-4. выполнить Ruff, pytest, frontend test/build и Alembic cycle;
-5. security review перед снятием draft.
+1. реализовать step-up removal с запретом последней identity;
+2. HC-026 для существующих дублей;
+3. выполнить Ruff, pytest, frontend test/build и Alembic cycle;
+4. security review перед снятием draft.
