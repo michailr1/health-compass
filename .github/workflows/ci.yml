@@ -78,7 +78,23 @@ jobs:
       - name: Install backend
         run: python -m pip install -e ".[dev]"
       - name: Migration upgrade/downgrade/upgrade
-        run: pytest -q tests/test_migrations.py
+        id: migration_tests
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest -q tests/test_migrations.py > migration-test.log 2>&1 || {
+            tail -n 120 migration-test.log > migration-failure-tail.log
+            cat migration-failure-tail.log
+            exit 1
+          }
+      - name: Upload migration failure tail
+        if: failure() && steps.migration_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-failure-tail
+          path: backend/migration-failure-tail.log
+          if-no-files-found: error
+          retention-days: 3
 
   frontend:
     name: Frontend lint, tests and build
