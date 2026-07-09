@@ -98,6 +98,21 @@ export interface ConsentStatus {
   active: boolean;
 }
 
+export type ClinicalSectionKey = "conditions" | "allergies" | "medications" | "supplements";
+
+export interface ClinicalSectionState {
+  reviewed: boolean;
+  confirmed_empty: boolean;
+  reviewed_at: string | null;
+  active_count: number;
+  total_count: number;
+}
+
+export interface ClinicalContextSummary {
+  profile_id: string;
+  sections: Record<ClinicalSectionKey, ClinicalSectionState>;
+}
+
 export interface DashboardSnapshot {
   id: string;
   profile_id: string;
