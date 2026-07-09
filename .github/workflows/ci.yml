@@ -155,6 +155,7 @@ jobs:
           src/lib/api.ts
           src/App.tsx
           src/components/AppLayout.tsx
+          src/components/AppLayout.test.ts
       - name: Tests
         run: npm test
       - name: Build
