@@ -8,7 +8,7 @@ import uuid
 import psycopg
 import pytest
 
-MIGRATOR_ENV = "TEST_DATABASE_MIGRATOR_URL"
+ADMIN_ENV = "TEST_DATABASE_ADMIN_URL"
 APP_ENV = "TEST_DATABASE_URL"
 
 
@@ -40,8 +40,7 @@ def rls_fixture() -> dict[str, uuid.UUID]:
         "profile": uuid.uuid4(),
     }
 
-    with psycopg.connect(_sync_url(MIGRATOR_ENV), autocommit=True) as connection:
-        connection.execute("SET ROLE health_compass_rls_definer")
+    with psycopg.connect(_sync_url(ADMIN_ENV), autocommit=True) as connection:
         for role in ("owner", "editor", "viewer", "analyzer", "outsider"):
             connection.execute(
                 """
@@ -81,12 +80,10 @@ def rls_fixture() -> dict[str, uuid.UUID]:
                 """,
                 (uuid.uuid4(), ids["profile"], ids[role], permission, ids["owner"]),
             )
-        connection.execute("RESET ROLE")
 
     yield ids
 
-    with psycopg.connect(_sync_url(MIGRATOR_ENV), autocommit=True) as connection:
-        connection.execute("SET ROLE health_compass_rls_definer")
+    with psycopg.connect(_sync_url(ADMIN_ENV), autocommit=True) as connection:
         connection.execute(
             "DELETE FROM health_compass.profile_audit_events WHERE profile_id = %s",
             (ids["profile"],),
@@ -111,7 +108,6 @@ def rls_fixture() -> dict[str, uuid.UUID]:
             "DELETE FROM health_compass.users WHERE id = ANY(%s)",
             ([ids[key] for key in ("owner", "editor", "viewer", "analyzer", "outsider")],),
         )
-        connection.execute("RESET ROLE")
 
 
 def test_read_permissions_and_cross_user_isolation(rls_fixture: dict[str, uuid.UUID]) -> None:
@@ -191,7 +187,6 @@ def test_measurement_insert_is_limited_to_owner_and_editor(
     for role in ("owner", "editor"):
         with psycopg.connect(_sync_url(APP_ENV)) as connection:
             _set_user(connection, rls_fixture[role])
-            measurement_id = uuid.uuid4()
             connection.execute(
                 """
                 INSERT INTO health_compass.body_measurements
@@ -200,7 +195,7 @@ def test_measurement_insert_is_limited_to_owner_and_editor(
                 VALUES (%s, %s, 'weight', 98.0, 'kg', now(),
                         'manual', 'confirmed', %s)
                 """,
-                (measurement_id, profile_id, rls_fixture[role]),
+                (uuid.uuid4(), profile_id, rls_fixture[role]),
             )
 
     for role in ("viewer", "analyzer", "outsider"):
