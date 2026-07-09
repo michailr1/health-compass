@@ -2,11 +2,11 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, Plus, ShieldAlert } from "lucide-react";
 
-import { apiGet, apiPost, type ClinicalContextSummary } from "@/lib/api";
+import { apiGet, apiPost, type ClinicalContextSummary, type ClinicalSectionState } from "@/lib/api";
 
-type SectionKey = "conditions" | "allergies" | "medications" | "supplements";
+export type SectionKey = "conditions" | "allergies" | "medications" | "supplements";
 
-type ClinicalRecord = {
+export type ClinicalRecord = {
   id: string;
   display_name?: string;
   substance_name?: string;
@@ -37,7 +37,7 @@ async function loadClinicalContext(profileId: string) {
   return { summary, conditions, allergies, medications, supplements };
 }
 
-function createPayload(section: SectionKey, value: string) {
+export function createClinicalPayload(section: SectionKey, value: string) {
   if (section === "conditions") {
     return { display_name: value, clinical_status: "active" };
   }
@@ -54,8 +54,15 @@ function createPayload(section: SectionKey, value: string) {
   return { display_name: value, supplement_type: "unknown", status: "active" };
 }
 
-function recordLabel(record: ClinicalRecord) {
+export function clinicalRecordLabel(record: ClinicalRecord) {
   return record.display_name ?? record.substance_name ?? "Запись";
+}
+
+export function clinicalSectionStatusLabel(state: ClinicalSectionState) {
+  if (state.confirmed_empty) return "Подтверждено отсутствие";
+  if (state.active_count > 0) return `Активных записей: ${state.active_count}`;
+  if (state.reviewed) return "Раздел просмотрен";
+  return "Пока не заполнено";
 }
 
 export function ClinicalContextSection({ profileId, consentActive }: { profileId: string; consentActive: boolean }) {
@@ -72,7 +79,7 @@ export function ClinicalContextSection({ profileId, consentActive }: { profileId
 
   const addMutation = useMutation({
     mutationFn: ({ section, name }: { section: SectionKey; name: string }) =>
-      apiPost(`/profiles/${profileId}/${section}`, createPayload(section, name)),
+      apiPost(`/profiles/${profileId}/${section}`, createClinicalPayload(section, name)),
     onSuccess: () => {
       setEditingSection(null);
       setValue("");
@@ -128,13 +135,7 @@ export function ClinicalContextSection({ profileId, consentActive }: { profileId
                 <div>
                   <h3 className="font-medium">{section.title}</h3>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {state.confirmed_empty
-                      ? "Подтверждено отсутствие"
-                      : state.active_count > 0
-                        ? `Активных записей: ${state.active_count}`
-                        : state.reviewed
-                          ? "Раздел просмотрен"
-                          : "Пока не заполнено"}
+                    {clinicalSectionStatusLabel(state)}
                   </p>
                 </div>
                 {state.confirmed_empty && <CheckCircle2 className="h-5 w-5 text-success" />}
@@ -144,7 +145,7 @@ export function ClinicalContextSection({ profileId, consentActive }: { profileId
                 <div className="mt-3 space-y-2">
                   {records.slice(0, 3).map((record) => (
                     <div key={record.id} className="rounded-xl bg-muted/40 px-3 py-2 text-sm">
-                      {recordLabel(record)}
+                      {clinicalRecordLabel(record)}
                     </div>
                   ))}
                   {records.length > 3 && (
