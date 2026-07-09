@@ -96,7 +96,8 @@ def test_duplicate_assessment_is_bound_to_current_user_context() -> None:
     duplicate_sql = read_migration("0030_add_duplicate_user_assessment.py")
     assert "current_setting('app.current_user_id', true)" in duplicate_sql
     assert "current_user_id NOT IN (first_user_id, second_user_id)" in duplicate_sql
-    assert "REVOKE ALL ON FUNCTION {helper_signature} FROM {APP}" in duplicate_sql
+    assert "for signature in (helper_signature, public_signature)" in duplicate_sql
+    assert "REVOKE ALL ON FUNCTION {signature} FROM {APP}" in duplicate_sql
     assert "GRANT EXECUTE ON FUNCTION {public_signature} TO {APP}" in duplicate_sql
     assert "'shared_verified_email', true" in duplicate_sql
     assert "'shared_verified_email', shared_verified_email" not in duplicate_sql
