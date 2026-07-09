@@ -6,11 +6,10 @@ import datetime
 import uuid
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.clinical_context import ProfileAllergy, ProfileMedication
-from app.models.consent import UserConsent
 from app.models.profile import HealthProfile
 from app.models.user import User
 from app.schemas.clinical_context import (
@@ -38,18 +37,12 @@ async def _get_profile(session: AsyncSession, profile_id: uuid.UUID) -> HealthPr
     return profile
 
 
-async def _require_active_consent(session: AsyncSession, profile: HealthProfile) -> None:
+async def _require_active_consent(session: AsyncSession, profile_id: uuid.UUID) -> None:
     result = await session.execute(
-        select(UserConsent.id)
-        .where(
-            UserConsent.user_id == profile.owner_user_id,
-            UserConsent.consent_type == "health_data_processing",
-            UserConsent.revoked_at.is_(None),
-        )
-        .order_by(UserConsent.accepted_at.desc())
-        .limit(1)
+        text("SELECT health_compass.app_profile_has_active_health_consent(:profile_id)"),
+        {"profile_id": profile_id},
     )
-    if result.scalar_one_or_none() is None:
+    if not bool(result.scalar_one()):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Active health data processing consent is required",
@@ -59,7 +52,7 @@ async def _require_active_consent(session: AsyncSession, profile: HealthProfile)
 async def _prepare_mutation(session: AsyncSession, profile_id: uuid.UUID) -> HealthProfile:
     profile = await _get_profile(session, profile_id)
     await require_profile_edit_access(session, profile_id)
-    await _require_active_consent(session, profile)
+    await _require_active_consent(session, profile_id)
     return profile
 
 
@@ -86,7 +79,7 @@ async def create_allergy(
     profile = await _prepare_mutation(session, profile_id)
     allergy = ProfileAllergy(
         profile_id=profile_id,
-        allergen=payload.allergen.strip(),
+        allergen=payload.allergen,
         reaction=_normalize_optional(payload.reaction),
         severity=payload.severity,
         status="active",
@@ -121,10 +114,9 @@ async def update_allergy(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Allergy not found")
 
     changes = payload.model_dump(exclude_unset=True)
-    for field in ("allergen", "reaction", "notes"):
+    for field in ("reaction", "notes"):
         if field in changes:
-            value = changes[field]
-            changes[field] = value.strip() if field == "allergen" and value is not None else _normalize_optional(value)
+            changes[field] = _normalize_optional(changes[field])
     for field, value in changes.items():
         setattr(allergy, field, value)
     allergy.updated_by_user_id = current_user.id
@@ -153,7 +145,7 @@ async def create_medication(
     profile = await _prepare_mutation(session, profile_id)
     medication = ProfileMedication(
         profile_id=profile_id,
-        medication_name=payload.medication_name.strip(),
+        medication_name=payload.medication_name,
         dose_text=_normalize_optional(payload.dose_text),
         schedule_text=_normalize_optional(payload.schedule_text),
         indication=_normalize_optional(payload.indication),
@@ -190,10 +182,9 @@ async def update_medication(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Medication not found")
 
     changes = payload.model_dump(exclude_unset=True)
-    for field in ("medication_name", "dose_text", "schedule_text", "indication", "notes"):
+    for field in ("dose_text", "schedule_text", "indication", "notes"):
         if field in changes:
-            value = changes[field]
-            changes[field] = value.strip() if field == "medication_name" and value is not None else _normalize_optional(value)
+            changes[field] = _normalize_optional(changes[field])
     started_on = changes.get("started_on", medication.started_on)
     ended_on = changes.get("ended_on", medication.ended_on)
     if started_on and ended_on and ended_on < started_on:
