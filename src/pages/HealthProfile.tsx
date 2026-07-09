@@ -15,6 +15,14 @@ const CONSENT_VERSION = "health-data-processing-v1";
 const WEIGHT_WARNING_MIN_KG = 20;
 const WEIGHT_WARNING_MAX_KG = 400;
 
+function detectBrowserTimezone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
+
 async function loadProfilePage() {
   const profiles = await apiGet<HealthProfile[]>("/profiles");
   const first = profiles[0];
@@ -35,6 +43,7 @@ export default function HealthProfilePage() {
   });
   const profile = data?.profile ?? null;
   const consentActive = Boolean(data?.consent?.active);
+  const detectedTimezone = useMemo(detectBrowserTimezone, []);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [weight, setWeight] = useState("");
@@ -46,7 +55,6 @@ export default function HealthProfilePage() {
       date_of_birth: profile.date_of_birth ?? "",
       sex: profile.sex ?? "",
       height_cm: profile.height_cm ?? "",
-      timezone: profile.timezone ?? "",
     });
   }, [profile?.id]);
 
@@ -71,7 +79,7 @@ export default function HealthProfilePage() {
         payload.date_of_birth = draft.date_of_birth || null;
         payload.sex = draft.sex || null;
         payload.height_cm = draft.height_cm || null;
-        payload.timezone = draft.timezone || null;
+        if (detectedTimezone) payload.timezone = detectedTimezone;
       }
 
       const medicalUnchanged =
@@ -79,12 +87,12 @@ export default function HealthProfilePage() {
         (payload.date_of_birth === profile.date_of_birth &&
           payload.sex === profile.sex &&
           String(payload.height_cm ?? "") === String(profile.height_cm ?? "") &&
-          payload.timezone === profile.timezone);
+          (!detectedTimezone || detectedTimezone === profile.timezone));
       const unchanged = payload.display_name === profile.display_name && medicalUnchanged;
       if (!unchanged && draft.display_name.trim()) patchMutation.mutate(payload);
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [consentActive, draft, profile?.id]);
+  }, [consentActive, detectedTimezone, draft, profile?.id]);
 
   const consentMutation = useMutation({
     mutationFn: () =>
@@ -196,7 +204,6 @@ export default function HealthProfilePage() {
             </select>
           </label>
           <Field label="Рост, см" type="number" value={draft.height_cm ?? ""} disabled={!consentActive} onChange={(value) => setDraft((state) => ({ ...state, height_cm: value }))} />
-          <Field label="Часовой пояс" value={draft.timezone ?? ""} disabled={!consentActive} onChange={(value) => setDraft((state) => ({ ...state, timezone: value }))} />
         </div>
         <div className="mt-3 text-xs text-muted-foreground">
           {saveState === "saving" && "Сохраняется…"}
