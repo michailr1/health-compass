@@ -10,6 +10,9 @@ export default function AccountLink() {
   const status = searchParams.get("status");
   const hasExistingDuplicates = status === "existing-duplicates";
   const [emailState, setEmailState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [declineState, setDeclineState] = useState<"idle" | "sending" | "declined" | "error">("idle");
+  const [separateConfirmVisible, setSeparateConfirmVisible] = useState(false);
+  const [separateState, setSeparateState] = useState<"idle" | "sending" | "error">("idle");
 
   const googleConfirmationUrl = intent
     ? `/api/auth/link/google/start?intent_id=${encodeURIComponent(intent)}`
@@ -29,6 +32,44 @@ export default function AccountLink() {
       setEmailState("sent");
     } catch {
       setEmailState("error");
+    }
+  }
+
+  async function declineLinking() {
+    if (!intent || declineState === "sending") return;
+    setDeclineState("sending");
+    try {
+      const response = await fetch("/api/auth/link/intents/decline", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intent_id: intent }),
+      });
+      if (!response.ok) throw new Error("decline failed");
+      setDeclineState("declined");
+    } catch {
+      setDeclineState("error");
+    }
+  }
+
+  async function createSeparateAccount() {
+    if (!intent || separateState === "sending") return;
+    setSeparateState("sending");
+    try {
+      const response = await fetch("/api/auth/link/intents/create-separate-account", {
+        method: "POST",
+        credentials: "include",
+        redirect: "follow",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          intent_id: intent,
+          confirmation: "CREATE_SEPARATE_ACCOUNT",
+        }),
+      });
+      if (!response.ok) throw new Error("separate account failed");
+      window.location.assign(response.url || "/app");
+    } catch {
+      setSeparateState("error");
     }
   }
 
@@ -60,7 +101,7 @@ export default function AccountLink() {
               : "Адрес уже связан с существующим профилем. Подтвердите второй способ входа, чтобы Google и ссылка по email всегда открывали один профиль."}
           </p>
 
-          {!hasExistingDuplicates && required === "google" && (
+          {!hasExistingDuplicates && declineState !== "declined" && required === "google" && (
             <div className="mt-6 space-y-3">
               <Button asChild className="w-full">
                 <a href={googleConfirmationUrl}>Подтвердить через Google</a>
@@ -71,7 +112,7 @@ export default function AccountLink() {
             </div>
           )}
 
-          {!hasExistingDuplicates && required === "email" && (
+          {!hasExistingDuplicates && declineState !== "declined" && required === "email" && (
             <div className="mt-6 space-y-3">
               <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-left">
                 <div className="flex items-start gap-3">
@@ -105,9 +146,70 @@ export default function AccountLink() {
             </div>
           )}
 
+          {!hasExistingDuplicates && intent && declineState === "idle" && (
+            <div className="mt-6 space-y-3">
+              <Button type="button" variant="outline" className="w-full" onClick={declineLinking}>
+                Не связывать аккаунты
+              </Button>
+            </div>
+          )}
+
+          {declineState === "sending" && (
+            <p className="mt-6 text-sm text-muted-foreground">Сохраняем ваш выбор…</p>
+          )}
+
+          {declineState === "error" && (
+            <p className="mt-6 text-sm text-destructive">Не удалось отменить связывание.</p>
+          )}
+
+          {declineState === "declined" && (
+            <div className="mt-6 space-y-4 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-left">
+              <div className="text-sm font-medium">Связывание отменено</div>
+              <p className="text-xs leading-5 text-muted-foreground">
+                Отдельный аккаунт будет иметь собственный профиль и отдельные медицинские данные. Они не будут автоматически объединены с найденным профилем.
+              </p>
+              {!separateConfirmVisible ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setSeparateConfirmVisible(true)}
+                >
+                  Создать отдельный аккаунт
+                </Button>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs font-medium text-destructive">
+                    Подтвердите ещё раз: создать отдельный профиль и не связывать способы входа?
+                  </p>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="w-full"
+                    disabled={separateState === "sending"}
+                    onClick={createSeparateAccount}
+                  >
+                    {separateState === "sending" ? "Создаём…" : "Да, создать отдельный аккаунт"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => setSeparateConfirmVisible(false)}
+                  >
+                    Назад
+                  </Button>
+                </div>
+              )}
+              {separateState === "error" && (
+                <p className="text-xs text-destructive">Не удалось создать отдельный аккаунт.</p>
+              )}
+            </div>
+          )}
+
           <div className="mt-6 space-y-3">
-            <Button asChild variant="outline" className="w-full">
-              <Link to="/login">Отказаться и вернуться ко входу</Link>
+            <Button asChild variant="ghost" className="w-full">
+              <Link to="/login">Вернуться ко входу</Link>
             </Button>
           </div>
 
