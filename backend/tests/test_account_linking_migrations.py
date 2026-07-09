@@ -46,6 +46,14 @@ def test_result_completion_migration_has_real_downgrade() -> None:
     assert "RuntimeError" not in downgrade
 
 
+def test_separate_account_claim_clears_declined_timestamp() -> None:
+    fix_sql = read_migration("0036_fix_separate_account_decline_transition.py")
+    assert "declined_at = NULL" in fix_sql
+    assert "status = 'cancelled'" in fix_sql
+    assert "REVOKE ALL ON FUNCTION {SIG} FROM PUBLIC" in fix_sql
+    assert "GRANT EXECUTE ON FUNCTION {SIG} TO {APP}" in fix_sql
+
+
 def test_identity_removal_uses_separate_tables_purpose_and_force_rls() -> None:
     removal_sql = read_migration("0029_add_identity_removal_step_up.py")
     assert "identity_removal_intents" in removal_sql
@@ -173,6 +181,7 @@ def test_security_definer_functions_revoke_public_execute() -> None:
         "0031_add_duplicate_resolution_intents.py",
         "0033_fix_duplicate_absorption_context.py",
         "0034_fix_duplicate_candidate_lookup.py",
+        "0036_fix_separate_account_decline_transition.py",
     ):
         migration = read_migration(filename)
         assert "SECURITY DEFINER" in migration
