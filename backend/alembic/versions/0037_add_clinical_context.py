@@ -28,6 +28,8 @@ def upgrade() -> None:
         """
     )
 
+    op.execute(f"GRANT SELECT ON {S}.health_profiles, {S}.user_consents TO {R}")
+    op.execute(f"GRANT CREATE ON SCHEMA {S} TO {R}")
     op.execute(
         f"""
         CREATE OR REPLACE FUNCTION {S}.app_profile_has_active_health_consent(
@@ -53,6 +55,7 @@ def upgrade() -> None:
         """
     )
     op.execute(f"ALTER FUNCTION {CONSENT_SIG} OWNER TO {R}")
+    op.execute(f"REVOKE CREATE ON SCHEMA {S} FROM {R}")
     op.execute(f"REVOKE ALL ON FUNCTION {CONSENT_SIG} FROM PUBLIC")
     op.execute(f"REVOKE ALL ON FUNCTION {CONSENT_SIG} FROM {APP}")
     op.execute(f"GRANT EXECUTE ON FUNCTION {CONSENT_SIG} TO {APP}")
