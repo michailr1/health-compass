@@ -65,6 +65,43 @@ def upgrade() -> None:
         )
         op.execute(f"GRANT UPDATE (canonical_concept_id) ON {S}.{table} TO {APP}")
 
+    op.execute(
+        f"""
+        CREATE OR REPLACE FUNCTION {S}.sync_clinical_dictionary_concept()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $$
+        BEGIN
+          IF NEW.code_system = 'health_compass' AND NEW.code IS NOT NULL THEN
+            BEGIN
+              NEW.canonical_concept_id := NEW.code::uuid;
+            EXCEPTION WHEN invalid_text_representation THEN
+              RAISE EXCEPTION 'invalid health_compass concept id';
+            END;
+          ELSIF NEW.code_system IS DISTINCT FROM 'health_compass' THEN
+            NEW.canonical_concept_id := NULL;
+          END IF;
+          RETURN NEW;
+        END;
+        $$
+        """
+    )
+    for table in (
+        "profile_conditions",
+        "profile_allergies",
+        "profile_medications",
+        "profile_supplements",
+    ):
+        op.execute(
+            f"""
+            CREATE TRIGGER trg_sync_{table}_dictionary_concept
+            BEFORE INSERT OR UPDATE OF code_system, code
+            ON {S}.{table}
+            FOR EACH ROW
+            EXECUTE FUNCTION {S}.sync_clinical_dictionary_concept()
+            """
+        )
+
     op.execute(f"GRANT SELECT ON {S}.clinical_dictionary_concepts TO {APP}")
     op.execute(f"GRANT SELECT ON {S}.clinical_dictionary_aliases TO {APP}")
     op.execute(f"REVOKE INSERT, UPDATE, DELETE ON {S}.clinical_dictionary_concepts FROM {APP}")
@@ -92,6 +129,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    for table in (
+        "profile_conditions",
+        "profile_allergies",
+        "profile_medications",
+        "profile_supplements",
+    ):
+        op.execute(f"DROP TRIGGER IF EXISTS trg_sync_{table}_dictionary_concept ON {S}.{table}")
+    op.execute(f"DROP FUNCTION IF EXISTS {S}.sync_clinical_dictionary_concept()")
     for table in (
         "profile_conditions",
         "profile_allergies",
