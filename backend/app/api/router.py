@@ -17,6 +17,7 @@ from app.api.routes.health_profile import router as health_profile_router
 from app.api.routes.identity import router as user_router
 from app.api.routes.identity_removal import router as identity_removal_router
 from app.api.routes.private import router as private_router
+from app.api.routes.profile_completion import router as profile_completion_router
 from app.api.routes.sign_in_methods import router as sign_in_methods_router
 from app.api.routes.version import router as version_router
 
@@ -27,6 +28,7 @@ api_router.include_router(version_router)
 api_router.include_router(private_router)
 api_router.include_router(user_router)
 api_router.include_router(health_profile_router)
+api_router.include_router(profile_completion_router)
 api_router.include_router(clinical_dictionary_router)
 api_router.include_router(contextual_intake_router)
 # Transition-safe review-state routes must be registered before the legacy
