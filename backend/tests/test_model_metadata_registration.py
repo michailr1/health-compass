@@ -1,8 +1,8 @@
 """Regression coverage for model registration required by Clinical Context FKs."""
 
-from app.db.base import Base
 import app.models  # noqa: F401
 import app.models.clinical_context  # noqa: F401
+from app.db.base import Base
 
 
 def test_clinical_dictionary_foreign_keys_resolve_in_shared_metadata() -> None:
