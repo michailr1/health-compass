@@ -1,7 +1,7 @@
 # HC-014 — Clinical Dictionaries v2
 
-Status: foundation deployed, production seed import pending  
-Production code: `e1b4dce3db2719ddce13f37f7248369f43f3b163`  
+Status: foundation and reviewed seed set deployed  
+Production code: `f3d7e8fedcdad5448abce5c74c1bdb698e5e82e6`  
 Production Alembic: `0045 (head)`
 
 ## Goal
@@ -128,31 +128,67 @@ The importer was corrected to:
 
 Fix commit deployed to production: `e1b4dce3db2719ddce13f37f7248369f43f3b163`.
 
-The corrected importer has passed compile, CI, dry-run and production health checks. The actual seed apply has not yet been retried.
+### 2026-07-10 — reviewed seed set imported successfully
+
+Backup before retry:
+
+`/opt/health-compass/backups/clinical_dictionary_before_seed_retry_20260710T224649Z.sql.gz`
+
+Import result:
+
+- all three packages passed dry-run;
+- all three packages applied successfully;
+- repeated apply was idempotent;
+- Alembic remained `0045`;
+- backend stayed healthy;
+- frontend and user medical records were untouched.
+
+Final database state:
+
+- 69 total concepts;
+- 107 aliases;
+- 0 duplicate concept business keys;
+- 0 duplicate aliases;
+- 0 orphan aliases.
+
+The database contains 69 concepts rather than 66 because 9 concepts already existed before the reviewed import and 6 of the 66 reviewed business keys overlapped those existing rows. Therefore:
+
+- all 66 reviewed business keys are represented;
+- 60 new concepts were inserted;
+- 6 reviewed concepts reused existing rows;
+- 3 pre-existing concepts were outside the reviewed set;
+- all 9 pre-existing UUIDs were preserved.
+
+Representative search checks passed for `головная боль`, `гипертония`, `пенициллин`, `витамин д`, `магний`, `headache` and `magnesium`.
+
+## Known content gaps after first reviewed import
+
+The following search forms were not present in the reviewed seed manifests and therefore did not match:
+
+- `мигрень` / `migraine`;
+- `hypertension`;
+- singular English `penicillin`;
+- English phrase `vitamin d`.
+
+These are seed-content gaps, not importer defects. Existing related terms include `high blood pressure`, `penicillins`, `пенициллин`, `cholecalciferol` and `холекальциферол`. Free-text entry remains available for all unmatched terms.
+
+The next curated content patch should add the missing aliases only after review, using the same versioned and idempotent workflow.
 
 ## Delivery slices
 
 1. Foundation: normalization and deterministic ranking — complete and deployed.
-2. Seed format: validation and idempotent import — complete; corrected importer deployed.
-3. Russian conditions and allergens — reviewed seed prepared, import pending.
-4. Russian medication ingredients — reviewed seed prepared, import pending.
-5. Russian supplement ingredients — reviewed seed prepared, import pending.
-6. Explicit personal-term reconciliation — not started.
-7. Official source ingestion and traceable mappings — not started.
+2. Seed format: validation and idempotent import — complete and verified in production.
+3. Russian conditions and allergens — first reviewed package deployed.
+4. Russian medication ingredients — first reviewed package deployed.
+5. Russian supplement ingredients — first reviewed package deployed.
+6. Alias coverage expansion — next content task.
+7. Explicit personal-term reconciliation — not started.
+8. Official source ingestion and traceable mappings — not started.
 
 ## Migration sequencing
 
 Production is at Alembic `0045`, while PR #25 owns revision `0046`. HC-014 introduces no migration and must not create a parallel head.
 
-## Next production step
+## Next step
 
-Repeat the controlled import of all three reviewed batches using the corrected importer. Required checks:
-
-- current production code includes `e1b4dce3...` or later;
-- Alembic remains `0045`;
-- backup exists before apply;
-- apply packages sequentially and stop on first error;
-- verify 66 total reviewed concepts are represented after merging with pre-existing rows;
-- verify 107 aliases for the reviewed concepts;
-- verify zero duplicate business keys;
-- verify representative Russian and English searches through the API and UI.
+Prepare a small reviewed alias-expansion package for the confirmed gaps, test it in dry-run and production-like PostgreSQL, and apply it only through the same backup-first controlled import process.
