@@ -1,0 +1,212 @@
+{
+  "version": "ru-RU-pilot-v1",
+  "source_label": "Health Compass Russian curated pilot",
+  "concepts": [
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Головная боль",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-headache",
+      "qualifier": "симптом",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Болит голова", "language": "ru", "kind": "common"},
+        {"text": "Headache", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Изжога",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-heartburn",
+      "qualifier": "симптом",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Жжение за грудиной", "language": "ru", "kind": "common"},
+        {"text": "Heartburn", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Бессонница",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-insomnia",
+      "qualifier": "состояние",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Нарушение сна", "language": "ru", "kind": "common"},
+        {"text": "Insomnia", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Повышенное артериальное давление",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-high-blood-pressure",
+      "qualifier": "состояние",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Высокое давление", "language": "ru", "kind": "common"},
+        {"text": "Гипертония", "language": "ru", "kind": "common"},
+        {"text": "High blood pressure", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Пенициллины",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-penicillins",
+      "qualifier": "группа лекарств",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Пенициллин", "language": "ru", "kind": "common"},
+        {"text": "Penicillins", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Арахис",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-peanut",
+      "qualifier": "пищевой аллерген",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Земляной орех", "language": "ru", "kind": "common"},
+        {"text": "Peanut", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Лактоза",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "intolerance-lactose",
+      "qualifier": "непереносимость",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Непереносимость лактозы", "language": "ru", "kind": "common"},
+        {"text": "Lactose", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Берёзовая пыльца",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-birch-pollen",
+      "qualifier": "пыльцевой аллерген",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Пыльца березы", "language": "ru", "kind": "spelling"},
+        {"text": "Birch pollen", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "medication",
+      "display_name": "Ибупрофен",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-ibuprofen",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Ibuprofen", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "medication",
+      "display_name": "Парацетамол",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-paracetamol",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Paracetamol", "language": "en", "kind": "international"},
+        {"text": "Acetaminophen", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "medication",
+      "display_name": "Метформин",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-metformin",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Metformin", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "medication",
+      "display_name": "Амоксициллин",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-amoxicillin",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Amoxicillin", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Витамин D3",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-vitamin-d3",
+      "qualifier": "ингредиент",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Холекальциферол", "language": "ru", "kind": "chemical"},
+        {"text": "Cholecalciferol", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Магний",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-magnesium",
+      "qualifier": "ингредиент",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Magnesium", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Омега-3",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-omega-3",
+      "qualifier": "ингредиент",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Омега 3", "language": "ru", "kind": "spelling"},
+        {"text": "Omega-3", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Ашваганда",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-ashwagandha",
+      "qualifier": "растительный ингредиент",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Витания снотворная", "language": "ru", "kind": "botanical"},
+        {"text": "Withania somnifera", "language": "la", "kind": "botanical"},
+        {"text": "Ashwagandha", "language": "en", "kind": "international"}
+      ]
+    }
+  ]
+}
