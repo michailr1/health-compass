@@ -25,8 +25,10 @@ api_router.include_router(version_router)
 api_router.include_router(private_router)
 api_router.include_router(user_router)
 api_router.include_router(health_profile_router)
-api_router.include_router(clinical_context_router)
+# Transition-safe review-state routes must be registered before the legacy
+# Clinical Context routes because several paths intentionally overlap.
 api_router.include_router(clinical_review_router)
+api_router.include_router(clinical_context_router)
 api_router.include_router(login_router)
 api_router.include_router(email_auth_router)
 api_router.include_router(account_link_router)
