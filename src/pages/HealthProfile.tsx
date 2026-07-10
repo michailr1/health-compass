@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Loader2, Scale, ShieldCheck, UserRound } from "lucide-react";
+import { CheckCircle2, Loader2, ShieldCheck, UserRound } from "lucide-react";
 
 import { ClinicalContextSection } from "@/components/ClinicalContextSection";
 import {
@@ -239,8 +239,34 @@ export default function HealthProfilePage() {
               <option value="not_specified">Предпочитаю не указывать</option>
             </select>
           </label>
-          <Field label="Рост, см" type="number" value={draft.height_cm ?? ""} disabled={!consentActive} onChange={(value) => setDraft((state) => ({ ...state, height_cm: value }))} />
+          <div className="grid grid-cols-2 gap-3 md:col-span-1">
+            <Field label="Рост, см" type="number" value={draft.height_cm ?? ""} disabled={!consentActive} onChange={(value) => setDraft((state) => ({ ...state, height_cm: value }))} />
+            <label className="space-y-1.5 text-sm">
+              <span className="text-muted-foreground">Вес, кг</span>
+              <div className="flex gap-2">
+                <input disabled={!consentActive} type="number" step="0.1" min="0" value={weight} onChange={(event) => setWeight(event.target.value)} className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2.5 disabled:opacity-60" />
+                <button type="button" aria-label="Сохранить вес" disabled={!consentActive || !weight || weightMutation.isPending} onClick={addWeight} className="rounded-xl bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
+                  {weightMutation.isPending ? "…" : "Сохранить"}
+                </button>
+              </div>
+            </label>
+          </div>
         </div>
+
+        {weightMutation.error && <p className="mt-2 text-sm text-destructive">{weightMutation.error.message}</p>}
+        {(data?.measurements ?? []).length > 0 && (
+          <details className="mt-4 rounded-xl border border-border/60 p-3 text-sm">
+            <summary className="cursor-pointer font-medium">История веса · {(data?.measurements ?? []).length}</summary>
+            <div className="mt-3 space-y-2">
+              {(data?.measurements ?? []).map((item) => (
+                <div key={item.id} className="flex items-center justify-between rounded-xl border border-border/60 p-3 text-sm">
+                  <span>{Number(item.value).toLocaleString("ru-RU")} кг</span>
+                  <span className="text-muted-foreground">{new Date(item.measured_at).toLocaleString("ru-RU")}</span>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
 
         {consentActive && (
           <div className="mt-4 rounded-xl border border-border/60 p-3 text-sm">
@@ -301,29 +327,6 @@ export default function HealthProfilePage() {
               <span>{ready ? `Готово: ${label}` : `Можно дополнить: ${label}`}</span>
             </div>
           ))}
-        </div>
-      </section>
-
-      <section className="hm-card p-5 md:p-6">
-        <div className="mb-4 flex items-center gap-2">
-          <Scale className="h-5 w-5 text-primary" />
-          <h2 className="font-display text-lg font-semibold">Вес</h2>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <input disabled={!consentActive} type="number" step="0.1" min="0" value={weight} onChange={(event) => setWeight(event.target.value)} placeholder="Вес, кг" className="rounded-xl border border-border bg-background px-3 py-2.5" />
-          <button disabled={!consentActive || !weight || weightMutation.isPending} onClick={addWeight} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50">
-            Добавить измерение
-          </button>
-        </div>
-        {weightMutation.error && <p className="mt-2 text-sm text-destructive">{weightMutation.error.message}</p>}
-        <div className="mt-4 space-y-2">
-          {(data?.measurements ?? []).map((item) => (
-            <div key={item.id} className="flex items-center justify-between rounded-xl border border-border/60 p-3 text-sm">
-              <span>{Number(item.value).toLocaleString("ru-RU")} кг</span>
-              <span className="text-muted-foreground">{new Date(item.measured_at).toLocaleString("ru-RU")}</span>
-            </div>
-          ))}
-          {(data?.measurements ?? []).length === 0 && <p className="text-sm text-muted-foreground">Измерений пока нет.</p>}
         </div>
       </section>
     </div>
