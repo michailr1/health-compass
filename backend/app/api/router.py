@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from app.api.routes.account_link import router as account_link_router
 from app.api.routes.auth import router as login_router
 from app.api.routes.clinical_context import router as clinical_context_router
+from app.api.routes.clinical_dictionary import router as clinical_dictionary_router
 from app.api.routes.clinical_review import router as clinical_review_router
 from app.api.routes.duplicate_resolution import router as duplicate_resolution_router
 from app.api.routes.email_auth import router as email_auth_router
@@ -25,6 +26,7 @@ api_router.include_router(version_router)
 api_router.include_router(private_router)
 api_router.include_router(user_router)
 api_router.include_router(health_profile_router)
+api_router.include_router(clinical_dictionary_router)
 # Transition-safe review-state routes must be registered before the legacy
 # Clinical Context routes because several paths intentionally overlap.
 api_router.include_router(clinical_review_router)
