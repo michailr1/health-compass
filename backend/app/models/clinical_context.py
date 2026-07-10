@@ -26,6 +26,8 @@ class ProfileCondition(Base):
     code_system: Mapped[str | None] = mapped_column(String(64), nullable=True)
     code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     clinical_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    onset_timing: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    presence_pattern: Mapped[str | None] = mapped_column(String(32), nullable=True)
     onset_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
     resolved_date: Mapped[datetime.date | None] = mapped_column(Date, nullable=True)
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
