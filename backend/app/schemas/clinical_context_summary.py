@@ -26,6 +26,11 @@ class ClinicalSectionReviewRequest(BaseModel):
             value["review_state"] = "confirmed_none" if value.pop("confirmed_empty") else "unknown"
         return value
 
+    @property
+    def confirmed_empty(self) -> bool:
+        """Backward-compatible read view for legacy callers and tests."""
+        return self.review_state == "confirmed_none"
+
 
 class ClinicalSectionState(BaseModel):
     review_state: StoredReviewState
