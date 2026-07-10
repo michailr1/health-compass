@@ -14,7 +14,9 @@ export default function ProfileQuestionnairePage() {
   return (
     <div className="space-y-6">
       {profile && <ProfileCompletionCard profileId={profile.id} />}
-      <HealthProfilePage />
+      <div id="basic-profile" className="scroll-mt-24">
+        <HealthProfilePage />
+      </div>
     </div>
   );
 }
