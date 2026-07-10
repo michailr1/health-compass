@@ -1,31 +1,33 @@
 # HC-012c — Contextual Intake Audit
 
-Status: `IN PROGRESS`  
+Status: `IMPLEMENTED — CI IN PROGRESS`  
 Base: `main` at `1b0bbe8bd63b180de9f73d6ecda5a85a773058c5`  
 Production: untouched
 
 ## Product goal
 
-When Health Compass encounters a relevant health fact during an analysis or conversation, the user must be able to choose one of four explicit outcomes:
+When Health Compass encounters a relevant health fact during an analysis or conversation, the user chooses one explicit outcome:
 
 1. `save_to_profile` — save as a durable profile fact;
 2. `analysis_only` — use only for the current analysis;
 3. `defer` — not now;
-4. `explain` — show why the information is useful without committing any data.
+4. `explain` — show why the information is useful without committing data.
 
-No option may be preselected. The user must understand the persistence boundary before choosing.
+No option is preselected.
 
-## Core invariants
+## Implemented invariants
 
-- `analysis_only` data is never written to durable Clinical Context tables.
-- `defer` records only the decision to defer, not the proposed health fact.
-- `explain` is a UI action and must not be treated as consent or persistence.
-- `save_to_profile` reuses the same validated create services and audit/RLS controls as normal Clinical Context entry.
-- outsider access remains 404 through profile visibility rules.
-- one request equals one transaction.
+- `analysis_only` rejects `record_payload` at schema validation.
+- `defer` rejects both durable and transient payloads.
+- `explain` remains a local UI action and is not persisted.
+- `save_to_profile` validates through the existing section-specific Clinical Context schemas.
+- durable saves reuse the existing create service, consent checks, audit events and review-state clearing.
+- decision audit stores no proposed health-fact text.
+- outsider access remains governed by profile visibility and RLS.
+- one request remains one transaction.
 - no AI diagnosis inference.
 
-## Proposed backend model
+## Implemented backend model
 
 Table: `profile_intake_decisions`
 
@@ -35,7 +37,6 @@ Table: `profile_intake_decisions`
 - `context_type varchar(64)`;
 - `decision varchar(32)`;
 - `proposed_section varchar(32) nullable`;
-- `proposed_display_text varchar(255) nullable`;
 - `analysis_scope_id uuid nullable`;
 - `decided_by_user_id uuid`;
 - `decided_at timestamptz`;
@@ -47,32 +48,31 @@ Stored decisions:
 - `analysis_only`;
 - `defer`.
 
-`explain` is intentionally not stored.
+The app role has SELECT and INSERT only. UPDATE and DELETE are revoked. RLS and FORCE RLS are enabled.
 
-The table stores only minimal prompt metadata. For `analysis_only`, the actual transient payload belongs to the analysis request/session boundary and must not be persisted here.
-
-## Proposed API
+## Implemented API
 
 ```text
 POST /profiles/{profile_id}/contextual-intake/decisions
 ```
 
-Request:
+For `save_to_profile`, the request contains `proposed_section` and `record_payload`. The service validates the payload with the existing section schema and creates the record using the standard Clinical Context service.
+
+For `analysis_only`, the request contains an `analysis_scope_id` but cannot contain `record_payload`.
+
+For `defer`, neither `analysis_scope_id` nor `record_payload` is accepted.
+
+Response:
 
 ```json
 {
-  "prompt_key": "analysis.medication.detected",
-  "context_type": "clinical_context",
+  "decision_id": "uuid",
   "decision": "analysis_only",
-  "proposed_section": "medications",
-  "proposed_display_text": "Метформин",
-  "analysis_scope_id": "uuid"
+  "record_id": null
 }
 ```
 
-For `save_to_profile`, the request includes a validated section payload and the service delegates to existing Clinical Context creation.
-
-## Frontend component
+## Implemented frontend component
 
 `IntakePromptCard`
 
@@ -80,18 +80,22 @@ For `save_to_profile`, the request includes a validated section payload and the 
 - `Сохранить в профиль`;
 - `Только для этого анализа`;
 - `Не сейчас`;
-- reusable `Зачем это нужно` disclosure;
-- neutral, non-blocking copy;
+- local `Зачем это нужно` disclosure;
+- explicit persistence boundary copy;
 - mobile-first controls;
-- explicit persistence label for every action.
+- deterministic callback contract.
 
-## First implementation slice
+## Tests
 
-1. Migration and RLS for decision audit.
-2. Backend decision schema/service/API.
-3. `IntakePromptCard` as reusable component with deterministic callbacks.
-4. Unit and RLS tests.
-5. No attachment to an AI chat or document flow yet; integration points remain explicit props/API calls.
+Added coverage for:
+
+- save-to-profile request shape;
+- analysis-only scope requirement;
+- rejection of analysis-only record payloads;
+- defer payload rejection;
+- append-only table privileges;
+- FORCE RLS;
+- migration head `0045`.
 
 ## Out of scope
 
@@ -99,4 +103,5 @@ For `save_to_profile`, the request includes a validated section payload and the 
 - AI extraction;
 - automatic prompt generation;
 - persistent storage of analysis-only health facts;
+- attachment to a concrete chat/analysis flow;
 - production rollout.
