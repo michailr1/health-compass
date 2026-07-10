@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, HelpCircle, Loader2, Plus, ShieldAlert } from "lucide-react";
 
+import { ClinicalTypeahead, type ClinicalSelection } from "@/components/ClinicalTypeahead";
 import {
   apiGet,
   apiPatch,
@@ -34,12 +35,7 @@ const SECTIONS: Array<{
     emptyLabel: "аллергий и непереносимостей нет",
     placeholder: "Например, пенициллин или арахис",
   },
-  {
-    key: "medications",
-    title: "Лекарства",
-    emptyLabel: "лекарств нет",
-    placeholder: "Название лекарства",
-  },
+  { key: "medications", title: "Лекарства", emptyLabel: "лекарств нет", placeholder: "Название лекарства" },
   { key: "supplements", title: "Добавки", emptyLabel: "добавок нет", placeholder: "Например, магний" },
 ];
 
@@ -54,13 +50,34 @@ async function loadClinicalContext(profileId: string) {
   return { summary, conditions, allergies, medications, supplements };
 }
 
-export function createClinicalPayload(section: SectionKey, value: string) {
-  if (section === "conditions") return { display_name: value, clinical_status: "active" };
-  if (section === "allergies") {
-    return { substance_name: value, allergy_type: "unknown", clinical_status: "active" };
+export function createClinicalPayload(section: SectionKey, input: string | ClinicalSelection) {
+  const selection: ClinicalSelection = typeof input === "string"
+    ? { displayText: input, canonicalConceptId: null, source: "free_text" }
+    : input;
+  const provenance = selection.canonicalConceptId
+    ? { code_system: "health_compass", code: selection.canonicalConceptId }
+    : {};
+
+  if (section === "conditions") {
+    return { display_name: selection.displayText, clinical_status: "active", ...provenance };
   }
-  if (section === "medications") return { display_name: value, status: "active" };
-  return { display_name: value, supplement_type: "unknown", status: "active" };
+  if (section === "allergies") {
+    return {
+      substance_name: selection.displayText,
+      allergy_type: "unknown",
+      clinical_status: "active",
+      ...provenance,
+    };
+  }
+  if (section === "medications") {
+    return { display_name: selection.displayText, status: "active", ...provenance };
+  }
+  return {
+    display_name: selection.displayText,
+    supplement_type: "unknown",
+    status: "active",
+    ...provenance,
+  };
 }
 
 export function clinicalRecordLabel(record: ClinicalRecord) {
@@ -98,18 +115,18 @@ export function WhyWeAsk() {
 export function ClinicalContextSection({ profileId, consentActive }: { profileId: string; consentActive: boolean }) {
   const queryClient = useQueryClient();
   const [editingSection, setEditingSection] = useState<SectionKey | null>(null);
-  const [value, setValue] = useState("");
+  const [selection, setSelection] = useState<ClinicalSelection | null>(null);
   const queryKey = useMemo(() => ["clinical-context", profileId], [profileId]);
   const { data, isLoading, error } = useQuery({ queryKey, queryFn: () => loadClinicalContext(profileId) });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey });
 
   const addMutation = useMutation({
-    mutationFn: ({ section, name }: { section: SectionKey; name: string }) =>
-      apiPost(`/profiles/${profileId}/${section}`, createClinicalPayload(section, name)),
+    mutationFn: ({ section, selected }: { section: SectionKey; selected: ClinicalSelection }) =>
+      apiPost(`/profiles/${profileId}/${section}`, createClinicalPayload(section, selected)),
     onSuccess: () => {
       setEditingSection(null);
-      setValue("");
+      setSelection(null);
       invalidate();
     },
   });
@@ -141,9 +158,7 @@ export function ClinicalContextSection({ profileId, consentActive }: { profileId
         <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
         <div>
           <h2 className="font-display text-lg font-semibold">Клинический контекст</h2>
-          <p className="mt-1 text-sm leading-5 text-muted-foreground">
-            Укажите только то, что вы знаете. Заполнить эти сведения можно позже.
-          </p>
+          <p className="mt-1 text-sm leading-5 text-muted-foreground">Укажите только то, что вы знаете. Заполнить эти сведения можно позже.</p>
         </div>
       </div>
       <WhyWeAsk />
@@ -160,9 +175,7 @@ export function ClinicalContextSection({ profileId, consentActive }: { profileId
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="font-medium leading-5">{section.title}</h3>
-                  <p className="mt-1 inline-flex rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
-                    {clinicalSectionStatusLabel(state)}
-                  </p>
+                  <p className="mt-1 inline-flex rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">{clinicalSectionStatusLabel(state)}</p>
                 </div>
                 {isConfirmedNone && <CheckCircle2 className="h-5 w-5 shrink-0 text-success" aria-hidden="true" />}
               </div>
@@ -170,9 +183,7 @@ export function ClinicalContextSection({ profileId, consentActive }: { profileId
               {records.length > 0 && (
                 <div className="mt-3 space-y-2" aria-label={`Записи раздела «${section.title}»`}>
                   {records.slice(0, 3).map((record) => (
-                    <div key={record.id} className="break-words rounded-xl bg-muted/40 px-3 py-2.5 text-sm">
-                      {clinicalRecordLabel(record)}
-                    </div>
+                    <div key={record.id} className="break-words rounded-xl bg-muted/40 px-3 py-2.5 text-sm">{clinicalRecordLabel(record)}</div>
                   ))}
                 </div>
               )}
@@ -180,37 +191,31 @@ export function ClinicalContextSection({ profileId, consentActive }: { profileId
               {isEditing && (
                 <form className="mt-3 space-y-3" onSubmit={(event) => {
                   event.preventDefault();
-                  const name = value.trim();
-                  if (name && !addMutation.isPending) addMutation.mutate({ section: section.key, name });
+                  if (selection && !addMutation.isPending) addMutation.mutate({ section: section.key, selected: selection });
                 }}>
-                  <label className="block text-xs font-medium text-muted-foreground" htmlFor={`clinical-${section.key}`}>Новая запись</label>
-                  <input
-                    id={`clinical-${section.key}`}
-                    autoFocus
-                    value={value}
-                    onChange={(event) => setValue(event.target.value)}
+                  <ClinicalTypeahead
+                    profileId={profileId}
+                    section={section.key}
                     placeholder={section.placeholder}
-                    autoComplete="off"
-                    className="min-h-11 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-base sm:text-sm"
+                    value={selection}
+                    onChange={setSelection}
                   />
                   <div className="grid grid-cols-2 gap-2 sm:flex">
-                    <button type="submit" disabled={!value.trim() || addMutation.isPending} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
+                    <button type="submit" disabled={!selection || addMutation.isPending} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
                       {addMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}Сохранить
                     </button>
-                    <button type="button" disabled={addMutation.isPending} onClick={() => { setEditingSection(null); setValue(""); }} className="min-h-11 rounded-xl border border-border px-4 py-2 text-sm text-muted-foreground disabled:opacity-50">Отмена</button>
+                    <button type="button" disabled={addMutation.isPending} onClick={() => { setEditingSection(null); setSelection(null); }} className="min-h-11 rounded-xl border border-border px-4 py-2 text-sm text-muted-foreground disabled:opacity-50">Отмена</button>
                   </div>
                 </form>
               )}
 
               {!isEditing && (
                 <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
-                  <button type="button" disabled={!consentActive || isBusy} onClick={() => { setEditingSection(section.key); setValue(""); }} className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium sm:w-auto disabled:opacity-50">
+                  <button type="button" disabled={!consentActive || isBusy} onClick={() => { setEditingSection(section.key); setSelection(null); }} className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium sm:w-auto disabled:opacity-50">
                     <Plus className="h-4 w-4" aria-hidden="true" /> Добавить запись
                   </button>
                   {records.length === 0 && !isConfirmedNone && (
-                    <button type="button" disabled={!consentActive || isBusy} onClick={() => reviewMutation.mutate({ section: section.key, reviewState: "confirmed_none", updatedAt: state.updated_at })} className="min-h-11 w-full rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-primary sm:w-auto disabled:opacity-50">
-                      {clinicalEmptyActionLabel(section.emptyLabel)}
-                    </button>
+                    <button type="button" disabled={!consentActive || isBusy} onClick={() => reviewMutation.mutate({ section: section.key, reviewState: "confirmed_none", updatedAt: state.updated_at })} className="min-h-11 w-full rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-primary sm:w-auto disabled:opacity-50">{clinicalEmptyActionLabel(section.emptyLabel)}</button>
                   )}
                   {records.length === 0 && state.effective_state !== "deferred" && (
                     <button type="button" disabled={!consentActive || isBusy} onClick={() => reviewMutation.mutate({ section: section.key, reviewState: "deferred", updatedAt: state.updated_at })} className="min-h-11 w-full rounded-xl px-3 py-2 text-sm text-muted-foreground sm:w-auto disabled:opacity-50">Не сейчас</button>
