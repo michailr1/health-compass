@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from app.services.clinical_dictionary import normalize_search_text
-from app.services.clinical_dictionary_seed import concept_uuid, load_seed_manifest
+from app.services.clinical_dictionary_seed import (
+    SeedAlias,
+    SeedConcept,
+    SeedManifest,
+    concept_uuid,
+    load_seed_manifest,
+    upsert_seed_manifest,
+)
 
 SEED_DIR = Path(__file__).parents[1] / "data" / "clinical_dictionary"
 PILOT_SEED_PATH = SEED_DIR / "ru-RU-pilot-v1.json"
@@ -90,6 +99,47 @@ def test_seed_batches_have_no_cross_file_duplicate_concepts() -> None:
 def test_seed_concept_ids_are_deterministic() -> None:
     concept = load_seed_manifest(PILOT_SEED_PATH).concepts[0]
     assert concept_uuid(concept) == concept_uuid(concept)
+
+
+@pytest.mark.asyncio
+async def test_upsert_uses_business_key_and_existing_concept_id_for_aliases() -> None:
+    existing_id = uuid.uuid4()
+    concept = SeedConcept(
+        domain="condition_or_symptom",
+        display_name="Головная боль",
+        source_system="health_compass_ru_curated",
+        source_code="condition-headache",
+        qualifier="симптом",
+        locale="ru-RU",
+        country="RU",
+        aliases=(SeedAlias(text="Headache", language="en", kind="international"),),
+    )
+    manifest = SeedManifest(version="test", source_label="test", concepts=(concept,))
+
+    class Result:
+        def scalar_one(self) -> uuid.UUID:
+            return existing_id
+
+    class Session:
+        def __init__(self) -> None:
+            self.statements: list[object] = []
+
+        async def execute(self, statement: object) -> Result:
+            self.statements.append(statement)
+            return Result()
+
+    session = Session()
+    result = await upsert_seed_manifest(session, manifest)  # type: ignore[arg-type]
+
+    assert result == {"concepts": 1, "aliases": 1}
+    assert len(session.statements) == 2
+
+    concept_sql = str(session.statements[0].compile(dialect=postgresql.dialect()))
+    assert "ON CONFLICT (domain, normalized_text) DO UPDATE" in concept_sql
+    assert "RETURNING health_compass.clinical_dictionary_concepts.id" in concept_sql
+
+    alias_compiled = session.statements[1].compile(dialect=postgresql.dialect())
+    assert existing_id in alias_compiled.params.values()
 
 
 def test_seed_rejects_non_russian_primary_locale(tmp_path: Path) -> None:
