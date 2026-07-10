@@ -1,193 +1,161 @@
 # Health Compass — текущее состояние
 
-Дата: 2026-07-09  
+Дата: 2026-07-10  
 Основная ветка: `main`  
+Repository HEAD после HC-012b: `ccc033127b6f9755cc7ea16f2cc2893a8bce2e7a`  
 Production URL: `https://health.funti.cc`  
-Старый URL: `https://funti.cc/health` → 301 на production-поддомен  
-Развёрнутый commit: `77453af7c5cb6aae77ff4164069131737981f208`  
-Alembic revision: `0022 (head)`
+Production deployment HC-012b: не выполнен
 
-## Что работает
+## Что уже работает в production
 
-- FastAPI backend и React/Vite frontend.
-- PostgreSQL + Alembic.
-- Прямой Google OAuth 2.0 / OIDC.
-- Email Magic Links через Brevo.
-- Friendly page для использованной или просроченной magic link.
-- Локальные PostgreSQL sessions и logout с отзывом сессии.
-- Собственные users, identities, workspaces, profiles и permissions.
-- FORCE ROW LEVEL SECURITY и tenant isolation.
-- Production-поддомен `health.funti.cc` через HTTPS и отдельный Apache VirtualHost.
-- Progressive Health Intake, Slice 1 — Basic Health Profile.
+- FastAPI backend и React/Vite frontend;
+- PostgreSQL + Alembic;
+- прямой Google OAuth 2.0 / OIDC;
+- Email Magic Links через Brevo;
+- локальные PostgreSQL sessions и logout;
+- users, identities, workspaces, profiles и permissions;
+- FORCE ROW LEVEL SECURITY и tenant isolation;
+- Basic Health Profile Slice 1;
+- consent gate для медицинских данных;
+- история веса, provenance, append-only audit и contextual readiness;
+- автоматическое определение IANA timezone с ручной корректировкой;
+- безопасный account linking и duplicate-resolution foundation из HC-025/026/027.
 
-## Auth MVP
+Точный production HEAD и Alembic revision должны быть повторно зафиксированы VPS-агентом перед следующим rollout. Merge в `main` сам по себе production не изменил.
+
+## Auth и identity
 
 Auth MVP завершён и принят.
 
-Подтверждено:
+Подтверждённые инварианты:
 
-- Google login: PASS;
-- Email Magic Link: PASS;
-- logout и повторный вход: PASS;
-- повторное использование magic link отклоняется: PASS;
-- friendly invalid-link page: PASS;
-- tenant isolation между двумя пользователями: PASS;
-- пользователь A не читает dashboard/profile пользователя B;
-- пользователь B не читает dashboard/profile пользователя A;
-- чужие ресурсы через API возвращают `404`.
+- Google login и Email Magic Link ведут через собственный backend;
+- logout отзывает локальную сессию;
+- повторное использование magic link отклоняется;
+- cross-user API возвращает `404`;
+- совпадение verified email само по себе не объединяет аккаунты;
+- новые дубли не создаются молча;
+- существующие дубли разбираются через контролируемый HC-026 flow;
+- TOTP HC-028 остаётся optional и не блокирует дальнейшую продуктовую работу.
 
-Production release auth MVP: `v0.1.0-auth-mvp`.
+## HC-012b Clinical Context
 
-## PHASE-02.5 Slice 1 — Basic Health Profile
+Статус кода: `MERGED TO MAIN / NOT DEPLOYED`.
 
-Реализовано и развёрнуто:
+Реализовано:
 
-- экран `/app/profile`;
-- имя профиля;
-- дата рождения;
-- поле `sex` со значениями `male`, `female`, `not_specified`;
-- рост в сантиметрах;
-- история веса через `body_measurements`;
-- consent gate для медицинских данных;
-- contextual readiness без health score;
-- provenance;
+- conditions;
+- allergies and intolerances;
+- medications;
+- supplements;
+- clinical safety flags;
+- явное различие «не заполнено» и «подтверждено отсутствие»;
+- summary endpoint;
+- list/create/update/void API;
+- optimistic concurrency;
+- owner/edit write;
+- view/analyze read-only;
+- outsider invisible;
+- consent проверяется у владельца профиля;
 - append-only audit;
-- soft validation необычных значений;
-- аннулирование ошибочного измерения без физического удаления;
-- RLS и cross-user negative tests;
-- регресс-тест SQLSTATE `54001`;
-- автоматическое определение IANA timezone браузером;
-- ручная корректировка timezone через ненавязчивую настройку;
-- собственный favicon и актуальные метаданные Health Compass.
+- void вместо физического DELETE;
+- voided-записи неизменяемы;
+- app-role может создавать только `manual + confirmed` записи;
+- `document + needs_review` зарезервирован для будущего OCR/import flow;
+- HC-026 duplicate assessment учитывает любую Clinical Context history;
+- nutrition safety flag `nutrition_calorie_feedback_suppressed` подготовлен для будущего HC-032;
+- mobile-friendly UI встроен в `/app/profile`.
 
-Часовой пояс нужен для корректного отнесения сна, тренировок, измерений и импортированных событий к локальным суткам. Он не является обязательным ручным полем основной формы.
-
-## Последний production deployment
-
-Подтверждено на `funti.cc` (`172.245.108.154`):
-
-- HEAD `77453af7c5cb6aae77ff4164069131737981f208`;
-- Alembic `0022 (head)`;
-- backend service active;
-- frontend release переключён через `/opt/health-compass/current-subdomain`;
-- `/api/health` → 200;
-- `/` → 200;
-- `/app/profile` → 200;
-- Google start endpoint → 307 на `accounts.google.com`;
-- favicon и title обновлены;
-- timezone UI работает;
-- свежие логи без ERROR, CRITICAL и Traceback.
-
-Backup перед deployment Slice 1:
+Миграции HC-012b:
 
 ```text
-/opt/health-compass/backups/health_compass_20260709T122531Z.sql.gz
+0037 — Clinical Context schema and RLS
+0038 — HC-026 duplicate activity integration
+0039 — explicit clinical review state
+0040 — write hardening and immutable voided rows
 ```
 
-## Тесты Slice 1
+Финальный PR: `#13`  
+Merge commit: `ccc033127b6f9755cc7ea16f2cc2893a8bce2e7a`
 
-Перед merge и deployment подтверждены:
+## Проверки HC-012b
+
+Финальный CI run `#205` завершён успешно:
 
 - backend compile;
 - Ruff;
 - backend unit tests;
 - frontend lint;
 - frontend tests;
-- production frontend build;
-- PostgreSQL migration cycle `0021 → 0022 → 0021 → 0022`;
-- FORCE RLS scan;
-- cross-user matrix owner/edit/view/analyze/outsider;
-- отсутствие PUBLIC EXECUTE на definer helpers.
+- frontend build;
+- PostgreSQL migration cycle;
+- FORCE RLS assertions;
+- owner/edit/view/analyze/outsider matrix;
+- no-DELETE assertions;
+- warm-data `54001` regression;
+- HC-026 regression;
+- provenance spoofing rejection;
+- immutable voided-row regression;
+- explicit reviewed-empty RLS test.
 
-Production DB для автоматических тестов не используется.
+Production DB в автоматических тестах не использовалась.
 
-## Активный дефект identity linking
+## Nutrition Photo MVP
 
-Один человек при входе через Google и Email Magic Link с одинаковым verified email сейчас может получить два разных `user_id`, workspace и health profile.
+Утверждён как PHASE-05.5 после Labs core.
 
-Причина: identity определяется по `(provider, subject)`, а совпадение email не должно автоматически объединять аккаунты. Отсутствует безопасный link-on-login flow.
-
-Запрещено исправлять это простым merge по email.
-
-## Текущая разработка — PHASE-02.6 Account Linking MVP
-
-Рабочая ветка:
-
-```text
-feat/account-linking-mvp
-```
-
-Каноническая спецификация:
+Канонический документ:
 
 ```text
-docs/ACCOUNT-LINKING-MVP.md
+docs/NUTRITION-PHOTO-MVP.md
 ```
 
-Принятые сценарии:
+Принятые инварианты:
 
-- Google-first → Email-second: Magic Link подтверждает email, затем требуется Google OAuth существующего аккаунта;
-- Email-first → Google-second: Google OAuth подтверждает Google identity, затем требуется специальная ссылка `link_email` существующего email-аккаунта;
-- до завершения подтверждения новый user/workspace/profile не создаётся;
-- после связывания оба способа всегда ведут к одному `user_id`, workspace и profile;
-- совпадение verified email только запускает link-flow и само по себе ничего не объединяет;
-- отказ может создать отдельный аккаунт только после явного подтверждения последствий.
+- `capture/raw → machine analysis → human confirmation → normalized fact`;
+- AI-результат не является фактом без подтверждения;
+- диапазон калорий вместо ложной точности;
+- обязательные provenance и `ai_runs`;
+- consent `external_llm`;
+- единый AI gateway;
+- wellbeing stop-list;
+- nutrition-таблицы не входят в HC-012b.
 
-Состав PHASE-02.6:
+## Следующий этап
 
-- HC-025 — link-on-login и UI «Способы входа»;
-- HC-026 — контролируемый разбор существующих дублей;
-- HC-027 — запрет молчаливого создания новых дублей в bootstrap;
-- HC-028 — добровольная TOTP 2FA, не блокирующая возврат к Slice 2.
-
-## Slice 2 Clinical Context
-
-Спецификация сохранена в ветке:
+Ближайший операционный шаг:
 
 ```text
-feat/clinical-context-slice-2
+controlled production rollout HC-012b
 ```
 
-Файл:
+Runbook:
 
 ```text
-docs/CLINICAL-CONTEXT-SLICE-2.md
+docs/HC-012B-ROLLOUT.md
 ```
 
-Реализация Slice 2 заморожена до завершения HC-025 и HC-026.
+После принятого rollout и smoke tests:
 
-## Ближайший порядок работ
-
-1. Аудит фактического Google callback, Magic Link request/consume и bootstrap.
-2. Точная техническая спецификация HC-025 по реальному коду.
-3. Миграция link-intent, backend flows и security tests.
-4. UI link-on-login и «Способы входа».
-5. HC-026 для уже существующих дублей.
-6. CI, review, merge и отдельный production deployment.
-7. Возврат к Clinical Context Slice 2.
+1. зафиксировать production HEAD и Alembic `0040`;
+2. обновить deployment history;
+3. провести ручную проверку Clinical Context UI на мобильном устройстве;
+4. устранить обнаруженные UX-дефекты отдельным PR;
+5. вернуться к PHASE-03/04 document upload and OCR review foundation;
+6. затем реализовать Labs core;
+7. после Labs core перейти к PHASE-05.5 Nutrition Photo MVP.
 
 ## Известные ограничения
 
-- Без HC-025 один человек может получить разные профили для Google и Magic Link.
-- Реальные загрузки документов и OCR ещё не реализованы.
-- Лабораторные показатели и их динамика ещё не реализованы.
-- Интеграции Oura и других wearable-источников ещё не реализованы.
-- Invitations и совместный доступ пока не готовы как законченный пользовательский flow.
-- Contextual Intake Slice 3 ещё не реализован.
-- AI-объяснения и doctor report пока не реализованы.
-
-## Google Cloud Console
-
-Действующий callback:
-
-```text
-https://health.funti.cc/api/auth/callback
-```
-
-Старый callback можно удалить вручную после дополнительной проверки:
-
-```text
-https://funti.cc/health/api/auth/callback
-```
+- HC-012b ещё не развёрнут в production;
+- OCR/import из документов не реализован;
+- реальные загрузки документов ещё не реализованы;
+- лабораторные показатели и их динамика ещё не реализованы;
+- Oura и другие wearable-интеграции ещё не реализованы;
+- Invitations и совместный доступ не завершены как пользовательский flow;
+- AI-объяснения и doctor report не реализованы;
+- clinical safety flag не создаётся автоматически из свободного текста;
+- система не диагностирует заболевания и не рассчитывает дозы.
 
 ## Роли
 
@@ -203,22 +171,25 @@ https://funti.cc/health/api/auth/callback
 
 ### VPS-агент
 
-- подключение только к `funti.cc` (`172.245.108.154`);
-- backup, git pull конкретного HEAD, build, migrations, Apache, systemd, smoke tests и rollback;
+- подключение только к production-хосту Health Compass;
+- backup;
+- фиксация HEAD/Alembic before;
+- получение конкретного commit;
+- build, migrations, systemd и release symlink;
+- smoke tests и rollback;
 - не принимает архитектурных решений;
-- не пишет продуктовый код без отдельной точной задачи;
-- не использует production DB для тестов;
+- не использует production DB для автоматических тестов;
 - не выводит секреты.
 
 ## Stop conditions
 
-Остановить релиз при:
+Остановить rollout при:
 
-- подключении не к `funti.cc`;
+- подключении не к production-хосту;
 - несовпадении ожидаемого HEAD;
 - грязном git worktree;
 - неуспешном backup;
 - неуспешной миграции;
 - признаках cross-user leak;
-- 5xx, `54001`, `42501`, `permission denied` или Traceback;
+- `5xx`, `54001`, `42501`, `permission denied` или Traceback;
 - выводе секретов в отчёт.
