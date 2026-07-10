@@ -13,6 +13,14 @@ from app.services.clinical_dictionary_seed import concept_uuid, load_seed_manife
 SEED_DIR = Path(__file__).parents[1] / "data" / "clinical_dictionary"
 PILOT_SEED_PATH = SEED_DIR / "ru-RU-pilot-v1.json"
 COMMON_SEED_PATH = SEED_DIR / "ru-RU-common-conditions-allergens-v1.json"
+MEDICATIONS_SUPPLEMENTS_SEED_PATH = (
+    SEED_DIR / "ru-RU-common-medications-supplements-v1.json"
+)
+ALL_SEED_PATHS = (
+    PILOT_SEED_PATH,
+    COMMON_SEED_PATH,
+    MEDICATIONS_SUPPLEMENTS_SEED_PATH,
+)
 
 
 @pytest.mark.parametrize(
@@ -23,6 +31,11 @@ COMMON_SEED_PATH = SEED_DIR / "ru-RU-common-conditions-allergens-v1.json"
             COMMON_SEED_PATH,
             "ru-RU-common-conditions-allergens-v1",
             25,
+        ),
+        (
+            MEDICATIONS_SUPPLEMENTS_SEED_PATH,
+            "ru-RU-common-medications-supplements-v1",
+            24,
         ),
     ],
 )
@@ -55,9 +68,19 @@ def test_common_seed_covers_conditions_and_allergens() -> None:
     assert sum(concept.domain == "allergy_or_intolerance" for concept in manifest.concepts) == 13
 
 
+def test_medications_supplements_seed_is_balanced() -> None:
+    manifest = load_seed_manifest(MEDICATIONS_SUPPLEMENTS_SEED_PATH)
+    assert {concept.domain for concept in manifest.concepts} == {
+        "medication",
+        "supplement",
+    }
+    assert sum(concept.domain == "medication" for concept in manifest.concepts) == 12
+    assert sum(concept.domain == "supplement" for concept in manifest.concepts) == 12
+
+
 def test_seed_batches_have_no_cross_file_duplicate_concepts() -> None:
     seen: set[tuple[str, str]] = set()
-    for path in (PILOT_SEED_PATH, COMMON_SEED_PATH):
+    for path in ALL_SEED_PATHS:
         for concept in load_seed_manifest(path).concepts:
             key = (concept.domain, normalize_search_text(concept.display_name))
             assert key not in seen
