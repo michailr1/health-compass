@@ -1,6 +1,6 @@
 # HC-012d — Profile Questionnaire Flow
 
-Status: `IN PROGRESS`  
+Status: `IMPLEMENTED — CI GREEN`  
 Base: `main` at `61f61a1051c397966b4dae508eb12b7a70e14078`  
 Production: untouched
 
@@ -8,7 +8,7 @@ Production: untouched
 
 Turn the existing profile and Clinical Context capabilities into one coherent user flow rather than a set of isolated controls.
 
-## Scope
+## Implemented scope
 
 1. Profile completion progress derived from real persisted state.
 2. Clear ordering of questionnaire sections.
@@ -17,7 +17,7 @@ Turn the existing profile and Clinical Context capabilities into one coherent us
 5. Viewing active records and history separately.
 6. Ending medication and supplement courses without deleting history.
 7. Re-starting a course as a new record rather than mutating old history.
-8. Clear connection between profile completeness and the quality of dashboards, reports and AI consultations.
+8. Clear explanation that incomplete data reduces personalization but does not block the product.
 
 ## Product rules
 
@@ -25,13 +25,13 @@ Turn the existing profile and Clinical Context capabilities into one coherent us
 - The product continues to work with an incomplete profile.
 - `Не сейчас` remains a valid decision.
 - `Подтверждено отсутствие` counts as reviewed.
-- A section with records counts as reviewed even if some optional fields are missing.
-- Profile completion must never imply medical completeness or diagnostic certainty.
+- A section with records counts as reviewed even if optional fields are missing.
+- Profile completion never implies medical completeness or diagnostic certainty.
 - Editing never physically deletes medical history.
-- Ending a medication/supplement course sets historical status and end date.
-- Restarting a course creates a new course record.
+- Ending a medication/supplement course sets status `completed` and an end date.
+- Restarting a course creates a new record through the normal add flow.
 
-## Proposed questionnaire order
+## Questionnaire order
 
 1. Basic profile data.
 2. Conditions and symptoms.
@@ -39,25 +39,44 @@ Turn the existing profile and Clinical Context capabilities into one coherent us
 4. Medications.
 5. Supplements.
 
-## Proposed completion model
+## Completion model
 
-Each section exposes:
+`GET /profiles/{profile_id}/completion` returns:
 
-- `state`: `complete | deferred | incomplete`;
-- `required_for_precision`: boolean;
-- `missing_fields`: list of concrete user-facing gaps;
-- `next_action`: route or section anchor;
+- completed and total section counts;
+- progress percentage;
+- next incomplete section;
+- ordered section state;
+- concrete missing fields for basic profile data;
+- navigation anchors for resume flow.
 
-Overall progress is derived from reviewed sections, not from raw field counts alone.
+The summary is derived from profile readiness, Clinical Context review state and record history. No duplicate progress table is introduced.
 
-## First implementation slice
+## Frontend
 
-- backend profile-completion summary endpoint;
-- frontend progress card and resume action;
-- edit actions for existing Clinical Context records;
-- active/history split;
-- medication and supplement course completion;
-- regression tests and RLS coverage.
+The profile route now renders:
+
+- a non-blocking completion card;
+- percentage and completed-section count;
+- `complete`, `deferred`, and `incomplete` states;
+- direct links to questionnaire sections;
+- a resume button for the next incomplete section;
+- active Clinical Context records under `Сейчас`;
+- historical records in a collapsible `История` group;
+- edit controls using the existing optimistic-concurrency PATCH API;
+- `Завершить курс` for active medications and supplements.
+
+Edits invalidate both Clinical Context and completion-summary queries.
+
+## Validation
+
+CI run `#312` passed:
+
+- frontend lint, tests and build;
+- backend compile, Ruff and unit tests;
+- PostgreSQL migration and RLS cycle.
+
+Regression coverage includes active/history classification and existing profile/Clinical Context security checks.
 
 ## Out of scope
 
