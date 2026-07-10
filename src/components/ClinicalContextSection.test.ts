@@ -43,6 +43,37 @@ describe("Clinical Context presentation helpers", () => {
     });
   });
 
+  it("maps observable condition answers without diagnosing", () => {
+    expect(createClinicalPayload("conditions", "Головная боль", {
+      onsetTiming: "long_ago",
+      presencePattern: "recurring",
+    })).toEqual({
+      display_name: "Головная боль",
+      clinical_status: "active",
+      onset_timing: "long_ago",
+      presence_pattern: "recurring",
+    });
+  });
+
+  it("maps optional medication details only when supplied", () => {
+    expect(createClinicalPayload("medications", "Метформин", {
+      currentUse: "yes",
+      startDate: "2026-01-15",
+      doseValue: "500",
+      doseUnit: "мг",
+      frequencyText: "два раза в день",
+      reasonText: "по назначению врача",
+    })).toEqual({
+      display_name: "Метформин",
+      status: "active",
+      start_date: "2026-01-15",
+      dose_value: 500,
+      dose_unit: "мг",
+      frequency_text: "два раза в день",
+      reason_text: "по назначению врача",
+    });
+  });
+
   it("preserves canonical dictionary provenance", () => {
     expect(createClinicalPayload("medications", {
       displayText: "Метформин",
