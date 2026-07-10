@@ -1,6 +1,6 @@
 # HC-013 — Session Management Audit
 
-Status: `IMPLEMENTED — CI IN PROGRESS`  
+Status: `IMPLEMENTED — CI GREEN`  
 Base: `main` at `61f61a1051c397966b4dae508eb12b7a70e14078`  
 Production: untouched
 
@@ -14,7 +14,7 @@ Provide a security-account UI and API for:
 - revoking the current session with cookie removal;
 - rotating the current session token without changing the session identity.
 
-## Existing foundation
+## Existing foundation and migration
 
 `health_compass.auth_sessions` already stores:
 
@@ -26,7 +26,7 @@ Provide a security-account UI and API for:
 - creation and expiration timestamps;
 - optional revocation timestamp.
 
-No schema migration is required. Existing RLS policies already scope SELECT and UPDATE to `user_id = app_current_user_id()`, and FORCE RLS is preserved.
+Migration `0046` preserves the narrow `sessions_current_*` policies required to authenticate a cookie before the user context is known, and adds `auth_sessions_self_*` policies that become effective after `app.current_user_id` is installed. FORCE RLS remains enabled.
 
 ## Implemented security invariants
 
@@ -39,6 +39,8 @@ No schema migration is required. Existing RLS policies already scope SELECT and 
 - revoking the current session sets `revoked_at` and removes the browser cookie;
 - revocation uses UPDATE, not physical DELETE;
 - browser-session endpoints reject development-header authentication without a cookie;
+- current-session authentication remains available before owner context is installed;
+- owner-scoped UPDATE cannot change `user_id` to another account;
 - production rollout is out of scope.
 
 ## Implemented API
@@ -83,9 +85,17 @@ Added coverage for:
 - response contract;
 - browser/device presentation labels;
 - FORCE RLS on `auth_sessions`;
-- existing owner-only SELECT and UPDATE policies;
+- preservation of current-session authentication policies;
+- owner-only SELECT and UPDATE policies;
 - app-role SELECT and UPDATE privileges;
+- migration head `0046`;
 - explicit lint coverage for all new frontend files.
+
+CI run `#299` passed:
+
+- frontend lint, tests and build;
+- backend compile, Ruff and unit tests;
+- PostgreSQL migration and RLS cycle.
 
 ## Out of scope
 
