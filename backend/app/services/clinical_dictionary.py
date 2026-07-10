@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 import uuid
 from typing import Any
 
@@ -20,7 +21,19 @@ SECTION_CONFIG = {
 
 
 def normalize_search_text(value: str) -> str:
-    return re.sub(r"\s+", " ", value.strip().casefold())
+    """Normalize user-facing medical terms without changing their stored value."""
+    compatible = unicodedata.normalize("NFKC", value).casefold().replace("ё", "е")
+    characters = [character if character.isalnum() else " " for character in compatible]
+    return re.sub(r"\s+", " ", "".join(characters)).strip()
+
+
+def _sql_normalized(column: str) -> str:
+    """Return the PostgreSQL equivalent of ``normalize_search_text`` for search."""
+    return (
+        "trim(regexp_replace("
+        f"replace(lower({column}), 'ё', 'е'), "
+        "'[^[:alnum:]]+', ' ', 'g'))"
+    )
 
 
 async def get_suggestions(
@@ -37,6 +50,7 @@ async def get_suggestions(
     if not normalized:
         return {"items": []}
 
+    personal_normalized = _sql_normalized(display_column)
     personal_sql = text(
         f"""
         SELECT NULL::uuid AS id,
@@ -47,15 +61,15 @@ async def get_suggestions(
                {display_column} AS matched_text,
                0 AS source_rank,
                CASE
-                 WHEN lower({display_column}) = :normalized THEN 0
-                 WHEN lower({display_column}) LIKE :prefix THEN 1
+                 WHEN {personal_normalized} = :normalized THEN 0
+                 WHEN {personal_normalized} LIKE :prefix THEN 1
                  ELSE 2
                END AS match_rank,
                max(updated_at) AS last_used_at
         FROM health_compass.{table_name}
         WHERE profile_id = :profile_id
           AND voided_at IS NULL
-          AND lower({display_column}) LIKE :contains
+          AND {personal_normalized} LIKE :contains
         GROUP BY {display_column}, canonical_concept_id
         """
     )
@@ -71,31 +85,48 @@ async def get_suggestions(
         )
     ).mappings().all()
 
+    concept_normalized = _sql_normalized("c.display_name")
+    alias_normalized = _sql_normalized("a.alias_text")
     global_sql = text(
-        """
+        f"""
         SELECT c.id,
                c.display_name AS display_text,
                c.qualifier,
                'global'::text AS source,
                c.id AS canonical_concept_id,
-               COALESCE(a.alias_text, c.display_name) AS matched_text,
-               1 AS source_rank,
+               c.display_name AS matched_text,
+               2 AS source_rank,
                CASE
-                 WHEN c.normalized_text = :normalized THEN 0
-                 WHEN c.normalized_text LIKE :prefix THEN 1
-                 WHEN a.normalized_text = :normalized THEN 1
-                 WHEN a.normalized_text LIKE :prefix THEN 2
-                 ELSE 3
+                 WHEN {concept_normalized} = :normalized THEN 0
+                 WHEN {concept_normalized} LIKE :prefix THEN 1
+                 ELSE 2
                END AS match_rank,
                NULL::timestamptz AS last_used_at
         FROM health_compass.clinical_dictionary_concepts c
-        LEFT JOIN health_compass.clinical_dictionary_aliases a ON a.concept_id = c.id
         WHERE c.domain = :domain
           AND c.is_active
-          AND (
-            c.normalized_text LIKE :contains
-            OR a.normalized_text LIKE :contains
-          )
+          AND {concept_normalized} LIKE :contains
+
+        UNION ALL
+
+        SELECT c.id,
+               c.display_name AS display_text,
+               c.qualifier,
+               'global'::text AS source,
+               c.id AS canonical_concept_id,
+               a.alias_text AS matched_text,
+               1 AS source_rank,
+               CASE
+                 WHEN {alias_normalized} = :normalized THEN 0
+                 WHEN {alias_normalized} LIKE :prefix THEN 1
+                 ELSE 2
+               END AS match_rank,
+               NULL::timestamptz AS last_used_at
+        FROM health_compass.clinical_dictionary_concepts c
+        JOIN health_compass.clinical_dictionary_aliases a ON a.concept_id = c.id
+        WHERE c.domain = :domain
+          AND c.is_active
+          AND {alias_normalized} LIKE :contains
         """
     )
     global_rows = (
@@ -114,15 +145,18 @@ async def get_suggestions(
     ranked = sorted(
         [*personal, *global_rows],
         key=lambda row: (
-            row["source_rank"],
             row["match_rank"],
+            row["source_rank"],
             -(row["last_used_at"].timestamp() if row["last_used_at"] else 0),
             row["display_text"].casefold(),
         ),
     )
     items: list[dict[str, Any]] = []
     for row in ranked:
-        key = (row["display_text"].casefold(), str(row["canonical_concept_id"]) if row["canonical_concept_id"] else None)
+        key = (
+            normalize_search_text(row["display_text"]),
+            str(row["canonical_concept_id"]) if row["canonical_concept_id"] else None,
+        )
         if key in seen:
             continue
         seen.add(key)

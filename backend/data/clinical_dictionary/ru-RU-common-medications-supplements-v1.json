@@ -1,0 +1,274 @@
+{
+  "version": "ru-RU-common-medications-supplements-v1",
+  "source_label": "Health Compass Russian curated common medications and supplements",
+  "concepts": [
+    {
+      "domain": "medication",
+      "display_name": "Лозартан",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-losartan",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Losartan", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "medication",
+      "display_name": "Амлодипин",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-amlodipine",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Amlodipine", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "medication",
+      "display_name": "Омепразол",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-omeprazole",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Omeprazole", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "medication",
+      "display_name": "Цетиризин",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-cetirizine",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Cetirizine", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "medication",
+      "display_name": "Азитромицин",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-azithromycin",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Azithromycin", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "medication",
+      "display_name": "Доксициклин",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-doxycycline",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Doxycycline", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "medication",
+      "display_name": "Левотироксин натрия",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-levothyroxine-sodium",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Левотироксин", "language": "ru", "kind": "common"},
+        {"text": "Levothyroxine sodium", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "medication",
+      "display_name": "Аторвастатин",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-atorvastatin",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Atorvastatin", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "medication",
+      "display_name": "Розувастатин",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-rosuvastatin",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Rosuvastatin", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "medication",
+      "display_name": "Бисопролол",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-bisoprolol",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Bisoprolol", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "medication",
+      "display_name": "Эналаприл",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-enalapril",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Enalapril", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "medication",
+      "display_name": "Пантопразол",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "medication-pantoprazole",
+      "qualifier": "МНН",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Pantoprazole", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Магний цитрат",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-magnesium-citrate",
+      "qualifier": "форма ингредиента",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Цитрат магния", "language": "ru", "kind": "word-order"},
+        {"text": "Magnesium citrate", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Железо",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-iron",
+      "qualifier": "ингредиент",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Iron", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Цинк",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-zinc",
+      "qualifier": "ингредиент",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Zinc", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Коэнзим Q10",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-coenzyme-q10",
+      "qualifier": "ингредиент",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Убихинон", "language": "ru", "kind": "chemical"},
+        {"text": "Coenzyme Q10", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Фолиевая кислота",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-folic-acid",
+      "qualifier": "витамин",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Витамин B9", "language": "ru", "kind": "common"},
+        {"text": "Folic acid", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Витамин B12",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-vitamin-b12",
+      "qualifier": "витамин",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Кобаламин", "language": "ru", "kind": "chemical"},
+        {"text": "Vitamin B12", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Витамин C",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-vitamin-c",
+      "qualifier": "витамин",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Аскорбиновая кислота", "language": "ru", "kind": "chemical"},
+        {"text": "Vitamin C", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Мелатонин",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-melatonin",
+      "qualifier": "ингредиент",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Melatonin", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Креатин",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-creatine",
+      "qualifier": "ингредиент",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Creatine", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Коллаген",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-collagen",
+      "qualifier": "ингредиент",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Collagen", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Пробиотики",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-probiotics",
+      "qualifier": "группа ингредиентов",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Probiotics", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Кальций",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-calcium",
+      "qualifier": "ингредиент",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Calcium", "language": "en", "kind": "international"}]
+    },
+    {
+      "domain": "supplement",
+      "display_name": "Селен",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "supplement-selenium",
+      "qualifier": "ингредиент",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [{"text": "Selenium", "language": "en", "kind": "international"}]
+    }
+  ]
+}

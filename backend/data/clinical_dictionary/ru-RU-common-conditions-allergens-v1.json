@@ -1,0 +1,328 @@
+{
+  "version": "ru-RU-common-conditions-allergens-v1",
+  "source_label": "Health Compass Russian curated common conditions and allergens",
+  "concepts": [
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Кашель",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-cough",
+      "qualifier": "симптом",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Покашливание", "language": "ru", "kind": "common"},
+        {"text": "Cough", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Боль в горле",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-sore-throat",
+      "qualifier": "симптом",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Першение в горле", "language": "ru", "kind": "common"},
+        {"text": "Sore throat", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Повышенная температура",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-fever",
+      "qualifier": "симптом",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Температура", "language": "ru", "kind": "common"},
+        {"text": "Лихорадка", "language": "ru", "kind": "clinical"},
+        {"text": "Fever", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Одышка",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-shortness-of-breath",
+      "qualifier": "симптом",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Нехватка воздуха", "language": "ru", "kind": "common"},
+        {"text": "Shortness of breath", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Тошнота",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-nausea",
+      "qualifier": "симптом",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Подташнивание", "language": "ru", "kind": "common"},
+        {"text": "Nausea", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Головокружение",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-dizziness",
+      "qualifier": "симптом",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Кружится голова", "language": "ru", "kind": "common"},
+        {"text": "Dizziness", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Слабость",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-weakness",
+      "qualifier": "симптом",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Упадок сил", "language": "ru", "kind": "common"},
+        {"text": "Weakness", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Повышенная утомляемость",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-fatigue",
+      "qualifier": "симптом",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Усталость", "language": "ru", "kind": "common"},
+        {"text": "Fatigue", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Боль в животе",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-abdominal-pain",
+      "qualifier": "симптом",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Болит живот", "language": "ru", "kind": "common"},
+        {"text": "Abdominal pain", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Диарея",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-diarrhea",
+      "qualifier": "симптом",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Жидкий стул", "language": "ru", "kind": "common"},
+        {"text": "Понос", "language": "ru", "kind": "common"},
+        {"text": "Diarrhea", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Запор",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-constipation",
+      "qualifier": "симптом",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Затруднённый стул", "language": "ru", "kind": "common"},
+        {"text": "Constipation", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "condition_or_symptom",
+      "display_name": "Тревожность",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "condition-anxiety",
+      "qualifier": "состояние",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Чувство тревоги", "language": "ru", "kind": "common"},
+        {"text": "Anxiety", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Куриное яйцо",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-chicken-egg",
+      "qualifier": "пищевой аллерген",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Яичный белок", "language": "ru", "kind": "related"},
+        {"text": "Chicken egg", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Рыба",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-fish",
+      "qualifier": "пищевой аллерген",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Fish", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Ракообразные",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-crustaceans",
+      "qualifier": "пищевой аллерген",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Креветки", "language": "ru", "kind": "example"},
+        {"text": "Crustaceans", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Орехи",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-tree-nuts",
+      "qualifier": "пищевой аллерген",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Древесные орехи", "language": "ru", "kind": "clinical"},
+        {"text": "Tree nuts", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Пшеница",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-wheat",
+      "qualifier": "пищевой аллерген",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Wheat", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Соя",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-soy",
+      "qualifier": "пищевой аллерген",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Соевые продукты", "language": "ru", "kind": "related"},
+        {"text": "Soy", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Кунжут",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-sesame",
+      "qualifier": "пищевой аллерген",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Sesame", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Пыльцевые аллергены",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-pollen-group",
+      "qualifier": "группа аллергенов",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Пыльца растений", "language": "ru", "kind": "common"},
+        {"text": "Pollen", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Домашняя пыль",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-house-dust",
+      "qualifier": "бытовой аллерген",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "House dust", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Клещи домашней пыли",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-dust-mites",
+      "qualifier": "бытовой аллерген",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Пылевые клещи", "language": "ru", "kind": "common"},
+        {"text": "Dust mites", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Эпителий кошки",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-cat-epithelium",
+      "qualifier": "животный аллерген",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Аллергия на кошек", "language": "ru", "kind": "common"},
+        {"text": "Cat dander", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Эпителий собаки",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-dog-epithelium",
+      "qualifier": "животный аллерген",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Аллергия на собак", "language": "ru", "kind": "common"},
+        {"text": "Dog dander", "language": "en", "kind": "international"}
+      ]
+    },
+    {
+      "domain": "allergy_or_intolerance",
+      "display_name": "Никель",
+      "source_system": "health_compass_ru_curated",
+      "source_code": "allergen-nickel",
+      "qualifier": "контактный аллерген",
+      "locale": "ru-RU",
+      "country": "RU",
+      "aliases": [
+        {"text": "Nickel", "language": "en", "kind": "international"}
+      ]
+    }
+  ]
+}
