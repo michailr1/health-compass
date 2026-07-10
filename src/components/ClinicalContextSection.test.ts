@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  clinicalEmptyActionLabel,
   clinicalRecordLabel,
   clinicalSectionStatusLabel,
   createClinicalPayload,
@@ -64,5 +65,11 @@ describe("Clinical Context presentation helpers", () => {
 
   it("uses substance name for allergy records", () => {
     expect(clinicalRecordLabel({ id: "1", substance_name: "Пенициллин" })).toBe("Пенициллин");
+  });
+
+  it("makes confirmed-empty actions explicit", () => {
+    expect(clinicalEmptyActionLabel("аллергий и непереносимостей нет")).toBe(
+      "Подтвердить: аллергий и непереносимостей нет",
+    );
   });
 });
