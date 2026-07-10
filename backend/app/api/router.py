@@ -9,6 +9,7 @@ from app.api.routes.auth import router as login_router
 from app.api.routes.clinical_context import router as clinical_context_router
 from app.api.routes.clinical_dictionary import router as clinical_dictionary_router
 from app.api.routes.clinical_review import router as clinical_review_router
+from app.api.routes.contextual_intake import router as contextual_intake_router
 from app.api.routes.duplicate_resolution import router as duplicate_resolution_router
 from app.api.routes.email_auth import router as email_auth_router
 from app.api.routes.health import router as health_router
@@ -27,6 +28,7 @@ api_router.include_router(private_router)
 api_router.include_router(user_router)
 api_router.include_router(health_profile_router)
 api_router.include_router(clinical_dictionary_router)
+api_router.include_router(contextual_intake_router)
 # Transition-safe review-state routes must be registered before the legacy
 # Clinical Context routes because several paths intentionally overlap.
 api_router.include_router(clinical_review_router)
