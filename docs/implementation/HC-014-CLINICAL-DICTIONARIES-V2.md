@@ -8,6 +8,17 @@ Production: untouched
 
 Provide useful Russian-first suggestions for conditions, symptoms, allergens, medications and supplements without ever preventing free-text entry.
 
+## Mandatory Russian naming policy
+
+- The primary `display_name` shown to users is Russian.
+- Russian consumer-facing wording is preferred over literal machine translation.
+- English, Latin and international names are searchable aliases, not the default UI label.
+- For medications, the canonical user-facing ingredient name is the Russian МНН where available.
+- Russian trade names registered for the Russian market are searchable brand/product aliases.
+- A brand is never silently substituted for its active ingredient, and an active ingredient is never silently substituted for a brand.
+- For conditions and symptoms, Russian labels should be understandable to a non-clinician; ICD wording and codes are retained as mappings where appropriate.
+- For supplements, the primary label is the commonly used Russian ingredient name; Latin botanical names and English names are aliases.
+
 ## Non-negotiable product rules
 
 - The dictionary is assistive, never a gate.
@@ -21,11 +32,11 @@ Provide useful Russian-first suggestions for conditions, symptoms, allergens, me
 
 ### Canonical concept
 
-Stable internal identity for a condition/symptom, allergen, active medication ingredient or supplement ingredient.
+Stable internal identity for a condition/symptom, allergen, active medication ingredient or supplement ingredient. Its default display label is Russian.
 
 ### Alias
 
-Russian and English synonyms, common spelling variants, abbreviations, transliterations and country-aware brand terms.
+Russian synonyms and common spellings rank first. English, Latin, abbreviations, transliterations, historical spellings and country-aware brand terms remain searchable aliases.
 
 ### Personal term
 
@@ -45,8 +56,9 @@ Medication and supplement brands/products must not be treated as canonical ingre
 6. Deterministic ranking:
    - exact match;
    - personal term;
-   - curated alias;
-   - canonical display name;
+   - curated Russian alias;
+   - Russian canonical display name;
+   - international/English/Latin alias;
    - prefix match;
    - contains/fuzzy candidates;
    - free-text fallback in the UI.
@@ -56,28 +68,61 @@ Medication and supplement brands/products must not be treated as canonical ingre
 
 ### Conditions and symptoms
 
-WHO ICD-11 may be used for external mappings and terminology only under its published license and attribution requirements. The consumer-facing Russian labels remain a curated Health Compass presentation layer rather than copied diagnostic descriptions.
+Primary presentation layer: curated Russian user-friendly labels.
+
+External mappings:
+
+- official Russian ICD-11 terminology from WHO where available;
+- Russian ICD-10 terminology for compatibility with current Russian medical records and historical documents;
+- ICD codes are mappings, not the text forced into the UI.
+
+### Medications
+
+Primary Russian sources:
+
+- ЕСКЛП for Russian МНН, dosage forms, strengths, trade names, packages and registration-related attributes;
+- ГРЛС for registered Russian-market medication names and registration verification.
+
+Secondary source:
+
+- NLM RxNorm for international identifiers and English aliases only.
+
+Canonical identity remains active-ingredient-first. Russian trade names are aliases/products with source and country scope `RU`.
+
+### Allergens and intolerances
+
+Primary labels are common Russian names of substances and ingredient classes. Medication-allergen relationships should reference Russian МНН and registered ingredient names where available.
+
+### Supplements and БАД
+
+Primary labels are common Russian ingredient names. Sources include:
+
+- the EAEU unified register of state registration certificates for registered БАД/product names;
+- Russian/EAEU registration data for product provenance;
+- Latin botanical names, English names and US DSLD labels only as supplemental aliases or mappings.
+
+Registry presence confirms registration, not efficacy, safety for a particular user or product quality.
 
 ### SNOMED CT
 
 Optional mapping only. Distribution and deployment require territory-appropriate licensing. The MVP must not depend on SNOMED availability.
 
-### Medications
-
-NLM RxNorm is useful for active-ingredient identifiers and English-language aliases, but it does not provide sufficient Russia/EU brand coverage. Canonical identity remains active-ingredient-first; country-specific brands are aliases/products with provenance.
-
-### Supplements
-
-NIH DSLD can support ingredient and US product-label references. It is not a global catalogue and must not be presented as proof of efficacy, safety or product quality.
-
 ## Delivery slices
 
 1. **Foundation** — normalization, deterministic ranking and architecture documentation; no migration.
 2. **Seed format** — versioned manifests, validation and idempotent importer.
-3. **Conditions/allergens** — curated Russian-first initial seed.
-4. **Medication ingredients** — active ingredients plus RU/EU/EN aliases.
-5. **Supplement ingredients** — ingredient/form/composition separation.
+3. **Russian conditions/allergens** — curated Russian-first initial seed with ICD mappings.
+4. **Russian medication ingredients and brands** — МНН plus RU trade-name aliases from ЕСКЛП/ГРЛС.
+5. **Russian supplement ingredients and БАД aliases** — ingredient/form/composition separation plus EAEU product names.
 6. **Personal reconciliation** — explicit user-approved mapping workflow.
+
+## Acceptance examples
+
+- Search `ибупрофен` → primary result `Ибупрофен`; Russian brands may appear as aliases/products.
+- Search a Russian brand → show the registered brand and its active ingredient relationship without replacing the user's choice.
+- Search `ashwagandha` → suggest `Ашваганда`; `Withania somnifera` remains a Latin alias.
+- Search `изжога` → suggest the plain Russian symptom label, with an ICD mapping only in metadata.
+- Search an unknown Russian term → allow immediate free-text save.
 
 ## Migration sequencing
 
