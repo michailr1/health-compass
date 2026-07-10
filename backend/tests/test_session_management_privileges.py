@@ -23,7 +23,7 @@ def _migrator_url() -> str:
     return url
 
 
-def test_auth_sessions_keep_force_rls_and_owner_policies() -> None:
+def test_auth_sessions_keep_force_rls_and_layered_policies() -> None:
     engine = create_engine(_migrator_url())
     try:
         with engine.connect() as connection:
@@ -34,7 +34,7 @@ def test_auth_sessions_keep_force_rls_and_owner_policies() -> None:
                     "WHERE n.nspname = 'health_compass' AND c.relname = 'auth_sessions'"
                 )
             ).one()
-            assert row_security == (True, True)
+            assert tuple(row_security) == (True, True)
 
             policies = set(
                 connection.execute(
@@ -44,8 +44,13 @@ def test_auth_sessions_keep_force_rls_and_owner_policies() -> None:
                     )
                 ).scalars()
             )
-            assert "auth_sessions_self_select" in policies
-            assert "auth_sessions_self_update" in policies
+            assert {
+                "sessions_current_select",
+                "sessions_current_update",
+                "sessions_self_insert",
+                "auth_sessions_self_select",
+                "auth_sessions_self_update",
+            }.issubset(policies)
 
             privileges = {
                 privilege: connection.execute(
