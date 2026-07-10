@@ -22,7 +22,7 @@ COMMON_SEED_PATH = SEED_DIR / "ru-RU-common-conditions-allergens-v1.json"
         (
             COMMON_SEED_PATH,
             "ru-RU-common-conditions-allergens-v1",
-            24,
+            25,
         ),
     ],
 )
@@ -52,7 +52,7 @@ def test_common_seed_covers_conditions_and_allergens() -> None:
         "allergy_or_intolerance",
     }
     assert sum(concept.domain == "condition_or_symptom" for concept in manifest.concepts) == 12
-    assert sum(concept.domain == "allergy_or_intolerance" for concept in manifest.concepts) == 12
+    assert sum(concept.domain == "allergy_or_intolerance" for concept in manifest.concepts) == 13
 
 
 def test_seed_batches_have_no_cross_file_duplicate_concepts() -> None:
