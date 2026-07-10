@@ -114,6 +114,9 @@ jobs:
           pytest -q \
             tests/test_migrations.py \
             tests/test_basic_health_profile_rls.py \
+            tests/test_clinical_context_rls.py \
+            tests/test_clinical_review_rls.py \
+            tests/test_clinical_context_hardening.py \
             tests/test_account_linking_postgres.py \
             tests/test_separate_account_postgres.py \
             tests/test_identity_removal_postgres.py \
@@ -156,6 +159,8 @@ jobs:
           src/App.tsx
           src/components/AppLayout.tsx
           src/components/AppLayout.test.ts
+          src/components/ClinicalContextSection.tsx
+          src/components/ClinicalContextSection.test.ts
       - name: Tests
         run: npm test
       - name: Build

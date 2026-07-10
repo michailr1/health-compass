@@ -1,0 +1,375 @@
+"""Business logic for Clinical Context Slice 2."""
+
+from __future__ import annotations
+
+import datetime
+import uuid
+from decimal import Decimal
+from typing import Any
+
+from fastapi import HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.clinical_context import (
+    ProfileAllergy,
+    ProfileClinicalReview,
+    ProfileClinicalSafetyFlag,
+    ProfileCondition,
+    ProfileMedication,
+    ProfileSupplement,
+)
+from app.models.profile_audit_event import ProfileAuditEvent
+from app.models.user import User
+from app.services.health_profile import (
+    get_visible_profile,
+    require_health_data_consent,
+    require_profile_edit_access,
+)
+
+MODEL_BY_SECTION = {
+    "conditions": ProfileCondition,
+    "allergies": ProfileAllergy,
+    "medications": ProfileMedication,
+    "supplements": ProfileSupplement,
+    "clinical-safety-flags": ProfileClinicalSafetyFlag,
+}
+ACTION_PREFIX = {
+    "conditions": "condition",
+    "allergies": "allergy",
+    "medications": "medication",
+    "supplements": "supplement",
+    "clinical-safety-flags": "clinical_safety_flag",
+}
+ACTIVE_FIELD = {
+    "conditions": ("clinical_status", "active"),
+    "allergies": ("clinical_status", "active"),
+    "medications": ("status", "active"),
+    "supplements": ("status", "active"),
+    "clinical-safety-flags": ("status", "active"),
+}
+
+
+def _serialize(value: Any) -> Any:
+    if isinstance(value, (datetime.date, datetime.datetime, Decimal, uuid.UUID)):
+        return str(value)
+    return value
+
+
+def _changed_fields(old_values: dict[str, Any], new_values: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    for field, new_value in new_values.items():
+        old_value = old_values.get(field)
+        if old_value != new_value:
+            result[field] = {"old": _serialize(old_value), "new": _serialize(new_value)}
+    return result
+
+
+def _audit(
+    *,
+    profile_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+    entity_type: str,
+    entity_id: uuid.UUID,
+    action: str,
+    changed_fields: dict[str, Any],
+    request_id: str | None,
+) -> ProfileAuditEvent:
+    return ProfileAuditEvent(
+        profile_id=profile_id,
+        actor_user_id=actor_user_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        action=action,
+        changed_fields=changed_fields,
+        request_id=request_id,
+    )
+
+
+async def _prepare_write(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+    current_user: User,
+) -> None:
+    profile = await get_visible_profile(session, profile_id)
+    await require_profile_edit_access(session, profile_id)
+    await require_health_data_consent(session, profile.owner_user_id)
+
+
+async def list_records(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+    section: str,
+    *,
+    include_voided: bool = False,
+) -> list[Any]:
+    await get_visible_profile(session, profile_id)
+    model = MODEL_BY_SECTION[section]
+    query = select(model).where(model.profile_id == profile_id)
+    if not include_voided:
+        query = query.where(model.voided_at.is_(None))
+    query = query.order_by(model.updated_at.desc())
+    result = await session.execute(query)
+    return list(result.scalars())
+
+
+async def create_record(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+    section: str,
+    payload: BaseModel,
+    current_user: User,
+    request_id: str | None,
+) -> Any:
+    await _prepare_write(session, profile_id, current_user)
+    model = MODEL_BY_SECTION[section]
+    values = payload.model_dump(exclude={"explicit_user_confirmation"})
+    values.update(
+        id=uuid.uuid4(),
+        profile_id=profile_id,
+        created_by_user_id=current_user.id,
+    )
+    record = model(**values)
+    session.add(record)
+    session.add(
+        _audit(
+            profile_id=profile_id,
+            actor_user_id=current_user.id,
+            entity_type=ACTION_PREFIX[section],
+            entity_id=record.id,
+            action=f"{ACTION_PREFIX[section]}.created",
+            changed_fields={
+                key: {"old": None, "new": _serialize(value)}
+                for key, value in values.items()
+                if key not in {"id", "profile_id", "created_by_user_id"}
+            },
+            request_id=request_id,
+        )
+    )
+    await session.flush()
+    return record
+
+
+async def update_record(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+    section: str,
+    record_id: uuid.UUID,
+    payload: BaseModel,
+    current_user: User,
+    request_id: str | None,
+) -> Any:
+    await _prepare_write(session, profile_id, current_user)
+    model = MODEL_BY_SECTION[section]
+    result = await session.execute(
+        select(model).where(
+            model.id == record_id,
+            model.profile_id == profile_id,
+            model.voided_at.is_(None),
+        )
+    )
+    record = result.scalar_one_or_none()
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clinical record not found")
+
+    values = payload.model_dump(
+        exclude_unset=True,
+        exclude={"expected_updated_at", "explicit_user_confirmation"},
+    )
+    expected_updated_at = getattr(payload, "expected_updated_at", None)
+    if expected_updated_at is not None and record.updated_at != expected_updated_at:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Clinical record was updated elsewhere",
+        )
+
+    if section == "conditions":
+        onset = values.get("onset_date", record.onset_date)
+        resolved = values.get("resolved_date", record.resolved_date)
+        if onset and resolved and resolved < onset:
+            raise HTTPException(status_code=422, detail="resolved_date cannot be before onset_date")
+    if section in {"medications", "supplements"}:
+        start = values.get("start_date", record.start_date)
+        end = values.get("end_date", record.end_date)
+        if start and end and end < start:
+            raise HTTPException(status_code=422, detail="end_date cannot be before start_date")
+
+    old_values = {field: getattr(record, field) for field in values}
+    changed = _changed_fields(old_values, values)
+    if not changed:
+        return record
+
+    for field, value in values.items():
+        setattr(record, field, value)
+    record.updated_at = datetime.datetime.now(datetime.UTC)
+    session.add(
+        _audit(
+            profile_id=profile_id,
+            actor_user_id=current_user.id,
+            entity_type=ACTION_PREFIX[section],
+            entity_id=record.id,
+            action=f"{ACTION_PREFIX[section]}.updated",
+            changed_fields=changed,
+            request_id=request_id,
+        )
+    )
+    await session.flush()
+    return record
+
+
+async def void_record(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+    section: str,
+    record_id: uuid.UUID,
+    reason: str,
+    current_user: User,
+    request_id: str | None,
+) -> Any:
+    await _prepare_write(session, profile_id, current_user)
+    model = MODEL_BY_SECTION[section]
+    result = await session.execute(
+        select(model).where(model.id == record_id, model.profile_id == profile_id)
+    )
+    record = result.scalar_one_or_none()
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clinical record not found")
+    if record.voided_at is not None:
+        return record
+
+    now = datetime.datetime.now(datetime.UTC)
+    record.voided_at = now
+    record.voided_by_user_id = current_user.id
+    record.void_reason = reason
+    record.updated_at = now
+    session.add(
+        _audit(
+            profile_id=profile_id,
+            actor_user_id=current_user.id,
+            entity_type=ACTION_PREFIX[section],
+            entity_id=record.id,
+            action=f"{ACTION_PREFIX[section]}.voided",
+            changed_fields={
+                "voided_at": {"old": None, "new": str(now)},
+                "void_reason": {"old": None, "new": reason},
+            },
+            request_id=request_id,
+        )
+    )
+    await session.flush()
+    return record
+
+
+async def review_section(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+    section: str,
+    confirmed_empty: bool,
+    current_user: User,
+    request_id: str | None,
+) -> ProfileClinicalReview:
+    if section not in {"conditions", "allergies", "medications", "supplements"}:
+        raise HTTPException(status_code=422, detail="Unknown clinical section")
+    await _prepare_write(session, profile_id, current_user)
+
+    if confirmed_empty:
+        model = MODEL_BY_SECTION[section]
+        active_field, active_value = ACTIVE_FIELD[section]
+        active_count = await session.scalar(
+            select(func.count(model.id)).where(
+                model.profile_id == profile_id,
+                model.voided_at.is_(None),
+                getattr(model, active_field) == active_value,
+            )
+        )
+        if active_count:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot confirm an empty section while active records exist",
+            )
+
+    result = await session.execute(
+        select(ProfileClinicalReview).where(
+            ProfileClinicalReview.profile_id == profile_id,
+            ProfileClinicalReview.section == section,
+        )
+    )
+    review = result.scalar_one_or_none()
+    now = datetime.datetime.now(datetime.UTC)
+    if review is None:
+        review = ProfileClinicalReview(
+            id=uuid.uuid4(),
+            profile_id=profile_id,
+            section=section,
+            confirmed_empty=confirmed_empty,
+            reviewed_at=now,
+            reviewed_by_user_id=current_user.id,
+            updated_at=now,
+        )
+        session.add(review)
+        old = None
+    else:
+        old = review.confirmed_empty
+        review.confirmed_empty = confirmed_empty
+        review.reviewed_at = now
+        review.reviewed_by_user_id = current_user.id
+        review.updated_at = now
+
+    session.add(
+        _audit(
+            profile_id=profile_id,
+            actor_user_id=current_user.id,
+            entity_type="clinical_context_review",
+            entity_id=review.id,
+            action="clinical_context.reviewed",
+            changed_fields={
+                "section": {"old": section if old is not None else None, "new": section},
+                "confirmed_empty": {"old": old, "new": confirmed_empty},
+            },
+            request_id=request_id,
+        )
+    )
+    await session.flush()
+    return review
+
+
+async def get_summary(session: AsyncSession, profile_id: uuid.UUID) -> dict[str, Any]:
+    await get_visible_profile(session, profile_id)
+    reviews_result = await session.execute(
+        select(ProfileClinicalReview).where(ProfileClinicalReview.profile_id == profile_id)
+    )
+    reviews = {row.section: row for row in reviews_result.scalars()}
+
+    sections: dict[str, Any] = {}
+    for section in ("conditions", "allergies", "medications", "supplements"):
+        model = MODEL_BY_SECTION[section]
+        active_field, active_value = ACTIVE_FIELD[section]
+        active_count = int(
+            await session.scalar(
+                select(func.count(model.id)).where(
+                    model.profile_id == profile_id,
+                    model.voided_at.is_(None),
+                    getattr(model, active_field) == active_value,
+                )
+            )
+            or 0
+        )
+        total_count = int(
+            await session.scalar(
+                select(func.count(model.id)).where(
+                    model.profile_id == profile_id,
+                    model.voided_at.is_(None),
+                )
+            )
+            or 0
+        )
+        review = reviews.get(section)
+        sections[section] = {
+            "reviewed": review is not None,
+            "confirmed_empty": bool(review.confirmed_empty) if review else False,
+            "reviewed_at": review.reviewed_at if review else None,
+            "active_count": active_count,
+            "total_count": total_count,
+        }
+    return {"profile_id": profile_id, "sections": sections}

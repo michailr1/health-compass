@@ -127,6 +127,68 @@ def _assert_revision_0021(engine) -> None:
         assert helper_exists is None
 
 
+def _assert_clinical_context_head(engine, expected_head: str) -> None:
+    clinical_tables = {
+        "profile_conditions",
+        "profile_allergies",
+        "profile_medications",
+        "profile_supplements",
+        "profile_clinical_safety_flags",
+        "profile_clinical_reviews",
+    }
+    with engine.connect() as connection:
+        assert _current_database_revision(engine) == expected_head
+        tables = set(
+            connection.execute(
+                text(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema = 'health_compass'"
+                )
+            ).scalars()
+        )
+        assert clinical_tables <= tables
+
+        rls_rows = connection.execute(
+            text(
+                "SELECT relname, relrowsecurity, relforcerowsecurity "
+                "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "WHERE n.nspname = 'health_compass' "
+                "AND relname = ANY(:tables)"
+            ),
+            {"tables": sorted(clinical_tables)},
+        ).all()
+        assert len(rls_rows) == len(clinical_tables)
+        assert all(row.relrowsecurity and row.relforcerowsecurity for row in rls_rows)
+
+        app_delete_grants = connection.execute(
+            text(
+                "SELECT count(*) FROM information_schema.role_table_grants "
+                "WHERE grantee = 'health_compass_app' "
+                "AND table_schema = 'health_compass' "
+                "AND table_name = ANY(:tables) "
+                "AND privilege_type = 'DELETE'"
+            ),
+            {"tables": sorted(clinical_tables)},
+        ).scalar_one()
+        assert app_delete_grants == 0
+
+        public_helper = connection.execute(
+            text(
+                "SELECT has_function_privilege("
+                "'public', 'health_compass.app_duplicate_user_activity(uuid)', 'EXECUTE')"
+            )
+        ).scalar_one()
+        app_helper = connection.execute(
+            text(
+                "SELECT has_function_privilege("
+                "'health_compass_app', "
+                "'health_compass.app_duplicate_user_activity(uuid)', 'EXECUTE')"
+            )
+        ).scalar_one()
+        assert public_helper is False
+        assert app_helper is False
+
+
 def test_migration_0021_0022_cycle_and_current_head() -> None:
     """Verify the historical 0021↔0022 boundary, then the current full head."""
     config = _get_alembic_config()
@@ -145,12 +207,12 @@ def test_migration_0021_0022_cycle_and_current_head() -> None:
         _assert_revision_0022(engine)
 
         upgrade(config, "head")
-        assert _current_database_revision(engine) == expected_head
+        _assert_clinical_context_head(engine, expected_head)
 
         downgrade(config, "-1")
         assert _current_database_revision(engine) != expected_head
 
         upgrade(config, "head")
-        assert _current_database_revision(engine) == expected_head
+        _assert_clinical_context_head(engine, expected_head)
     finally:
         engine.dispose()
