@@ -154,59 +154,60 @@ def alias_uuid(concept_id: uuid.UUID, alias: SeedAlias) -> uuid.UUID:
 
 
 async def upsert_seed_manifest(session: AsyncSession, manifest: SeedManifest) -> dict[str, int]:
-    concept_rows: list[dict[str, Any]] = []
-    alias_rows: list[dict[str, Any]] = []
+    concept_count = 0
+    alias_count = 0
 
     for concept in manifest.concepts:
-        concept_id = concept_uuid(concept)
-        concept_rows.append(
+        normalized_text = normalize_search_text(concept.display_name)
+        concept_insert = insert(ClinicalDictionaryConcept).values(
             {
-                "id": concept_id,
+                "id": concept_uuid(concept),
                 "domain": concept.domain,
                 "display_name": concept.display_name,
-                "normalized_text": normalize_search_text(concept.display_name),
+                "normalized_text": normalized_text,
                 "qualifier": concept.qualifier,
                 "source_system": concept.source_system,
                 "source_code": concept.source_code,
                 "is_active": True,
             }
         )
-        for alias in concept.aliases:
-            alias_rows.append(
-                {
-                    "id": alias_uuid(concept_id, alias),
-                    "concept_id": concept_id,
-                    "alias_text": alias.text,
-                    "normalized_text": normalize_search_text(alias.text),
-                }
-            )
-
-    if concept_rows:
-        concept_insert = insert(ClinicalDictionaryConcept).values(concept_rows)
-        await session.execute(
+        concept_result = await session.execute(
             concept_insert.on_conflict_do_update(
-                index_elements=[ClinicalDictionaryConcept.id],
+                index_elements=[
+                    ClinicalDictionaryConcept.domain,
+                    ClinicalDictionaryConcept.normalized_text,
+                ],
                 set_={
                     "display_name": concept_insert.excluded.display_name,
-                    "normalized_text": concept_insert.excluded.normalized_text,
                     "qualifier": concept_insert.excluded.qualifier,
                     "source_system": concept_insert.excluded.source_system,
                     "source_code": concept_insert.excluded.source_code,
                     "is_active": True,
                 },
-            )
+            ).returning(ClinicalDictionaryConcept.id)
         )
+        actual_concept_id = concept_result.scalar_one()
+        concept_count += 1
 
-    if alias_rows:
-        alias_insert = insert(ClinicalDictionaryAlias).values(alias_rows)
-        await session.execute(
-            alias_insert.on_conflict_do_update(
-                index_elements=[ClinicalDictionaryAlias.id],
-                set_={
-                    "alias_text": alias_insert.excluded.alias_text,
-                    "normalized_text": alias_insert.excluded.normalized_text,
-                },
+        for alias in concept.aliases:
+            alias_insert = insert(ClinicalDictionaryAlias).values(
+                {
+                    "id": alias_uuid(actual_concept_id, alias),
+                    "concept_id": actual_concept_id,
+                    "alias_text": alias.text,
+                    "normalized_text": normalize_search_text(alias.text),
+                }
             )
-        )
+            await session.execute(
+                alias_insert.on_conflict_do_update(
+                    index_elements=[ClinicalDictionaryAlias.id],
+                    set_={
+                        "concept_id": actual_concept_id,
+                        "alias_text": alias_insert.excluded.alias_text,
+                        "normalized_text": alias_insert.excluded.normalized_text,
+                    },
+                )
+            )
+            alias_count += 1
 
-    return {"concepts": len(concept_rows), "aliases": len(alias_rows)}
+    return {"concepts": concept_count, "aliases": alias_count}
