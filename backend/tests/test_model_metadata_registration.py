@@ -1,11 +1,11 @@
 """Regression coverage for model registration required by Clinical Context FKs."""
 
-import app.models  # noqa: F401
-import app.models.clinical_context  # noqa: F401
 from app.db.base import Base
+from app.main import app as application  # noqa: F401
 
 
-def test_clinical_dictionary_foreign_keys_resolve_in_shared_metadata() -> None:
+def test_clinical_dictionary_foreign_keys_resolve_in_production_registry() -> None:
+    """The normal application import path must register every referenced table."""
     table_names = {table.fullname for table in Base.metadata.sorted_tables}
 
     assert "health_compass.clinical_dictionary_concepts" in table_names
