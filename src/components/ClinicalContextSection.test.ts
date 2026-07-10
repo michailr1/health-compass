@@ -22,7 +22,7 @@ const state = (
 });
 
 describe("Clinical Context presentation helpers", () => {
-  it("builds safe default payloads for every section", () => {
+  it("builds safe free-text payloads for every section", () => {
     expect(createClinicalPayload("conditions", "Головная боль")).toEqual({
       display_name: "Головная боль",
       clinical_status: "active",
@@ -40,6 +40,19 @@ describe("Clinical Context presentation helpers", () => {
       display_name: "Магний",
       supplement_type: "unknown",
       status: "active",
+    });
+  });
+
+  it("preserves canonical dictionary provenance", () => {
+    expect(createClinicalPayload("medications", {
+      displayText: "Метформин",
+      canonicalConceptId: "11111111-1111-4111-8111-111111111301",
+      source: "global",
+    })).toEqual({
+      display_name: "Метформин",
+      status: "active",
+      code_system: "health_compass",
+      code: "11111111-1111-4111-8111-111111111301",
     });
   });
 
