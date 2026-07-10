@@ -28,6 +28,10 @@ def upgrade() -> None:
     )
     op.execute(
         f"ALTER TABLE {S}.profile_clinical_reviews "
+        "ALTER COLUMN review_state SET DEFAULT 'unknown'"
+    )
+    op.execute(
+        f"ALTER TABLE {S}.profile_clinical_reviews "
         "ALTER COLUMN review_state SET NOT NULL"
     )
     op.execute(
@@ -36,10 +40,39 @@ def upgrade() -> None:
         "CHECK (review_state IN ('unknown', 'deferred', 'confirmed_none'))"
     )
     op.execute(
-        f"GRANT UPDATE (review_state) ON {S}.profile_clinical_reviews TO {APP}"
+        f"""
+        CREATE OR REPLACE FUNCTION {S}.sync_clinical_review_legacy_flag()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $$
+        BEGIN
+          IF TG_OP = 'INSERT' THEN
+            IF NEW.confirmed_empty THEN
+              NEW.review_state := 'confirmed_none';
+            ELSE
+              NEW.confirmed_empty := (NEW.review_state = 'confirmed_none');
+            END IF;
+          ELSIF NEW.review_state IS DISTINCT FROM OLD.review_state THEN
+            NEW.confirmed_empty := (NEW.review_state = 'confirmed_none');
+          ELSIF NEW.confirmed_empty IS DISTINCT FROM OLD.confirmed_empty THEN
+            NEW.review_state := CASE WHEN NEW.confirmed_empty THEN 'confirmed_none' ELSE 'unknown' END;
+          END IF;
+          RETURN NEW;
+        END;
+        $$
+        """
     )
     op.execute(
-        f"ALTER TABLE {S}.profile_clinical_reviews DROP COLUMN confirmed_empty"
+        f"""
+        CREATE TRIGGER trg_sync_clinical_review_legacy_flag
+        BEFORE INSERT OR UPDATE OF review_state, confirmed_empty
+        ON {S}.profile_clinical_reviews
+        FOR EACH ROW
+        EXECUTE FUNCTION {S}.sync_clinical_review_legacy_flag()
+        """
+    )
+    op.execute(
+        f"GRANT UPDATE (review_state) ON {S}.profile_clinical_reviews TO {APP}"
     )
 
     op.execute(
@@ -77,8 +110,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute(
-        f"ALTER TABLE {S}.profile_clinical_reviews "
-        "ADD COLUMN confirmed_empty boolean NOT NULL DEFAULT false"
+        f"DROP TRIGGER IF EXISTS trg_sync_clinical_review_legacy_flag "
+        f"ON {S}.profile_clinical_reviews"
+    )
+    op.execute(
+        f"DROP FUNCTION IF EXISTS {S}.sync_clinical_review_legacy_flag()"
     )
     op.execute(
         f"UPDATE {S}.profile_clinical_reviews "
@@ -93,9 +129,6 @@ def downgrade() -> None:
     )
     op.execute(
         f"ALTER TABLE {S}.profile_clinical_reviews DROP COLUMN review_state"
-    )
-    op.execute(
-        f"GRANT UPDATE (confirmed_empty) ON {S}.profile_clinical_reviews TO {APP}"
     )
 
     op.execute(
