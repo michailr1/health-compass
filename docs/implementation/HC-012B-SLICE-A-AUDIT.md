@@ -1,89 +1,113 @@
 # HC-012b Slice A — Implementation Audit
 
-Status: `IN PROGRESS`  
+Status: `IMPLEMENTED — CI IN PROGRESS`  
 Base: `main` at `eb7d6ab4e8f2c85c0f58cd4e087ab19462e907de`  
 Production: untouched
 
-## Confirmed current implementation
+## Implemented schema
 
-### Database
-
-`profile_clinical_reviews` was introduced by migration `0039_add_clinical_context_review_state.py`.
-
-Current columns:
-
-- `id uuid`;
-- `profile_id uuid`;
-- `section varchar(32)`;
-- `confirmed_empty boolean NOT NULL DEFAULT false`;
-- `reviewed_at timestamptz`;
-- `reviewed_by_user_id uuid`;
-- `updated_at timestamptz`.
-
-Current constraints and security:
-
-- UNIQUE `(profile_id, section)`;
-- sections limited to conditions/allergies/medications/supplements;
-- ENABLE RLS;
-- FORCE RLS;
-- SELECT through `app_can_view_profile`;
-- INSERT/UPDATE through `app_can_edit_profile` and current actor;
-- app role has SELECT/INSERT and column-level UPDATE;
-- app role must remain without DELETE after migration `0041`.
-
-### ORM
-
-`backend/app/models/clinical_context.py` contains `ProfileClinicalReview` with boolean `confirmed_empty`.
-
-### Existing audit
-
-Current review changes use the generic action:
-
-- `clinical_context.reviewed`.
-
-Slice A must extend this to explicit review-state audit semantics while preserving existing history.
-
-## Required implementation files
-
-The existing HC-012b code is concentrated in:
-
-- `backend/alembic/versions/0039_add_clinical_context_review_state.py`;
-- new migration after current head (`0042` if head remains `0041`);
-- `backend/app/models/clinical_context.py`;
-- `backend/app/schemas/clinical_context.py`;
-- `backend/app/schemas/clinical_context_summary.py`;
-- `backend/app/services/clinical_context.py`;
-- `backend/app/api/routes/clinical_context.py`;
-- `backend/tests/test_clinical_review_rls.py`;
-- `backend/tests/test_clinical_context_hardening.py`;
-- `backend/tests/test_migrations.py`;
-- `src/components/ClinicalContextSection.tsx`;
-- `src/components/ClinicalContextSection.test.ts`;
-- `src/lib/api.ts`.
-
-## Planned schema change
-
-Replace the boolean-only representation with:
+Migration `0042_add_clinical_review_states.py` adds:
 
 ```text
 review_state = unknown | deferred | confirmed_none
 ```
-
-`has_entries` remains derived and is never accepted as a stored client value.
 
 Backfill:
 
 - `confirmed_empty=true` → `confirmed_none`;
 - `confirmed_empty=false` → `unknown`.
 
-The obsolete boolean can only be dropped after backend and frontend no longer reference it in the same reviewed change set.
+The legacy `confirmed_empty` column is temporarily preserved and synchronized by a database trigger so existing SQL tests and older clients remain compatible during the transition.
+
+Security invariants remain:
+
+- UNIQUE `(profile_id, section)`;
+- ENABLE RLS;
+- FORCE RLS;
+- view access through `app_can_view_profile`;
+- writes through `app_can_edit_profile` and current actor;
+- app role without DELETE.
+
+## Implemented API
+
+Primary endpoints:
+
+- `GET /profiles/{profile_id}/clinical-context/state`;
+- `PATCH /profiles/{profile_id}/clinical-context/sections/{section}/review`.
+
+Compatibility endpoints remain functional:
+
+- `GET /profiles/{profile_id}/clinical-context`;
+- `POST /profiles/{profile_id}/clinical-context/review`;
+- legacy `confirmed_empty` request payloads.
+
+The API stores only:
+
+- `unknown`;
+- `deferred`;
+- `confirmed_none`.
+
+`has_entries` is derived from clinical history and cannot be submitted by a client.
+
+Optimistic concurrency uses `expected_updated_at`; stale changes return `409 review_state_conflict`.
+
+`confirmed_none` returns `409 section_has_entries` when records/history exist.
+
+## Implemented record interaction
+
+Creating the first record in a section atomically clears incompatible `deferred` or `confirmed_none` state in the same request transaction.
+
+Voiding the final record does not automatically create `confirmed_none`.
+
+## Implemented frontend
+
+`ClinicalContextSection` now provides:
+
+- `Добавить запись`;
+- explicit confirmed-none action;
+- neutral `Не сейчас`;
+- reversible `Изменить решение`;
+- reusable `WhyWeAsk` disclosure;
+- status labels for unknown, deferred, confirmed-none and has-entries;
+- mobile-sized controls and non-blocking copy.
+
+The interface explicitly states that all core functions remain available without completing Clinical Context, with potentially lower personalization.
+
+## Audit events
+
+Migration `0042` permits:
+
+- `clinical_section.review_deferred`;
+- `clinical_section.review_unknown`;
+- `clinical_section.confirmed_none`;
+- `clinical_section.confirmed_none_cleared`.
+
+Existing `clinical_context.reviewed` history remains valid.
+
+## Tests
+
+Added/updated coverage for:
+
+- allowed stored states;
+- rejection of client-submitted `has_entries`;
+- legacy request compatibility;
+- frontend status mapping;
+- migration head `0042`;
+- no effective DELETE privilege;
+- full migration/RLS cycle.
+
+CI history:
+
+- run `#237`: frontend and PostgreSQL/RLS passed; one legacy backend property assertion failed;
+- compatibility property added;
+- run `#239`: current validation run.
 
 ## Non-negotiable invariants
 
-- adding the first record clears `deferred` or `confirmed_none` atomically;
-- confirmed-none is rejected while records exist;
-- voiding the final record does not create confirmed-none;
+- `has_entries` cannot drift from clinical records;
+- `deferred` is persisted on backend;
+- confirmed-none cannot coexist with history;
 - no physical DELETE;
 - RLS/FORCE RLS preserved;
 - outsider API remains 404;
-- no production deployment from this branch.
+- production is not deployed from this branch.
