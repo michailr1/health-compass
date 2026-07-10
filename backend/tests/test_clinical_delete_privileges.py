@@ -39,7 +39,7 @@ def test_app_role_has_no_effective_delete_on_clinical_context_tables() -> None:
             revision = connection.execute(
                 text("SELECT version_num FROM health_compass.alembic_version")
             ).scalar_one()
-            assert revision == "0043"
+            assert revision == "0044"
 
             effective_delete = {
                 table: connection.execute(
