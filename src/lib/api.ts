@@ -125,6 +125,24 @@ export interface ClinicalSuggestion {
   matched_text: string;
 }
 
+export type ProfileCompletionState = "complete" | "deferred" | "incomplete";
+
+export interface ProfileCompletionSection {
+  key: string;
+  title: string;
+  state: ProfileCompletionState;
+  missing_fields: string[];
+  next_action: string;
+}
+
+export interface ProfileCompletionSummary {
+  completed_sections: number;
+  total_sections: number;
+  progress_percent: number;
+  next_section: string | null;
+  sections: ProfileCompletionSection[];
+}
+
 export interface DashboardSnapshot {
   id: string;
   profile_id: string;

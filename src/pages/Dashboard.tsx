@@ -2,7 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Activity, Bed, CalendarClock, Dna, Gauge, AlertTriangle, ArrowRight, Info, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import { ApiError, apiGet, type DashboardSnapshot, type HealthProfile } from "@/lib/api";
+import { DashboardProfileContextCard } from "@/components/DashboardProfileContextCard";
+import {
+  ApiError,
+  apiGet,
+  type DashboardSnapshot,
+  type HealthProfile,
+  type ProfileCompletionSummary,
+} from "@/lib/api";
 
 const fmt = new Intl.NumberFormat("ru-RU");
 
@@ -34,14 +41,17 @@ const priorityIcon: Record<string, React.ComponentType<{ className?: string }>> 
 export async function loadDashboard() {
   const profiles = await apiGet<HealthProfile[]>("/profiles");
   const profile = profiles[0];
-  if (!profile) return { profile: null, dashboard: null };
+  if (!profile) return { profile: null, dashboard: null, completion: null };
+
+  const completionPromise = apiGet<ProfileCompletionSummary>(`/profiles/${profile.id}/completion`)
+    .catch(() => null);
 
   try {
     const dashboard = await apiGet<DashboardSnapshot>(`/profiles/${profile.id}/dashboard`);
-    return { profile, dashboard };
+    return { profile, dashboard, completion: await completionPromise };
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
-      return { profile, dashboard: null };
+      return { profile, dashboard: null, completion: await completionPromise };
     }
     throw error;
   }
@@ -82,10 +92,11 @@ export default function Dashboard() {
           <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">Дашборд</h1>
           <p className="mt-1 text-sm text-muted-foreground">Профиль: {data.profile.display_name}</p>
         </header>
+        {data.completion && <DashboardProfileContextCard completion={data.completion} />}
         <div className="hm-card p-6 md:p-8">
           <h2 className="font-display text-xl font-semibold">Профиль создан</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Данных для дашборда пока нет. Подключите источник, добавьте измерения или заполните профиль — показатели появятся после первой обработки данных.
+            Данных для дашборда пока нет. Подключите источник или добавьте измерения — показатели появятся после первой обработки данных. Анкету можно заполнять постепенно.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <Link
@@ -98,7 +109,7 @@ export default function Dashboard() {
               to="/app/profile"
               className="inline-flex items-center gap-1.5 rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted/40"
             >
-              Заполнить профиль
+              Открыть профиль
             </Link>
           </div>
         </div>
@@ -108,6 +119,7 @@ export default function Dashboard() {
 
   const s = data.dashboard.summary;
   const priorities = data.dashboard.priorities;
+  const fullProfileContext = data.completion?.progress_percent === 100;
 
   return (
     <div className="space-y-6">
@@ -115,11 +127,13 @@ export default function Dashboard() {
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">Дашборд</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Профиль: {data.profile.display_name}. Данные загружены через backend API с серверной сессией.
+            Профиль: {data.profile.display_name}. Показатели и контекст профиля учитываются отдельно.
           </p>
         </div>
         <div className="hm-chip"><span className="h-1.5 w-1.5 rounded-full bg-success" /> Данные актуальны</div>
       </header>
+
+      {data.completion && <DashboardProfileContextCard completion={data.completion} />}
 
       <div className="hm-card relative overflow-hidden p-6 md:p-8">
         <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
@@ -134,7 +148,11 @@ export default function Dashboard() {
             <div>
               <div className="text-xs uppercase tracking-wider text-muted-foreground">Интегральный индекс наблюдения</div>
               <div className="mt-1 font-display text-xl font-semibold">Наблюдение стабильно</div>
-              <div className="mt-1 text-sm text-muted-foreground">Собрана достаточная база для сравнения окон.</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {fullProfileContext
+                  ? "Физиологические данные дополнены просмотренным контекстом профиля."
+                  : "Физиологические данные доступны; контекст профиля можно дополнить для более точной персонализации."}
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
