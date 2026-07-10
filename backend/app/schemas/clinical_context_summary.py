@@ -1,4 +1,4 @@
-"""Summary and reviewed-empty schemas for Clinical Context."""
+"""Summary and review-state schemas for Clinical Context."""
 
 from __future__ import annotations
 
@@ -9,19 +9,23 @@ from typing import Literal
 from pydantic import BaseModel
 
 ClinicalSection = Literal["conditions", "allergies", "medications", "supplements"]
+StoredReviewState = Literal["unknown", "deferred", "confirmed_none"]
+EffectiveReviewState = Literal["unknown", "deferred", "confirmed_none", "has_entries"]
 
 
 class ClinicalSectionReviewRequest(BaseModel):
     section: ClinicalSection
-    confirmed_empty: bool = False
+    review_state: StoredReviewState
+    expected_updated_at: datetime.datetime | None = None
 
 
 class ClinicalSectionState(BaseModel):
-    reviewed: bool
-    confirmed_empty: bool
+    review_state: StoredReviewState
+    effective_state: EffectiveReviewState
     reviewed_at: datetime.datetime | None = None
+    updated_at: datetime.datetime | None = None
     active_count: int
-    total_count: int
+    history_count: int
 
 
 class ClinicalContextSummary(BaseModel):
