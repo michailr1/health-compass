@@ -46,6 +46,26 @@ Normalization covers Unicode NFKC, case folding, `ё/е`, punctuation and whites
 - Supplements/БАД: Russian ingredient names plus EAEU/Russian registered product names as aliases; registry presence does not imply efficacy.
 - SNOMED CT: optional mapping only where licensing permits.
 
+## Seed workflow
+
+Validation is the default and performs no database writes:
+
+```bash
+cd backend
+.venv/bin/python scripts/import_clinical_dictionary_seed.py
+```
+
+Expected output includes `VALID` and `DRY_RUN`.
+
+Applying a reviewed batch is always explicit and uses `DATABASE_MIGRATOR_URL`, never the runtime application role:
+
+```bash
+cd backend
+.venv/bin/python scripts/import_clinical_dictionary_seed.py --apply
+```
+
+The importer uses deterministic UUIDv5 identities and PostgreSQL upserts, so repeating the same reviewed batch is idempotent. A production import requires a separate deployment approval and a before/after count report.
+
 ## Delivery slices
 
 1. Foundation: normalization and deterministic ranking.
