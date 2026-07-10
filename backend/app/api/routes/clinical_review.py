@@ -23,7 +23,10 @@ from app.schemas.clinical_context import (
     SupplementCreateRequest,
     SupplementResponse,
 )
-from app.schemas.clinical_context_summary import ClinicalContextSummary
+from app.schemas.clinical_context_summary import (
+    ClinicalContextSummary,
+    ClinicalSectionReviewRequest,
+)
 from app.services.clinical_context import create_record
 from app.services.clinical_review import (
     clear_incompatible_review_state,
@@ -58,6 +61,29 @@ async def clinical_context_state(
     _: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    return await get_summary(session, profile_id)
+
+
+@router.post(
+    "/profiles/{profile_id}/clinical-context/review",
+    response_model=ClinicalContextSummary,
+)
+async def legacy_review_clinical_context(
+    profile_id: uuid.UUID,
+    payload: ClinicalSectionReviewRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    await review_section(
+        session,
+        profile_id,
+        payload.section,
+        payload.review_state,
+        payload.expected_updated_at,
+        current_user,
+        _request_id(request),
+    )
     return await get_summary(session, profile_id)
 
 
