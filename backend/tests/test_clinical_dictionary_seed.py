@@ -35,7 +35,7 @@ ALL_SEED_PATHS = (
         (
             MEDICATIONS_SUPPLEMENTS_SEED_PATH,
             "ru-RU-common-medications-supplements-v1",
-            24,
+            25,
         ),
     ],
 )
@@ -75,7 +75,7 @@ def test_medications_supplements_seed_is_balanced() -> None:
         "supplement",
     }
     assert sum(concept.domain == "medication" for concept in manifest.concepts) == 12
-    assert sum(concept.domain == "supplement" for concept in manifest.concepts) == 12
+    assert sum(concept.domain == "supplement" for concept in manifest.concepts) == 13
 
 
 def test_seed_batches_have_no_cross_file_duplicate_concepts() -> None:
