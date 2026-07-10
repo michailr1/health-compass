@@ -17,6 +17,7 @@ from app.api.routes.health_profile import router as health_profile_router
 from app.api.routes.identity import router as user_router
 from app.api.routes.identity_removal import router as identity_removal_router
 from app.api.routes.private import router as private_router
+from app.api.routes.session_management import router as session_management_router
 from app.api.routes.sign_in_methods import router as sign_in_methods_router
 from app.api.routes.version import router as version_router
 
@@ -37,5 +38,6 @@ api_router.include_router(login_router)
 api_router.include_router(email_auth_router)
 api_router.include_router(account_link_router)
 api_router.include_router(sign_in_methods_router)
+api_router.include_router(session_management_router)
 api_router.include_router(identity_removal_router)
 api_router.include_router(duplicate_resolution_router)
