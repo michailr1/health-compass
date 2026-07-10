@@ -16,7 +16,6 @@ from app.models.user import User
 from app.schemas.clinical_context import (
     AllergyCreateRequest,
     AllergyResponse,
-    ConditionCreateRequest,
     ConditionResponse,
     MedicationCreateRequest,
     MedicationResponse,
@@ -27,6 +26,7 @@ from app.schemas.clinical_context_summary import (
     ClinicalContextSummary,
     ClinicalSectionReviewRequest,
 )
+from app.schemas.clinical_questions import ConditionCreateWithQuestions
 from app.services.clinical_context import create_record
 from app.services.clinical_review import (
     clear_incompatible_review_state,
@@ -142,7 +142,7 @@ async def _create_and_clear_review(
 @router.post("/profiles/{profile_id}/conditions", response_model=ConditionResponse, status_code=201)
 async def add_condition_with_review_state(
     profile_id: uuid.UUID,
-    payload: ConditionCreateRequest,
+    payload: ConditionCreateWithQuestions,
     request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
