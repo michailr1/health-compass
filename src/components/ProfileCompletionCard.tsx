@@ -1,23 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, CircleDashed, Clock3, Loader2 } from "lucide-react";
 
-import { apiGet } from "@/lib/api";
-
-type CompletionSection = {
-  key: string;
-  title: string;
-  state: "complete" | "deferred" | "incomplete";
-  missing_fields: string[];
-  next_action: string;
-};
-
-type CompletionSummary = {
-  completed_sections: number;
-  total_sections: number;
-  progress_percent: number;
-  next_section: string | null;
-  sections: CompletionSection[];
-};
+import { apiGet, type ProfileCompletionSummary } from "@/lib/api";
 
 const STATE_LABELS = {
   complete: "Заполнено",
@@ -28,7 +12,7 @@ const STATE_LABELS = {
 export function ProfileCompletionCard({ profileId }: { profileId: string }) {
   const { data, isLoading, error } = useQuery({
     queryKey: ["profile-completion", profileId],
-    queryFn: () => apiGet<CompletionSummary>(`/profiles/${profileId}/completion`),
+    queryFn: () => apiGet<ProfileCompletionSummary>(`/profiles/${profileId}/completion`),
   });
 
   if (isLoading) {
