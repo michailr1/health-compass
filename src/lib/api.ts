@@ -99,13 +99,16 @@ export interface ConsentStatus {
 }
 
 export type ClinicalSectionKey = "conditions" | "allergies" | "medications" | "supplements";
+export type ClinicalReviewState = "unknown" | "deferred" | "confirmed_none";
+export type ClinicalEffectiveState = ClinicalReviewState | "has_entries";
 
 export interface ClinicalSectionState {
-  reviewed: boolean;
-  confirmed_empty: boolean;
+  review_state: ClinicalReviewState;
+  effective_state: ClinicalEffectiveState;
   reviewed_at: string | null;
+  updated_at: string | null;
   active_count: number;
-  total_count: number;
+  history_count: number;
 }
 
 export interface ClinicalContextSummary {
