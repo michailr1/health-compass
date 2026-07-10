@@ -116,6 +116,15 @@ export interface ClinicalContextSummary {
   sections: Record<ClinicalSectionKey, ClinicalSectionState>;
 }
 
+export interface ClinicalSuggestion {
+  id: string | null;
+  display_text: string;
+  qualifier: string | null;
+  source: "global" | "personal";
+  canonical_concept_id: string | null;
+  matched_text: string;
+}
+
 export interface DashboardSnapshot {
   id: string;
   profile_id: string;
