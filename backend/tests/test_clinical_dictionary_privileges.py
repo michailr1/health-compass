@@ -55,6 +55,8 @@ def test_app_role_can_only_read_global_dictionary() -> None:
                 )
             ).scalar_one()
             assert aliases_select is True
+    finally:
+        engine.dispose()
 
 
 def test_dictionary_seed_is_deterministic() -> None:
