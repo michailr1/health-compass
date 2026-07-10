@@ -2,6 +2,10 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, HelpCircle, Loader2, Plus, ShieldAlert } from "lucide-react";
 
+import {
+  ClinicalClarifyingQuestions,
+  type ClinicalAnswers,
+} from "@/components/ClinicalClarifyingQuestions";
 import { ClinicalTypeahead, type ClinicalSelection } from "@/components/ClinicalTypeahead";
 import {
   apiGet,
@@ -50,32 +54,66 @@ async function loadClinicalContext(profileId: string) {
   return { summary, conditions, allergies, medications, supplements };
 }
 
-export function createClinicalPayload(section: SectionKey, input: string | ClinicalSelection) {
+export function createClinicalPayload(
+  section: SectionKey,
+  input: string | ClinicalSelection,
+  answers: ClinicalAnswers = {},
+) {
   const selection: ClinicalSelection = typeof input === "string"
     ? { displayText: input, canonicalConceptId: null, source: "free_text" }
     : input;
   const provenance = selection.canonicalConceptId
     ? { code_system: "health_compass", code: selection.canonicalConceptId }
     : {};
+  const dose = answers.doseValue && answers.doseUnit
+    ? { dose_value: Number(answers.doseValue), dose_unit: answers.doseUnit.trim() }
+    : {};
 
   if (section === "conditions") {
-    return { display_name: selection.displayText, clinical_status: "active", ...provenance };
+    const status = answers.presencePattern === "resolved"
+      ? "resolved"
+      : answers.presencePattern === "unknown"
+        ? "unknown"
+        : "active";
+    return {
+      display_name: selection.displayText,
+      clinical_status: status,
+      ...(answers.onsetTiming ? { onset_timing: answers.onsetTiming } : {}),
+      ...(answers.presencePattern ? { presence_pattern: answers.presencePattern } : {}),
+      ...provenance,
+    };
   }
   if (section === "allergies") {
+    const status = answers.currentUse === "no" ? "inactive" : answers.currentUse === "unknown" ? "unknown" : "active";
     return {
       substance_name: selection.displayText,
       allergy_type: "unknown",
-      clinical_status: "active",
+      clinical_status: status,
+      ...(answers.reaction?.trim() ? { reaction: answers.reaction.trim() } : {}),
+      ...(answers.severity ? { severity: answers.severity } : {}),
       ...provenance,
     };
   }
   if (section === "medications") {
-    return { display_name: selection.displayText, status: "active", ...provenance };
+    const status = answers.currentUse === "no" ? "completed" : answers.currentUse === "unknown" ? "unknown" : "active";
+    return {
+      display_name: selection.displayText,
+      status,
+      ...(answers.startDate ? { start_date: answers.startDate } : {}),
+      ...(answers.frequencyText?.trim() ? { frequency_text: answers.frequencyText.trim() } : {}),
+      ...(answers.reasonText?.trim() ? { reason_text: answers.reasonText.trim() } : {}),
+      ...dose,
+      ...provenance,
+    };
   }
+  const status = answers.currentUse === "no" ? "completed" : answers.currentUse === "unknown" ? "unknown" : "active";
   return {
     display_name: selection.displayText,
     supplement_type: "unknown",
-    status: "active",
+    status,
+    ...(answers.startDate ? { start_date: answers.startDate } : {}),
+    ...(answers.frequencyText?.trim() ? { frequency_text: answers.frequencyText.trim() } : {}),
+    ...dose,
     ...provenance,
   };
 }
@@ -116,17 +154,22 @@ export function ClinicalContextSection({ profileId, consentActive }: { profileId
   const queryClient = useQueryClient();
   const [editingSection, setEditingSection] = useState<SectionKey | null>(null);
   const [selection, setSelection] = useState<ClinicalSelection | null>(null);
+  const [answers, setAnswers] = useState<ClinicalAnswers>({});
   const queryKey = useMemo(() => ["clinical-context", profileId], [profileId]);
   const { data, isLoading, error } = useQuery({ queryKey, queryFn: () => loadClinicalContext(profileId) });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey });
+  const resetEditor = () => {
+    setEditingSection(null);
+    setSelection(null);
+    setAnswers({});
+  };
 
   const addMutation = useMutation({
-    mutationFn: ({ section, selected }: { section: SectionKey; selected: ClinicalSelection }) =>
-      apiPost(`/profiles/${profileId}/${section}`, createClinicalPayload(section, selected)),
+    mutationFn: ({ section, selected, details }: { section: SectionKey; selected: ClinicalSelection; details: ClinicalAnswers }) =>
+      apiPost(`/profiles/${profileId}/${section}`, createClinicalPayload(section, selected, details)),
     onSuccess: () => {
-      setEditingSection(null);
-      setSelection(null);
+      resetEditor();
       invalidate();
     },
   });
@@ -191,27 +234,39 @@ export function ClinicalContextSection({ profileId, consentActive }: { profileId
               {isEditing && (
                 <form className="mt-3 space-y-3" onSubmit={(event) => {
                   event.preventDefault();
-                  if (selection && !addMutation.isPending) addMutation.mutate({ section: section.key, selected: selection });
+                  if (selection && !addMutation.isPending) {
+                    addMutation.mutate({ section: section.key, selected: selection, details: answers });
+                  }
                 }}>
                   <ClinicalTypeahead
                     profileId={profileId}
                     section={section.key}
                     placeholder={section.placeholder}
                     value={selection}
-                    onChange={setSelection}
+                    onChange={(next) => {
+                      setSelection(next);
+                      if (!next) setAnswers({});
+                    }}
                   />
+                  {selection && (
+                    <ClinicalClarifyingQuestions
+                      section={section.key}
+                      answers={answers}
+                      onChange={setAnswers}
+                    />
+                  )}
                   <div className="grid grid-cols-2 gap-2 sm:flex">
                     <button type="submit" disabled={!selection || addMutation.isPending} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
                       {addMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}Сохранить
                     </button>
-                    <button type="button" disabled={addMutation.isPending} onClick={() => { setEditingSection(null); setSelection(null); }} className="min-h-11 rounded-xl border border-border px-4 py-2 text-sm text-muted-foreground disabled:opacity-50">Отмена</button>
+                    <button type="button" disabled={addMutation.isPending} onClick={resetEditor} className="min-h-11 rounded-xl border border-border px-4 py-2 text-sm text-muted-foreground disabled:opacity-50">Отмена</button>
                   </div>
                 </form>
               )}
 
               {!isEditing && (
                 <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
-                  <button type="button" disabled={!consentActive || isBusy} onClick={() => { setEditingSection(section.key); setSelection(null); }} className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium sm:w-auto disabled:opacity-50">
+                  <button type="button" disabled={!consentActive || isBusy} onClick={() => { setEditingSection(section.key); setSelection(null); setAnswers({}); }} className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium sm:w-auto disabled:opacity-50">
                     <Plus className="h-4 w-4" aria-hidden="true" /> Добавить запись
                   </button>
                   {records.length === 0 && !isConfirmedNone && (
