@@ -1,0 +1,116 @@
+.clinical-section-nav {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.25rem 0 0.5rem;
+  scrollbar-width: none;
+}
+
+.clinical-section-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.clinical-section-nav a {
+  flex: 0 0 auto;
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid hsl(var(--border));
+  border-radius: 9999px;
+  background: hsl(var(--card));
+  padding: 0.65rem 0.95rem;
+  color: hsl(var(--foreground));
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.clinical-section-nav a:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+.clinical-questionnaire #clinical-conditions,
+.clinical-questionnaire #clinical-allergies,
+.clinical-questionnaire #clinical-medications,
+.clinical-questionnaire #clinical-supplements {
+  position: relative;
+  border-width: 1px;
+  border-color: hsl(var(--border));
+  background: hsl(var(--card));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+  padding: 1.15rem;
+}
+
+.clinical-questionnaire #clinical-conditions::before,
+.clinical-questionnaire #clinical-allergies::before,
+.clinical-questionnaire #clinical-medications::before,
+.clinical-questionnaire #clinical-supplements::before {
+  content: "";
+  position: absolute;
+  inset: 0.85rem auto 0.85rem 0;
+  width: 3px;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+}
+
+.clinical-questionnaire #clinical-conditions h3,
+.clinical-questionnaire #clinical-allergies h3,
+.clinical-questionnaire #clinical-medications h3,
+.clinical-questionnaire #clinical-supplements h3 {
+  font-size: 1.2rem;
+  line-height: 1.35;
+  font-weight: 700;
+}
+
+.clinical-questionnaire #clinical-conditions p,
+.clinical-questionnaire #clinical-allergies p,
+.clinical-questionnaire #clinical-medications p,
+.clinical-questionnaire #clinical-supplements p {
+  line-height: 1.5;
+}
+
+.clinical-questionnaire #clinical-conditions .text-xs,
+.clinical-questionnaire #clinical-allergies .text-xs,
+.clinical-questionnaire #clinical-medications .text-xs,
+.clinical-questionnaire #clinical-supplements .text-xs {
+  font-size: 0.9rem;
+}
+
+.clinical-questionnaire #clinical-conditions .text-sm,
+.clinical-questionnaire #clinical-allergies .text-sm,
+.clinical-questionnaire #clinical-medications .text-sm,
+.clinical-questionnaire #clinical-supplements .text-sm {
+  font-size: 1rem;
+}
+
+.clinical-questionnaire #clinical-conditions button,
+.clinical-questionnaire #clinical-allergies button,
+.clinical-questionnaire #clinical-medications button,
+.clinical-questionnaire #clinical-supplements button {
+  min-height: 3rem;
+  font-size: 1rem;
+}
+
+.clinical-questionnaire #clinical-conditions > div:first-child,
+.clinical-questionnaire #clinical-allergies > div:first-child,
+.clinical-questionnaire #clinical-medications > div:first-child,
+.clinical-questionnaire #clinical-supplements > div:first-child {
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid hsl(var(--border) / 0.7);
+}
+
+@media (max-width: 767px) {
+  .clinical-questionnaire .hm-card > .grid {
+    gap: 1rem;
+  }
+
+  .clinical-questionnaire #clinical-conditions,
+  .clinical-questionnaire #clinical-allergies,
+  .clinical-questionnaire #clinical-medications,
+  .clinical-questionnaire #clinical-supplements {
+    border-radius: 1.1rem;
+    padding: 1rem 1rem 1.1rem 1.15rem;
+  }
+}
