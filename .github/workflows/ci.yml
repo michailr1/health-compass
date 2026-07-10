@@ -118,6 +118,7 @@ jobs:
             tests/test_clinical_review_rls.py \
             tests/test_clinical_context_hardening.py \
             tests/test_clinical_delete_privileges.py \
+            tests/test_session_management_privileges.py \
             tests/test_account_linking_postgres.py \
             tests/test_separate_account_postgres.py \
             tests/test_identity_removal_postgres.py \
@@ -156,12 +157,15 @@ jobs:
           src/pages/AccountLink.tsx
           src/pages/SignInMethods.tsx
           src/pages/SignInMethods.test.ts
+          src/pages/Security.tsx
           src/lib/api.ts
           src/App.tsx
           src/components/AppLayout.tsx
           src/components/AppLayout.test.ts
           src/components/ClinicalContextSection.tsx
           src/components/ClinicalContextSection.test.ts
+          src/components/ActiveSessionsCard.tsx
+          src/components/ActiveSessionsCard.test.ts
       - name: Tests
         run: npm test
       - name: Build
