@@ -153,6 +153,7 @@ jobs:
           src/pages/Dashboard.tsx
           src/pages/Dashboard.test.ts
           src/pages/HealthProfile.tsx
+          src/pages/ProfileQuestionnaire.tsx
           src/pages/AccountLink.tsx
           src/pages/SignInMethods.tsx
           src/pages/SignInMethods.test.ts
@@ -162,6 +163,7 @@ jobs:
           src/components/AppLayout.test.ts
           src/components/ClinicalContextSection.tsx
           src/components/ClinicalContextSection.test.ts
+          src/components/ProfileCompletionCard.tsx
       - name: Tests
         run: npm test
       - name: Build

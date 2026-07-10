@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, HelpCircle, Loader2, Plus, ShieldAlert } from "lucide-react";
+import { CheckCircle2, ChevronDown, HelpCircle, Loader2, Pencil, Plus, ShieldAlert } from "lucide-react";
 
 import {
   ClinicalClarifyingQuestions,
@@ -24,6 +24,15 @@ export type ClinicalRecord = {
   substance_name?: string;
   clinical_status?: string;
   status?: string;
+  reaction?: string | null;
+  severity?: string | null;
+  dose_value?: string | number | null;
+  dose_unit?: string | null;
+  frequency_text?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  reason_text?: string | null;
+  updated_at: string;
 };
 
 const SECTIONS: Array<{
@@ -122,6 +131,11 @@ export function clinicalRecordLabel(record: ClinicalRecord) {
   return record.display_name ?? record.substance_name ?? "Запись";
 }
 
+export function isClinicalRecordActive(section: SectionKey, record: ClinicalRecord) {
+  if (section === "conditions" || section === "allergies") return record.clinical_status === "active";
+  return record.status === "active";
+}
+
 export function clinicalSectionStatusLabel(state: ClinicalSectionState) {
   if (state.effective_state === "confirmed_none") return "Подтверждено отсутствие";
   if (state.effective_state === "deferred") return "Можно заполнить позже";
@@ -150,6 +164,105 @@ export function WhyWeAsk() {
   );
 }
 
+function RecordEditor({
+  profileId,
+  section,
+  record,
+  onSaved,
+}: {
+  profileId: string;
+  section: SectionKey;
+  record: ClinicalRecord;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(clinicalRecordLabel(record));
+  const [frequency, setFrequency] = useState(record.frequency_text ?? "");
+  const [doseValue, setDoseValue] = useState(record.dose_value == null ? "" : String(record.dose_value));
+  const [doseUnit, setDoseUnit] = useState(record.dose_unit ?? "");
+
+  const mutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiPatch(`/profiles/${profileId}/${section}/${record.id}`, {
+        ...payload,
+        expected_updated_at: record.updated_at,
+      }),
+    onSuccess: () => {
+      setEditing(false);
+      onSaved();
+    },
+  });
+
+  const completeCourse = () => {
+    if (section !== "medications" && section !== "supplements") return;
+    mutation.mutate({ status: "completed", end_date: new Date().toISOString().slice(0, 10) });
+  };
+
+  if (editing) {
+    return (
+      <form
+        className="space-y-2 rounded-xl border border-border bg-background p-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const payload: Record<string, unknown> = section === "allergies"
+            ? { substance_name: name.trim() }
+            : { display_name: name.trim() };
+          if (section === "medications" || section === "supplements") {
+            payload.frequency_text = frequency.trim() || null;
+            if (doseValue && doseUnit.trim()) {
+              payload.dose_value = Number(doseValue);
+              payload.dose_unit = doseUnit.trim();
+            }
+          }
+          mutation.mutate(payload);
+        }}
+      >
+        <input value={name} onChange={(event) => setName(event.target.value)} className="min-h-11 w-full rounded-xl border border-border bg-background px-3 py-2" />
+        {(section === "medications" || section === "supplements") && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <input value={doseValue} inputMode="decimal" onChange={(event) => setDoseValue(event.target.value)} placeholder="Доза" className="min-h-11 rounded-xl border border-border bg-background px-3 py-2" />
+              <input value={doseUnit} onChange={(event) => setDoseUnit(event.target.value)} placeholder="мг, мл" className="min-h-11 rounded-xl border border-border bg-background px-3 py-2" />
+            </div>
+            <input value={frequency} onChange={(event) => setFrequency(event.target.value)} placeholder="Как часто" className="min-h-11 w-full rounded-xl border border-border bg-background px-3 py-2" />
+          </>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <button type="submit" disabled={!name.trim() || mutation.isPending} className="min-h-10 rounded-xl bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50">Сохранить</button>
+          <button type="button" onClick={() => setEditing(false)} className="min-h-10 rounded-xl border border-border px-3 py-2 text-sm">Отмена</button>
+        </div>
+        {mutation.error && <p className="text-xs text-destructive">{mutation.error.message}</p>}
+      </form>
+    );
+  }
+
+  return (
+    <div className="rounded-xl bg-muted/40 px-3 py-2.5 text-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="break-words font-medium">{clinicalRecordLabel(record)}</div>
+          {(record.dose_value || record.frequency_text) && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {record.dose_value ? `${record.dose_value} ${record.dose_unit ?? ""}`.trim() : ""}
+              {record.dose_value && record.frequency_text ? " · " : ""}
+              {record.frequency_text ?? ""}
+            </p>
+          )}
+          {record.end_date && <p className="mt-1 text-xs text-muted-foreground">Завершено: {new Date(record.end_date).toLocaleDateString("ru-RU")}</p>}
+        </div>
+        <button type="button" onClick={() => setEditing(true)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted" aria-label={`Редактировать ${clinicalRecordLabel(record)}`}>
+          <Pencil className="h-4 w-4" />
+        </button>
+      </div>
+      {isClinicalRecordActive(section, record) && (section === "medications" || section === "supplements") && (
+        <button type="button" disabled={mutation.isPending} onClick={completeCourse} className="mt-2 text-xs font-medium text-primary disabled:opacity-50">
+          Завершить курс
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function ClinicalContextSection({ profileId, consentActive }: { profileId: string; consentActive: boolean }) {
   const queryClient = useQueryClient();
   const [editingSection, setEditingSection] = useState<SectionKey | null>(null);
@@ -158,7 +271,10 @@ export function ClinicalContextSection({ profileId, consentActive }: { profileId
   const queryKey = useMemo(() => ["clinical-context", profileId], [profileId]);
   const { data, isLoading, error } = useQuery({ queryKey, queryFn: () => loadClinicalContext(profileId) });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey });
+    queryClient.invalidateQueries({ queryKey: ["profile-completion", profileId] });
+  };
   const resetEditor = () => {
     setEditingSection(null);
     setSelection(null);
@@ -210,11 +326,13 @@ export function ClinicalContextSection({ profileId, consentActive }: { profileId
         {SECTIONS.map((section) => {
           const state = data.summary.sections[section.key];
           const records = data[section.key];
+          const activeRecords = records.filter((record) => isClinicalRecordActive(section.key, record));
+          const historyRecords = records.filter((record) => !isClinicalRecordActive(section.key, record));
           const isEditing = editingSection === section.key;
           const isBusy = addMutation.isPending || reviewMutation.isPending;
           const isConfirmedNone = state.effective_state === "confirmed_none";
           return (
-            <article key={section.key} className="rounded-2xl border border-border/70 p-4">
+            <article id={`clinical-${section.key}`} key={section.key} className="scroll-mt-24 rounded-2xl border border-border/70 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="font-medium leading-5">{section.title}</h3>
@@ -223,12 +341,27 @@ export function ClinicalContextSection({ profileId, consentActive }: { profileId
                 {isConfirmedNone && <CheckCircle2 className="h-5 w-5 shrink-0 text-success" aria-hidden="true" />}
               </div>
 
-              {records.length > 0 && (
-                <div className="mt-3 space-y-2" aria-label={`Записи раздела «${section.title}»`}>
-                  {records.slice(0, 3).map((record) => (
-                    <div key={record.id} className="break-words rounded-xl bg-muted/40 px-3 py-2.5 text-sm">{clinicalRecordLabel(record)}</div>
+              {activeRecords.length > 0 && (
+                <div className="mt-3 space-y-2" aria-label={`Активные записи раздела «${section.title}»`}>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Сейчас</p>
+                  {activeRecords.map((record) => (
+                    <RecordEditor key={record.id} profileId={profileId} section={section.key} record={record} onSaved={invalidate} />
                   ))}
                 </div>
+              )}
+
+              {historyRecords.length > 0 && (
+                <details className="mt-3 rounded-xl border border-border/60 px-3 py-2">
+                  <summary className="flex min-h-9 cursor-pointer list-none items-center justify-between text-sm font-medium">
+                    История · {historyRecords.length}
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    {historyRecords.map((record) => (
+                      <RecordEditor key={record.id} profileId={profileId} section={section.key} record={record} onSaved={invalidate} />
+                    ))}
+                  </div>
+                </details>
               )}
 
               {isEditing && (

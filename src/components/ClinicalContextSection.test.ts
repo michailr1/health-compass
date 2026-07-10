@@ -5,6 +5,7 @@ import {
   clinicalRecordLabel,
   clinicalSectionStatusLabel,
   createClinicalPayload,
+  isClinicalRecordActive,
 } from "./ClinicalContextSection";
 
 const state = (
@@ -87,6 +88,13 @@ describe("Clinical Context presentation helpers", () => {
     });
   });
 
+  it("splits active records from history by section semantics", () => {
+    expect(isClinicalRecordActive("conditions", { id: "1", clinical_status: "active", updated_at: "2026-01-01T00:00:00Z" })).toBe(true);
+    expect(isClinicalRecordActive("allergies", { id: "2", clinical_status: "resolved", updated_at: "2026-01-01T00:00:00Z" })).toBe(false);
+    expect(isClinicalRecordActive("medications", { id: "3", status: "completed", updated_at: "2026-01-01T00:00:00Z" })).toBe(false);
+    expect(isClinicalRecordActive("supplements", { id: "4", status: "active", updated_at: "2026-01-01T00:00:00Z" })).toBe(true);
+  });
+
   it("distinguishes all effective review states", () => {
     expect(clinicalSectionStatusLabel(state("unknown", "unknown"))).toBe("Пока не заполнено");
     expect(clinicalSectionStatusLabel(state("deferred", "deferred"))).toBe("Можно заполнить позже");
@@ -96,7 +104,7 @@ describe("Clinical Context presentation helpers", () => {
   });
 
   it("uses substance name for allergy records", () => {
-    expect(clinicalRecordLabel({ id: "1", substance_name: "Пенициллин" })).toBe("Пенициллин");
+    expect(clinicalRecordLabel({ id: "1", substance_name: "Пенициллин", updated_at: "2026-01-01T00:00:00Z" })).toBe("Пенициллин");
   });
 
   it("makes confirmed-empty actions explicit", () => {
