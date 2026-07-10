@@ -17,8 +17,9 @@ S = "health_compass"
 
 
 def upgrade() -> None:
-    op.execute(f"DROP POLICY IF EXISTS sessions_current_select ON {S}.auth_sessions")
-    op.execute(f"DROP POLICY IF EXISTS sessions_current_update ON {S}.auth_sessions")
+    # Keep sessions_current_* policies: they are required to authenticate a
+    # cookie before app.current_user_id is known. The new owner policies become
+    # effective after get_current_user installs the user context.
     op.execute(f"DROP POLICY IF EXISTS auth_sessions_self_select ON {S}.auth_sessions")
     op.execute(f"DROP POLICY IF EXISTS auth_sessions_self_update ON {S}.auth_sessions")
 
@@ -44,21 +45,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(f"DROP POLICY IF EXISTS auth_sessions_self_update ON {S}.auth_sessions")
     op.execute(f"DROP POLICY IF EXISTS auth_sessions_self_select ON {S}.auth_sessions")
-
-    op.execute(
-        f"""
-        CREATE POLICY sessions_current_select
-        ON {S}.auth_sessions
-        FOR SELECT
-        USING (session_token_hash = {S}.app_current_session_hash())
-        """
-    )
-    op.execute(
-        f"""
-        CREATE POLICY sessions_current_update
-        ON {S}.auth_sessions
-        FOR UPDATE
-        USING (session_token_hash = {S}.app_current_session_hash())
-        WITH CHECK (session_token_hash = {S}.app_current_session_hash())
-        """
-    )
