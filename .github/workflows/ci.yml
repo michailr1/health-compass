@@ -164,6 +164,8 @@ jobs:
           src/components/ClinicalContextSection.tsx
           src/components/ClinicalContextSection.test.ts
           src/components/ProfileCompletionCard.tsx
+          src/components/DashboardProfileContextCard.tsx
+          src/components/DashboardProfileContextCard.test.ts
       - name: Tests
         run: npm test
       - name: Build
