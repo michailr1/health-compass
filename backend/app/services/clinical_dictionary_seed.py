@@ -107,7 +107,7 @@ def load_seed_manifest(path: str | Path) -> SeedManifest:
             alias_text = _required(raw_alias.get("text"), f"concepts[{index}].aliases[{alias_index}].text")
             alias_key = normalize_search_text(alias_text)
             if alias_key in seen_aliases:
-                raise ValueError(f"duplicate alias for {display_name}: {alias_text}")
+                continue
             seen_aliases.add(alias_key)
             aliases.append(
                 SeedAlias(
