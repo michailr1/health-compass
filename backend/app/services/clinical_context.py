@@ -9,12 +9,12 @@ from typing import Any
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.clinical_context import (
     ProfileAllergy,
-    ProfileClinicalReview,
     ProfileClinicalSafetyFlag,
     ProfileCondition,
     ProfileMedication,
@@ -41,13 +41,6 @@ ACTION_PREFIX = {
     "medications": "medication",
     "supplements": "supplement",
     "clinical-safety-flags": "clinical_safety_flag",
-}
-ACTIVE_FIELD = {
-    "conditions": ("clinical_status", "active"),
-    "allergies": ("clinical_status", "active"),
-    "medications": ("status", "active"),
-    "supplements": ("status", "active"),
-    "clinical-safety-flags": ("status", "active"),
 }
 
 
@@ -95,6 +88,31 @@ async def _prepare_write(
     profile = await get_visible_profile(session, profile_id)
     await require_profile_edit_access(session, profile_id)
     await require_health_data_consent(session, profile.owner_user_id)
+
+
+# SQLSTATEs raised by health_compass.sync_clinical_dictionary_concept when a
+# client submits an impossible canonical coding (migration 0047).
+_CONCEPT_ERROR_BY_SQLSTATE = {
+    "HC422": "invalid_concept_id",
+    "HC404": "unknown_concept",
+    "HC409": "concept_domain_mismatch",
+}
+
+
+async def _flush_clinical_write(session: AsyncSession) -> None:
+    """Flush, translating dictionary integrity violations into a 422."""
+    try:
+        await session.flush()
+    except DBAPIError as exc:
+        original = getattr(exc, "orig", None)
+        sqlstate = getattr(original, "sqlstate", None) or getattr(original, "pgcode", None)
+        detail = _CONCEPT_ERROR_BY_SQLSTATE.get(str(sqlstate or ""))
+        if detail is None:
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=detail,
+        ) from exc
 
 
 async def list_records(
@@ -147,7 +165,7 @@ async def create_record(
             request_id=request_id,
         )
     )
-    await session.flush()
+    await _flush_clinical_write(session)
     return record
 
 
@@ -214,7 +232,7 @@ async def update_record(
             request_id=request_id,
         )
     )
-    await session.flush()
+    await _flush_clinical_write(session)
     return record
 
 
@@ -226,7 +244,15 @@ async def void_record(
     reason: str,
     current_user: User,
     request_id: str | None,
+    expected_updated_at: datetime.datetime | None,
 ) -> Any:
+    """Void a record only with an explicit optimistic-concurrency precondition."""
+    if expected_updated_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_428_PRECONDITION_REQUIRED,
+            detail="expected_updated_at is required",
+        )
+
     await _prepare_write(session, profile_id, current_user)
     model = MODEL_BY_SECTION[section]
     result = await session.execute(
@@ -235,6 +261,11 @@ async def void_record(
     record = result.scalar_one_or_none()
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clinical record not found")
+    if record.updated_at != expected_updated_at:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Clinical record was updated elsewhere",
+        )
     if record.voided_at is not None:
         return record
 
@@ -261,115 +292,7 @@ async def void_record(
     return record
 
 
-async def review_section(
-    session: AsyncSession,
-    profile_id: uuid.UUID,
-    section: str,
-    confirmed_empty: bool,
-    current_user: User,
-    request_id: str | None,
-) -> ProfileClinicalReview:
-    if section not in {"conditions", "allergies", "medications", "supplements"}:
-        raise HTTPException(status_code=422, detail="Unknown clinical section")
-    await _prepare_write(session, profile_id, current_user)
-
-    if confirmed_empty:
-        model = MODEL_BY_SECTION[section]
-        active_field, active_value = ACTIVE_FIELD[section]
-        active_count = await session.scalar(
-            select(func.count(model.id)).where(
-                model.profile_id == profile_id,
-                model.voided_at.is_(None),
-                getattr(model, active_field) == active_value,
-            )
-        )
-        if active_count:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Cannot confirm an empty section while active records exist",
-            )
-
-    result = await session.execute(
-        select(ProfileClinicalReview).where(
-            ProfileClinicalReview.profile_id == profile_id,
-            ProfileClinicalReview.section == section,
-        )
-    )
-    review = result.scalar_one_or_none()
-    now = datetime.datetime.now(datetime.UTC)
-    if review is None:
-        review = ProfileClinicalReview(
-            id=uuid.uuid4(),
-            profile_id=profile_id,
-            section=section,
-            confirmed_empty=confirmed_empty,
-            reviewed_at=now,
-            reviewed_by_user_id=current_user.id,
-            updated_at=now,
-        )
-        session.add(review)
-        old = None
-    else:
-        old = review.confirmed_empty
-        review.confirmed_empty = confirmed_empty
-        review.reviewed_at = now
-        review.reviewed_by_user_id = current_user.id
-        review.updated_at = now
-
-    session.add(
-        _audit(
-            profile_id=profile_id,
-            actor_user_id=current_user.id,
-            entity_type="clinical_context_review",
-            entity_id=review.id,
-            action="clinical_context.reviewed",
-            changed_fields={
-                "section": {"old": section if old is not None else None, "new": section},
-                "confirmed_empty": {"old": old, "new": confirmed_empty},
-            },
-            request_id=request_id,
-        )
-    )
-    await session.flush()
-    return review
-
-
-async def get_summary(session: AsyncSession, profile_id: uuid.UUID) -> dict[str, Any]:
-    await get_visible_profile(session, profile_id)
-    reviews_result = await session.execute(
-        select(ProfileClinicalReview).where(ProfileClinicalReview.profile_id == profile_id)
-    )
-    reviews = {row.section: row for row in reviews_result.scalars()}
-
-    sections: dict[str, Any] = {}
-    for section in ("conditions", "allergies", "medications", "supplements"):
-        model = MODEL_BY_SECTION[section]
-        active_field, active_value = ACTIVE_FIELD[section]
-        active_count = int(
-            await session.scalar(
-                select(func.count(model.id)).where(
-                    model.profile_id == profile_id,
-                    model.voided_at.is_(None),
-                    getattr(model, active_field) == active_value,
-                )
-            )
-            or 0
-        )
-        total_count = int(
-            await session.scalar(
-                select(func.count(model.id)).where(
-                    model.profile_id == profile_id,
-                    model.voided_at.is_(None),
-                )
-            )
-            or 0
-        )
-        review = reviews.get(section)
-        sections[section] = {
-            "reviewed": review is not None,
-            "confirmed_empty": bool(review.confirmed_empty) if review else False,
-            "reviewed_at": review.reviewed_at if review else None,
-            "active_count": active_count,
-            "total_count": total_count,
-        }
-    return {"profile_id": profile_id, "sections": sections}
+# The legacy summary/review implementations (``get_summary``/``review_section``
+# with the ``reviewed``/``confirmed_empty``/``total_count`` response shape) were
+# removed in HC-015 Slice A. ``app.services.clinical_review`` is the only owner
+# of summary and review-state logic.

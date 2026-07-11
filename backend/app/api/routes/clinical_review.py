@@ -31,6 +31,7 @@ from app.services.clinical_context import create_record
 from app.services.clinical_review import (
     clear_incompatible_review_state,
     get_summary,
+    lock_section_review,
     review_section,
 )
 
@@ -120,6 +121,9 @@ async def _create_and_clear_review(
     current_user: User,
     request: Request,
 ):
+    # Serialize against a concurrent confirmed_none review of this section
+    # (CR-10): the same advisory lock is taken by review_section.
+    await lock_section_review(session, profile_id, section)
     record = await create_record(
         session,
         profile_id,

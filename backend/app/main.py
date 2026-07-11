@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
 from app.core.config import settings
-from app.core.logging import configure_logging, get_logger
+from app.core.logging import configure_logging, get_logger, redacted_url
 from app.core.request_id import RequestIDMiddleware
 from app.schemas.errors import ErrorDetail, ErrorResponse
 
@@ -55,10 +55,16 @@ app.include_router(api_router)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Catch unhandled exceptions and return a safe error response."""
     request_id = getattr(request.state, "request_id", None)
-    logger.exception(
-        "Unhandled exception: %s",
-        exc,
-        extra={"request_id": request_id, "path": str(request.url)},
+    # Do not attach ``exc_info`` here. Exception text and tracebacks can contain
+    # bound SQL parameters or user-entered clinical values. Operational
+    # correlation is preserved with request_id, safe path and exception type.
+    logger.error(
+        "Unhandled exception",
+        extra={
+            "request_id": request_id,
+            "path": redacted_url(request.url),
+            "exception_type": type(exc).__name__,
+        },
     )
     detail = ErrorDetail(
         code="internal_error",

@@ -7,7 +7,7 @@ import uuid
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.clinical_context import (
@@ -54,6 +54,24 @@ async def _prepare_write(
     profile = await get_visible_profile(session, profile_id)
     await require_profile_edit_access(session, profile_id)
     await require_health_data_consent(session, profile.owner_user_id)
+
+
+async def lock_section_review(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+    section: str,
+) -> None:
+    """Serialize review-state transitions against record creation.
+
+    ``confirmed_none`` must never be persisted while a concurrent transaction
+    inserts the section's first record (CR-10). Both paths take the same
+    transaction-scoped advisory lock, so the emptiness check and the review
+    write happen atomically relative to record creation.
+    """
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 8615))"),
+        {"key": f"clinical-review:{profile_id}:{section}"},
+    )
 
 
 async def _record_counts(
@@ -138,6 +156,7 @@ async def review_section(
         raise HTTPException(status_code=422, detail="Unknown clinical review state")
 
     await _prepare_write(session, profile_id, current_user)
+    await lock_section_review(session, profile_id, section)
     _, history_count = await _record_counts(session, profile_id, section)
     if review_state == "confirmed_none" and history_count > 0:
         raise HTTPException(

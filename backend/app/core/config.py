@@ -85,6 +85,14 @@ class Settings(BaseSettings):
             raise ValueError("Google OIDC settings are required outside development")
         if not self.oidc_redirect_uri:
             raise ValueError("OIDC_REDIRECT_URI is required outside development")
+        if not self.account_linking_enabled:
+            # Fail safe: without the linking flow a second sign-in method
+            # silently creates a duplicate account (CR-08). Disabling the
+            # protection is a development-only override.
+            raise ValueError(
+                "ACCOUNT_LINKING_ENABLED must be true outside development; "
+                "disabling duplicate-account protection is a development-only override"
+            )
         if self.email_auth_enabled:
             if not self.magic_link_consume_url:
                 raise ValueError("MAGIC_LINK_CONSUME_URL is required when email auth is enabled")

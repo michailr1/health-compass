@@ -1,8 +1,23 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Loader2, X } from "lucide-react";
 
 import { apiGet, type ClinicalSectionKey, type ClinicalSuggestion } from "@/lib/api";
+
+export const TYPEAHEAD_DEBOUNCE_MS = 250;
+
+/**
+ * Suggestions are cached per exact query string, so a slow response for an
+ * older query can never replace the result of a newer one; the request
+ * signal additionally aborts superseded fetches.
+ */
+export function clinicalSuggestionsQueryKey(
+  profileId: string,
+  section: ClinicalSectionKey,
+  query: string,
+) {
+  return ["clinical-suggestions", profileId, section, query] as const;
+}
 
 export type ClinicalSelection = {
   displayText: string;
@@ -28,12 +43,18 @@ export function ClinicalTypeahead({
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const normalized = query.trim();
+  const [debounced, setDebounced] = useState("");
+  useEffect(() => {
+    const handle = setTimeout(() => setDebounced(normalized), TYPEAHEAD_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [normalized]);
   const { data, isFetching } = useQuery({
-    queryKey: ["clinical-suggestions", profileId, section, normalized],
-    queryFn: () => apiGet<{ items: ClinicalSuggestion[] }>(
-      `/profiles/${profileId}/clinical-context/suggestions?section=${section}&q=${encodeURIComponent(normalized)}&limit=8`,
+    queryKey: clinicalSuggestionsQueryKey(profileId, section, debounced),
+    queryFn: ({ signal }) => apiGet<{ items: ClinicalSuggestion[] }>(
+      `/profiles/${profileId}/clinical-context/suggestions?section=${section}&q=${encodeURIComponent(debounced)}&limit=8`,
+      { signal },
     ),
-    enabled: normalized.length > 0 && value === null,
+    enabled: debounced.length > 0 && value === null,
     staleTime: 30_000,
   });
 

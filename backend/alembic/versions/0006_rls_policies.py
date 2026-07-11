@@ -67,6 +67,15 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop the policies created by this revision before their functions;
+    # otherwise the function drops fail on dependent objects (HC-015 Slice E).
+    op.execute(f"DROP POLICY IF EXISTS dashboard_view_select ON {S}.{DS}")
+    op.execute(f"DROP POLICY IF EXISTS profile_access_select ON {S}.{PP}")
+    op.execute(f"DROP POLICY IF EXISTS profiles_view_select ON {S}.health_profiles")
+    op.execute(f"DROP POLICY IF EXISTS workspace_access_select ON {S}.{WM}")
+    op.execute(f"DROP POLICY IF EXISTS workspaces_access_select ON {S}.workspaces")
+    op.execute(f"DROP POLICY IF EXISTS identities_self_select ON {S}.user_identities")
+    op.execute(f"DROP POLICY IF EXISTS users_self_select ON {S}.users")
     for table in [DS, "invitations", PP, "health_profiles", WM, "workspaces", "user_identities", "users"]:
         op.execute(f"ALTER TABLE {S}.{table} DISABLE ROW LEVEL SECURITY")
     op.execute(f"DROP FUNCTION IF EXISTS {S}.app_has_workspace_access(uuid)")

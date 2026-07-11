@@ -210,20 +210,22 @@ HC-015 должен синхронизировать meaningful-activity assessm
 
 ### PHASE-02.7 — HC-015 Code Review Remediation
 
-Статус: `CURRENT BLOCKING PHASE`
+Статус: `IMPLEMENTED / NOT MERGED — awaiting review, merge and rollout`
 
 Goal: закрыть findings двух независимых reviews до новых feature migrations и production rollout.
 
 Обязательные slices:
 
-1. Clinical Context route cleanup.
-2. Duplicate resolution schema synchronization.
-3. Magic Link/logout/account-linking/logging hardening.
-4. Clinical dictionary integrity migration.
-5. Full lint/typecheck and migration-cycle CI.
-6. Concurrency and frontend API contract fixes.
-7. Independent diff review.
-8. Controlled production rollout.
+1. Clinical Context route cleanup — `IMPLEMENTED / NOT MERGED`.
+2. Duplicate resolution schema synchronization — `IMPLEMENTED / NOT MERGED` (migration `0046`).
+3. Magic Link/logout/account-linking/logging hardening — `IMPLEMENTED / NOT MERGED`.
+4. Clinical dictionary integrity migration — `IMPLEMENTED / NOT MERGED` (migration `0047`; `0048` для users grants).
+5. Full lint/typecheck and migration-cycle CI — `IMPLEMENTED / NOT MERGED`.
+6. Concurrency and frontend API contract fixes — `IMPLEMENTED / NOT MERGED`.
+7. Independent diff review — `PENDING`.
+8. Controlled production rollout — `PENDING / NOT DEPLOYED`.
+
+Implementation branch: `claude/hc-015-code-review-remediation-noaeve`.
 
 Канонический документ:
 
@@ -363,10 +365,10 @@ Implementation must comply with `docs/AI-PRODUCT-SAFETY.md`.
 
 ## 6. Ближайший план
 
-1. Принять docs PR с review evidence и HC-015 specification.
-2. Создать implementation branch `fix/hc-015-code-review-remediation` от актуального `main`.
-3. Выполнить HC-015 Slices A–F в зафиксированном порядке.
-4. Не создавать parallel Alembic head; migration revision определяется только после проверки актуального head.
+1. ~~Принять docs PR с review evidence и HC-015 specification~~ — выполнено (PR #38 merged).
+2. ~~Создать implementation branch от актуального `main`~~ — выполнено: `claude/hc-015-code-review-remediation-noaeve`.
+3. ~~Выполнить HC-015 Slices A–F в зафиксированном порядке~~ — выполнено, `IMPLEMENTED / NOT MERGED`.
+4. ~~Не создавать parallel Alembic head~~ — выполнено: линейные `0046 → 0047 → 0048`, один head.
 5. Запустить полный backend/frontend/PostgreSQL CI на exact PR SHA.
 6. Провести independent diff review.
 7. Merge только при отсутствии unresolved High findings.

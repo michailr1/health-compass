@@ -36,3 +36,4 @@ backend/.env
 *.sqlite3
 .coverage
 htmlcov/
+backend/*.egg-info/

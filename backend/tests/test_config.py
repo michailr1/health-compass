@@ -20,6 +20,7 @@ def production_settings(**overrides: object) -> Settings:
         "smtp_host": "smtp-relay.example",
         "smtp_from_email": "health@example.com",
         "allow_dev_auth": False,
+        "account_linking_enabled": True,
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)
@@ -56,3 +57,24 @@ def test_production_rejects_dev_auth() -> None:
 def test_production_rejects_missing_required_settings(field: str, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         production_settings(**{field: ""}).validate_production()
+
+
+def test_production_rejects_disabled_account_linking() -> None:
+    """CR-08: duplicate-account protection must be fail-safe in production."""
+    with pytest.raises(ValueError, match="ACCOUNT_LINKING_ENABLED"):
+        production_settings(account_linking_enabled=False).validate_production()
+
+
+def test_production_rejects_default_account_linking_flag() -> None:
+    """The absence of the environment variable must not disable protection."""
+    values = production_settings().model_dump()
+    values.pop("account_linking_enabled")
+    with pytest.raises(ValueError, match="ACCOUNT_LINKING_ENABLED"):
+        Settings(_env_file=None, **values).validate_production()
+
+
+def test_development_allows_disabled_account_linking() -> None:
+    """Disabling the protection stays an explicit development-only override."""
+    Settings(
+        _env_file=None, environment="development", account_linking_enabled=False
+    ).validate_production()

@@ -71,6 +71,20 @@
 | `docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md` | блокирующий план исправлений и критерии приёмки |
 | `docs/reviews/FABLE-RECOMMENDATIONS.md` | статусы принятых рекомендаций |
 
+## HC-015 implementation evidence (2026-07-11)
+
+| Источник | Назначение |
+|---|---|
+| branch `fix/hc-015-code-review-remediation` (= `claude/hc-015-code-review-remediation-noaeve`) | реализация slices A–F, статус `IMPLEMENTED / NOT MERGED` |
+| Alembic migrations `0046`–`0048` | duplicate-activity sync, dictionary domain integrity, users column grants |
+| `backend/tests/test_route_table.py`, `test_clinical_context_http.py` | Slice A route ownership и HTTP contract |
+| `backend/tests/test_duplicate_activity_schema_sync_postgres.py` | Slice B regression |
+| `backend/tests/test_magic_link_scanner_safety_http.py`, `test_logout_http.py`, `test_logging_redaction.py`, `test_config.py` | Slice C regression |
+| `backend/tests/test_clinical_dictionary_integrity_postgres.py`, `test_clinical_dictionary_seed_upsert_postgres.py` | Slice D regression |
+| `backend/tests/test_migration_cycle.py`, `.github/workflows/ci.yml` | Slice E gates |
+| `backend/tests/test_users_update_privileges_postgres.py` | CR-19 hardening |
+| `src/lib/api.test.ts`, `src/lib/utils.test.ts`, `src/components/*.test.ts` | Slice F frontend contracts |
+
 ## Фактические источники
 
 - Git commits и Pull Requests;

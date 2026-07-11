@@ -106,29 +106,45 @@ jobs:
           SQL
       - name: Install backend
         run: python -m pip install -e ".[dev]"
-      - name: Migration and RLS tests
+      - name: Migration boundary tests
+        id: migration_boundary
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest -q tests/test_migrations.py > migration-test.log 2>&1 || {
+            tail -n 240 migration-test.log > migration-failure-tail.log
+            cat migration-failure-tail.log
+            exit 1
+          }
+      - name: Full migration cycle (head -> base -> head) in isolated database
+        id: migration_cycle
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest -q tests/test_migration_cycle.py >> migration-test.log 2>&1 || {
+            tail -n 240 migration-test.log > migration-failure-tail.log
+            cat migration-failure-tail.log
+            exit 1
+          }
+      - name: PostgreSQL integration and RLS tests
         id: migration_tests
         shell: bash
         run: |
           set -o pipefail
-          pytest -q \
-            tests/test_migrations.py \
-            tests/test_basic_health_profile_rls.py \
-            tests/test_clinical_context_rls.py \
-            tests/test_clinical_review_rls.py \
-            tests/test_clinical_context_hardening.py \
-            tests/test_clinical_delete_privileges.py \
-            tests/test_account_linking_postgres.py \
-            tests/test_separate_account_postgres.py \
-            tests/test_identity_removal_postgres.py \
-            tests/test_duplicate_resolution_postgres.py \
-            > migration-test.log 2>&1 || {
+          pytest -q -m integration \
+            --ignore=tests/test_migration_cycle.py \
+            >> migration-test.log 2>&1 || {
               tail -n 240 migration-test.log > migration-failure-tail.log
               cat migration-failure-tail.log
               exit 1
             }
       - name: Upload migration failure tail
-        if: failure() && steps.migration_tests.outcome == 'failure'
+        if: >-
+          failure() && (
+            steps.migration_boundary.outcome == 'failure' ||
+            steps.migration_cycle.outcome == 'failure' ||
+            steps.migration_tests.outcome == 'failure'
+          )
         uses: actions/upload-artifact@v4
         with:
           name: migration-failure-tail
@@ -147,25 +163,10 @@ jobs:
           cache: npm
       - name: Install frontend
         run: npm ci
-      - name: Lint changed frontend files
-        run: >-
-          npx eslint
-          src/pages/Dashboard.tsx
-          src/pages/Dashboard.test.ts
-          src/pages/HealthProfile.tsx
-          src/pages/ProfileQuestionnaire.tsx
-          src/pages/AccountLink.tsx
-          src/pages/SignInMethods.tsx
-          src/pages/SignInMethods.test.ts
-          src/lib/api.ts
-          src/App.tsx
-          src/components/AppLayout.tsx
-          src/components/AppLayout.test.ts
-          src/components/ClinicalContextSection.tsx
-          src/components/ClinicalContextSection.test.ts
-          src/components/ProfileCompletionCard.tsx
-          src/components/DashboardProfileContextCard.tsx
-          src/components/DashboardProfileContextCard.test.ts
+      - name: Lint (full source)
+        run: npm run lint
+      - name: Typecheck (full source)
+        run: npm run typecheck
       - name: Tests
         run: npm test
       - name: Build
