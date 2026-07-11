@@ -128,7 +128,8 @@ def upgrade() -> None:
           owner_id uuid;
           target_table text;
           source_entity_type text;
-          actual_updated_at timestamptz;
+          deleted_updated_at timestamptz;
+          row_exists boolean;
         BEGIN
           actor_id := {S}.app_current_user_id();
           IF actor_id IS NULL THEN
@@ -181,20 +182,32 @@ def upgrade() -> None:
             );
           END IF;
 
+          -- Apply optimistic concurrency in the DELETE statement itself. This
+          -- avoids a SELECT FOR UPDATE grant while remaining race-safe: after
+          -- waiting on a concurrent writer PostgreSQL rechecks updated_at.
           EXECUTE pg_catalog.format(
-            'SELECT updated_at FROM %I.%I '
-            'WHERE id = $1 AND profile_id = $2 FOR UPDATE',
+            'DELETE FROM %I.%I '
+            'WHERE id = $1 AND profile_id = $2 AND updated_at = $3 '
+            'RETURNING updated_at',
             '{S}', target_table
           )
-          INTO actual_updated_at
-          USING target_record_id, target_profile_id;
+          INTO deleted_updated_at
+          USING target_record_id, target_profile_id, expected_updated_at;
 
           IF NOT FOUND THEN
-            RAISE EXCEPTION 'Clinical record not found' USING ERRCODE = 'HC404';
-          END IF;
+            EXECUTE pg_catalog.format(
+              'SELECT EXISTS ('
+              'SELECT 1 FROM %I.%I WHERE id = $1 AND profile_id = $2'
+              ')',
+              '{S}', target_table
+            )
+            INTO row_exists
+            USING target_record_id, target_profile_id;
 
-          IF actual_updated_at IS DISTINCT FROM expected_updated_at THEN
-            RAISE EXCEPTION 'Clinical record was updated elsewhere' USING ERRCODE = 'HC409';
+            IF row_exists THEN
+              RAISE EXCEPTION 'Clinical record was updated elsewhere' USING ERRCODE = 'HC409';
+            END IF;
+            RAISE EXCEPTION 'Clinical record not found' USING ERRCODE = 'HC404';
           END IF;
 
           -- Earlier audit events can contain names, doses, reactions and other
@@ -203,12 +216,6 @@ def upgrade() -> None:
           WHERE profile_id = target_profile_id
             AND entity_type = source_entity_type
             AND entity_id = target_record_id;
-
-          EXECUTE pg_catalog.format(
-            'DELETE FROM %I.%I WHERE id = $1 AND profile_id = $2',
-            '{S}', target_table
-          )
-          USING target_record_id, target_profile_id;
 
           -- Keep only a content-free security tombstone. It intentionally does
           -- not retain the section, record label, clinical values or reason.
