@@ -1,195 +1,219 @@
 # Health Compass — текущее состояние
 
-Дата: 2026-07-10  
+Дата: 2026-07-11  
 Основная ветка: `main`  
-Repository HEAD после HC-012b: `ccc033127b6f9755cc7ea16f2cc2893a8bce2e7a`  
+Main HEAD на момент независимого ревью: `1a61f0307130e19fedeabd95218293d9a5075fe1`  
+Production code: `f3d7e8fedcdad5448abce5c74c1bdb698e5e82e6`  
+Production Alembic: `0045 (head)`  
 Production URL: `https://health.funti.cc`  
-Production deployment HC-012b: не выполнен
+Текущий engineering verdict: `FIX BEFORE ROLLOUT`
 
-## Что уже работает в production
+## Что работает в production
 
 - FastAPI backend и React/Vite frontend;
 - PostgreSQL + Alembic;
-- прямой Google OAuth 2.0 / OIDC;
+- direct Google OAuth 2.0 / OIDC;
 - Email Magic Links через Brevo;
-- локальные PostgreSQL sessions и logout;
+- локальные PostgreSQL sessions;
 - users, identities, workspaces, profiles и permissions;
 - FORCE ROW LEVEL SECURITY и tenant isolation;
-- Basic Health Profile Slice 1;
-- consent gate для медицинских данных;
-- история веса, provenance, append-only audit и contextual readiness;
-- автоматическое определение IANA timezone с ручной корректировкой;
-- безопасный account linking и duplicate-resolution foundation из HC-025/026/027.
+- безопасный account linking и controlled duplicate resolution foundation;
+- Basic Health Profile;
+- история веса, provenance, consent и append-only audit;
+- Clinical Context для состояний, аллергий, лекарств и добавок;
+- review states `unknown`, `deferred`, `confirmed_none`, `has_entries`;
+- contextual intake decisions;
+- mobile-oriented questionnaire flow;
+- Clinical Dictionaries v2 с Russian-first search и free-text fallback;
+- dashboard context coverage и переходы к заполнению профиля.
 
-Точный production HEAD и Alembic revision должны быть повторно зафиксированы VPS-агентом перед следующим rollout. Merge в `main` сам по себе production не изменил.
+## Production data state — Clinical Dictionaries v2
 
-## Auth и identity
+На 2026-07-10 успешно применён reviewed seed set.
 
-Auth MVP завершён и принят.
+Подтверждено:
 
-Подтверждённые инварианты:
+- 69 concepts total;
+- 107 aliases;
+- 0 duplicate concept business keys;
+- 0 duplicate aliases;
+- 0 orphan aliases;
+- все 66 reviewed business keys представлены;
+- повторный apply идемпотентен;
+- существовавшие UUID сохранены;
+- Alembic остался `0045`.
 
-- Google login и Email Magic Link ведут через собственный backend;
-- logout отзывает локальную сессию;
-- повторное использование magic link отклоняется;
-- cross-user API возвращает `404`;
-- совпадение verified email само по себе не объединяет аккаунты;
-- новые дубли не создаются молча;
-- существующие дубли разбираются через контролируемый HC-026 flow;
-- TOTP HC-028 остаётся optional и не блокирует дальнейшую продуктовую работу.
-
-## HC-012b Clinical Context
-
-Статус кода: `MERGED TO MAIN / NOT DEPLOYED`.
-
-Реализовано:
-
-- conditions;
-- allergies and intolerances;
-- medications;
-- supplements;
-- clinical safety flags;
-- явное различие «не заполнено» и «подтверждено отсутствие»;
-- summary endpoint;
-- list/create/update/void API;
-- optimistic concurrency;
-- owner/edit write;
-- view/analyze read-only;
-- outsider invisible;
-- consent проверяется у владельца профиля;
-- append-only audit;
-- void вместо физического DELETE;
-- voided-записи неизменяемы;
-- app-role может создавать только `manual + confirmed` записи;
-- `document + needs_review` зарезервирован для будущего OCR/import flow;
-- HC-026 duplicate assessment учитывает любую Clinical Context history;
-- nutrition safety flag `nutrition_calorie_feedback_suppressed` подготовлен для будущего HC-032;
-- mobile-friendly UI встроен в `/app/profile`.
-
-Миграции HC-012b:
+Backup перед повторным import:
 
 ```text
-0037 — Clinical Context schema and RLS
-0038 — HC-026 duplicate activity integration
-0039 — explicit clinical review state
-0040 — write hardening and immutable voided rows
+/opt/health-compass/backups/clinical_dictionary_before_seed_retry_20260710T224649Z.sql.gz
 ```
 
-Финальный PR: `#13`  
-Merge commit: `ccc033127b6f9755cc7ea16f2cc2893a8bce2e7a`
+Известные content gaps первого seed set:
 
-## Проверки HC-012b
+- `мигрень` / `migraine`;
+- `hypertension`;
+- singular English `penicillin`;
+- English phrase `vitamin d`.
 
-Финальный CI run `#205` завершён успешно:
+Free-text entry остаётся доступным; gaps не являются importer defect.
 
-- backend compile;
-- Ruff;
-- backend unit tests;
-- frontend lint;
-- frontend tests;
-- frontend build;
-- PostgreSQL migration cycle;
-- FORCE RLS assertions;
-- owner/edit/view/analyze/outsider matrix;
-- no-DELETE assertions;
-- warm-data `54001` regression;
-- HC-026 regression;
-- provenance spoofing rejection;
-- immutable voided-row regression;
-- explicit reviewed-empty RLS test.
+## Подтверждённые security properties
 
-Production DB в автоматических тестах не использовалась.
+Два независимых code review не обнаружили подтверждённого:
 
-## Nutrition Photo MVP
+- cross-user data leak;
+- обхода `FORCE RLS` runtime role;
+- self-grant owner чужого profile;
+- self-add в чужой workspace;
+- удаления последней identity;
+- silent account merge только по verified email.
 
-Утверждён как PHASE-05.5 после Labs core.
+Подтверждены:
 
-Канонический документ:
+- runtime role `NOBYPASSRLS`;
+- отдельный `health_compass_rls_definer NOLOGIN BYPASSRLS`;
+- ограниченные `SECURITY DEFINER` functions;
+- `search_path=''`, `row_security=off` и отзыв `PUBLIC EXECUTE`;
+- PKCE, state, nonce, issuer/audience/azp и verified-email checks;
+- consent, provenance, void и audit для clinical data;
+- одна DB transaction на request для transaction-local RLS context.
+
+## Code review 2026-07-11
+
+Проведены два независимых статических review актуального repository HEAD:
+
+- ChatGPT architecture/code review;
+- Fable 5 independent code review.
+
+Канонические документы:
 
 ```text
-docs/NUTRITION-PHOTO-MVP.md
+docs/reviews/CODE-REVIEW-CONSOLIDATED-2026-07-11.md
+docs/reviews/FABLE-5-INDEPENDENT-CODE-REVIEW-2026-07-11.md
 ```
 
-Принятые инварианты:
-
-- `capture/raw → machine analysis → human confirmation → normalized fact`;
-- AI-результат не является фактом без подтверждения;
-- диапазон калорий вместо ложной точности;
-- обязательные provenance и `ai_runs`;
-- consent `external_llm`;
-- единый AI gateway;
-- wellbeing stop-list;
-- nutrition-таблицы не входят в HC-012b.
-
-## Следующий этап
-
-Ближайший операционный шаг:
+Итог обоих review:
 
 ```text
-controlled production rollout HC-012b
+FIX BEFORE ROLLOUT
 ```
 
-Runbook:
+Critical findings и подтверждённый tenant-isolation breach не обнаружены. Rollout gate установлен из-за дефектов корректности, schema drift и data integrity.
+
+## Блокирующие findings
+
+1. Duplicate Clinical Context summary/review routes с несовместимыми response contracts; текущее поведение зависит от порядка router registration.
+2. Duplicate assessment/absorption не учитывает `profile_clinical_reviews` и `profile_intake_decisions`.
+3. Email Magic Link выполняет meaningful consume через GET и может быть поглощён scanner/prefetch.
+4. `canonical_concept_id` не полностью защищён от wrong-domain и stale mappings.
+5. Frontend CI не запускает full-source lint и обязательный TypeScript typecheck.
+
+Дополнительно приняты к исправлению:
+
+- alias upsert по database business key;
+- optimistic concurrency для void;
+- race при `confirmed_none`;
+- единый error envelope и сохранение `request_id`;
+- safe structured logging и query/token redaction;
+- fail-safe production account-linking configuration;
+- POST logout;
+- полный migration cycle;
+- column-level narrowing для `users` UPDATE.
+
+## Текущий обязательный этап
+
+Следующая задача:
 
 ```text
-docs/HC-012B-ROLLOUT.md
+HC-015 — Code Review Remediation
 ```
 
-После принятого rollout и smoke tests:
+Канонический план:
 
-1. зафиксировать production HEAD и Alembic `0040`;
-2. обновить deployment history;
-3. провести ручную проверку Clinical Context UI на мобильном устройстве;
-4. устранить обнаруженные UX-дефекты отдельным PR;
-5. вернуться к PHASE-03/04 document upload and OCR review foundation;
-6. затем реализовать Labs core;
-7. после Labs core перейти к PHASE-05.5 Nutrition Photo MVP.
+```text
+docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md
+```
 
-## Известные ограничения
+До завершения HC-015:
 
-- HC-012b ещё не развёрнут в production;
-- OCR/import из документов не реализован;
-- реальные загрузки документов ещё не реализованы;
-- лабораторные показатели и их динамика ещё не реализованы;
-- Oura и другие wearable-интеграции ещё не реализованы;
-- Invitations и совместный доступ не завершены как пользовательский flow;
-- AI-объяснения и doctor report не реализованы;
-- clinical safety flag не создаётся автоматически из свободного текста;
-- система не диагностирует заболевания и не рассчитывает дозы.
+- не добавлять новые product features;
+- не выполнять следующий production code rollout;
+- не создавать параллельные Alembic heads;
+- разрешены документация, tests и remediation branch;
+- alias content expansion HC-014 не должна обходить remediation gate, если требует code rollout.
+
+## Порядок HC-015
+
+1. Clinical Context route cleanup.
+2. Duplicate resolution schema synchronization.
+3. Magic Link/logout/account-linking/logging hardening.
+4. Canonical dictionary integrity migration.
+5. Full lint/typecheck и migration-cycle CI.
+6. Clinical concurrency и frontend API contract fixes.
+7. Independent diff review.
+8. Controlled backup-first rollout.
+9. Production smoke и фиксация evidence.
+
+## Известные ограничения продукта
+
+- OCR/import документов не реализован;
+- реальные загрузки лабораторных документов не реализованы;
+- Labs core и динамика лабораторных показателей не реализованы;
+- Oura и другие wearable integrations не реализованы;
+- invitations и совместный доступ не завершены как user flow;
+- AI explanation, evidence retrieval и doctor report не реализованы;
+- clinical safety flags не выводятся автоматически из свободного текста;
+- система не диагностирует заболевания и не рассчитывает дозы;
+- словарь остаётся assistive и не заменяет free text.
+
+## Следующий product этап после HC-015
+
+После успешного remediation и rollout:
+
+1. снять verdict `FIX BEFORE ROLLOUT` на основании evidence;
+2. выполнить небольшой reviewed alias-expansion package HC-014;
+3. вернуться к PHASE-03/04 document upload and OCR review foundation;
+4. реализовать Labs core;
+5. затем PHASE-05.5 Nutrition Photo MVP согласно отдельной спецификации.
 
 ## Роли
 
 ### ChatGPT / coding role
 
-- архитектура;
-- data model и API contracts;
-- продуктовый код;
-- миграции, RLS и тесты;
+- архитектура и data contracts;
+- product code;
+- migrations, RLS и tests;
 - frontend;
 - документация;
-- точные задачи VPS-агенту.
+- точные задачи VPS-agent.
 
-### VPS-агент
+### VPS-agent
 
-- подключение только к production-хосту Health Compass;
-- backup;
-- фиксация HEAD/Alembic before;
-- получение конкретного commit;
-- build, migrations, systemd и release symlink;
-- smoke tests и rollback;
+- работает только с production host;
+- фиксирует HEAD/Alembic before;
+- создаёт backup;
+- получает конкретный approved commit;
+- выполняет build, migrations, systemd/release switch;
+- запускает smoke tests и rollback при необходимости;
 - не принимает архитектурных решений;
-- не использует production DB для автоматических тестов;
-- не выводит секреты.
+- не использует production DB для automated tests;
+- не выводит secrets.
 
 ## Stop conditions
 
-Остановить rollout при:
+Остановить merge или rollout при:
 
-- подключении не к production-хосту;
-- несовпадении ожидаемого HEAD;
-- грязном git worktree;
+- несовпадении expected HEAD;
+- dirty production worktree;
 - неуспешном backup;
-- неуспешной миграции;
+- нескольких Alembic heads;
+- неуспешной migration;
+- duplicate route collision;
+- wrong-domain canonical mapping;
+- scanner GET, поглощающем Magic Link;
+- duplicate resolution с 500/FK violation;
 - признаках cross-user leak;
 - `5xx`, `54001`, `42501`, `permission denied` или Traceback;
-- выводе секретов в отчёт.
+- CI, запущенном не на exact deployed SHA;
+- появлении tokens, secrets или medical values в logs.
