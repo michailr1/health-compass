@@ -31,8 +31,11 @@ api_router.include_router(health_profile_router)
 api_router.include_router(profile_completion_router)
 api_router.include_router(clinical_dictionary_router)
 api_router.include_router(contextual_intake_router)
-# Transition-safe review-state routes must be registered before the legacy
-# Clinical Context routes because several paths intentionally overlap.
+# Summary/review-state and section create routes are owned by
+# clinical_review_router; clinical_context_router owns list/update/void and
+# safety flags. The two routers never register the same method/path pair, so
+# registration order does not affect behavior (enforced by
+# tests/test_route_table.py).
 api_router.include_router(clinical_review_router)
 api_router.include_router(clinical_context_router)
 api_router.include_router(login_router)

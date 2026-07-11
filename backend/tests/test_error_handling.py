@@ -11,10 +11,10 @@ from app.main import app
 
 @pytest.mark.asyncio
 async def test_unknown_route_returns_404(test_session):
-    """GET /health/api/nonexistent should return structured 404."""
+    """GET /nonexistent should return structured 404."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/health/api/nonexistent")
+        response = await client.get("/nonexistent")
     assert response.status_code == 404
     data = response.json()
     assert "error" in data
@@ -26,7 +26,7 @@ async def test_request_id_is_returned(test_session):
     """Response should include X-Request-ID header."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/health/api/health")
+        response = await client.get("/health")
     assert REQUEST_ID_HEADER in response.headers
     assert len(response.headers[REQUEST_ID_HEADER]) == 36  # UUID length
 
@@ -38,7 +38,7 @@ async def test_client_request_id_is_respected(test_session):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
-            "/health/api/health",
+            "/health",
             headers={REQUEST_ID_HEADER: client_id},
         )
     assert response.headers[REQUEST_ID_HEADER] == client_id
@@ -49,7 +49,7 @@ async def test_no_stack_trace_in_production(test_session):
     """Production should not expose stack traces."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/health/api/private/ping")
+        response = await client.get("/private/ping")
     assert response.status_code == 401
     body = response.text
     assert "Traceback" not in body
