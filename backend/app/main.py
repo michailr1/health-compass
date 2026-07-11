@@ -55,7 +55,10 @@ app.include_router(api_router)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Catch unhandled exceptions and return a safe error response."""
     request_id = getattr(request.state, "request_id", None)
-    logger.exception(
+    # Do not attach ``exc_info`` here. Exception text and tracebacks can contain
+    # bound SQL parameters or user-entered clinical values. Operational
+    # correlation is preserved with request_id, safe path and exception type.
+    logger.error(
         "Unhandled exception",
         extra={
             "request_id": request_id,
