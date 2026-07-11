@@ -193,6 +193,21 @@ def _create_legacy_trigger_function() -> None:
 
 
 def upgrade() -> None:
+    # Block concurrent writes while existing rows are repaired/validated and
+    # the old permissive triggers are replaced. Without this lock a legacy
+    # application process could insert a wrong-domain code after validation
+    # but before the validating trigger is installed.
+    op.execute(
+        f"""
+        LOCK TABLE
+          {S}.profile_conditions,
+          {S}.profile_allergies,
+          {S}.profile_medications,
+          {S}.profile_supplements
+        IN ACCESS EXCLUSIVE MODE
+        """
+    )
+
     _repair_and_verify_existing_rows()
     for table in DOMAIN_BY_TABLE:
         op.execute(f"DROP TRIGGER IF EXISTS trg_sync_{table}_dictionary_concept ON {S}.{table}")
