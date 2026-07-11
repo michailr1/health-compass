@@ -139,7 +139,12 @@ jobs:
               exit 1
             }
       - name: Upload migration failure tail
-        if: failure() && steps.migration_tests.outcome == 'failure'
+        if: >-
+          failure() && (
+            steps.migration_boundary.outcome == 'failure' ||
+            steps.migration_cycle.outcome == 'failure' ||
+            steps.migration_tests.outcome == 'failure'
+          )
         uses: actions/upload-artifact@v4
         with:
           name: migration-failure-tail
