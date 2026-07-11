@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.clinical_context import (
@@ -41,6 +42,8 @@ ACTION_PREFIX = {
     "supplements": "supplement",
     "clinical-safety-flags": "clinical_safety_flag",
 }
+
+
 def _serialize(value: Any) -> Any:
     if isinstance(value, (datetime.date, datetime.datetime, Decimal, uuid.UUID)):
         return str(value)
@@ -85,6 +88,31 @@ async def _prepare_write(
     profile = await get_visible_profile(session, profile_id)
     await require_profile_edit_access(session, profile_id)
     await require_health_data_consent(session, profile.owner_user_id)
+
+
+# SQLSTATEs raised by health_compass.sync_clinical_dictionary_concept when a
+# client submits an impossible canonical coding (migration 0047).
+_CONCEPT_ERROR_BY_SQLSTATE = {
+    "HC422": "invalid_concept_id",
+    "HC404": "unknown_concept",
+    "HC409": "concept_domain_mismatch",
+}
+
+
+async def _flush_clinical_write(session: AsyncSession) -> None:
+    """Flush, translating dictionary integrity violations into a 422."""
+    try:
+        await session.flush()
+    except DBAPIError as exc:
+        original = getattr(exc, "orig", None)
+        sqlstate = getattr(original, "sqlstate", None) or getattr(original, "pgcode", None)
+        detail = _CONCEPT_ERROR_BY_SQLSTATE.get(str(sqlstate or ""))
+        if detail is None:
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=detail,
+        ) from exc
 
 
 async def list_records(
@@ -137,7 +165,7 @@ async def create_record(
             request_id=request_id,
         )
     )
-    await session.flush()
+    await _flush_clinical_write(session)
     return record
 
 
@@ -204,7 +232,7 @@ async def update_record(
             request_id=request_id,
         )
     )
-    await session.flush()
+    await _flush_clinical_write(session)
     return record
 
 

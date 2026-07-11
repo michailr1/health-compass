@@ -198,13 +198,18 @@ async def upsert_seed_manifest(session: AsyncSession, manifest: SeedManifest) ->
                     "normalized_text": normalize_search_text(alias.text),
                 }
             )
+            # Conflict on the database business key (concept_id,
+            # normalized_text), not the deterministic UUID: a pre-existing
+            # alias row with a different id must be updated in place, never
+            # duplicated or crashed into the unique constraint (CR-07).
             await session.execute(
                 alias_insert.on_conflict_do_update(
-                    index_elements=[ClinicalDictionaryAlias.id],
+                    index_elements=[
+                        ClinicalDictionaryAlias.concept_id,
+                        ClinicalDictionaryAlias.normalized_text,
+                    ],
                     set_={
-                        "concept_id": actual_concept_id,
                         "alias_text": alias_insert.excluded.alias_text,
-                        "normalized_text": alias_insert.excluded.normalized_text,
                     },
                 )
             )

@@ -155,6 +155,35 @@ async def test_clinical_context_summary_contract_and_access_matrix() -> None:
         await _dispose_app_engine()
 
 
+async def test_dictionary_integrity_violations_return_controlled_422() -> None:
+    """HC-015 Slice D: DB-boundary rejections surface as validation errors."""
+    with psycopg.connect(_admin_url(), autocommit=True) as connection:
+        profile, actors = _seed_profile_with_actors(connection)
+    owner = actors["owner"]
+    medication_concept = "11111111-1111-4111-8111-111111111301"
+
+    cases = [
+        (medication_concept, "concept_domain_mismatch"),
+        (str(uuid.uuid4()), "unknown_concept"),
+        ("not-a-uuid-not-a-uuid-not-a-uuid-not-a-uuid", "invalid_concept_id"),
+    ]
+    try:
+        async with _get_client(owner) as client:
+            for code, expected_detail in cases:
+                response = await client.post(
+                    f"/profiles/{profile}/conditions",
+                    json={
+                        "display_name": "Проверка словаря",
+                        "code_system": "health_compass",
+                        "code": code,
+                    },
+                )
+                assert response.status_code == 422, (code, response.text)
+                assert response.json()["detail"] == expected_detail
+    finally:
+        await _dispose_app_engine()
+
+
 async def test_review_and_create_flow_keeps_summary_contract() -> None:
     with psycopg.connect(_admin_url(), autocommit=True) as connection:
         profile, actors = _seed_profile_with_actors(connection)
