@@ -16,7 +16,7 @@ _ERASURE_ERROR_BY_SQLSTATE: dict[str, tuple[int, str]] = {
     "HC404": (status.HTTP_404_NOT_FOUND, "Clinical record not found"),
     "HC409": (status.HTTP_409_CONFLICT, "Clinical record was updated elsewhere"),
     "HC428": (status.HTTP_428_PRECONDITION_REQUIRED, "expected_updated_at is required"),
-    "HC422": (status.HTTP_422_UNPROCESSABLE_ENTITY, "Unknown clinical section"),
+    "HC422": (status.HTTP_422_UNPROCESSABLE_CONTENT, "Unknown clinical section"),
 }
 
 
