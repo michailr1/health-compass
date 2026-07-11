@@ -6,6 +6,7 @@ import {
   ClinicalClarifyingQuestions,
   type ClinicalAnswers,
 } from "@/components/ClinicalClarifyingQuestions";
+import { ClinicalRecordActions } from "@/components/ClinicalRecordActions";
 import { ClinicalTypeahead, type ClinicalSelection } from "@/components/ClinicalTypeahead";
 import {
   ApiError,
@@ -247,8 +248,6 @@ function RecordEditor({
     setFields((current) => ({ ...current, [key]: value }));
 
   const startEditing = () => {
-    // Re-derive the form from the current record so switching between
-    // records or a save from elsewhere never leaves stale editor state.
     setFields(recordEditorInitialState(record));
     setValidationError(null);
     setEditing(true);
@@ -329,6 +328,12 @@ function RecordEditor({
           Завершить курс
         </button>
       )}
+      <ClinicalRecordActions
+        profileId={profileId}
+        section={section}
+        record={record}
+        onSaved={onSaved}
+      />
       {mutation.error && (
         <p className="mt-2 text-xs text-destructive" role="alert">{clinicalErrorMessage(mutation.error)}</p>
       )}
@@ -491,7 +496,7 @@ export function ClinicalContextSection({ profileId, consentActive }: { profileId
         })}
       </div>
 
-      {!consentActive && <div className="mt-4 rounded-xl border border-border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">Чтобы добавлять медицинские сведения, сначала примите согласие на обработку данных здоровья выше на странице.</div>}
+      {!consentActive && <div className="mt-4 rounded-xl border border-border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">Чтобы добавлять медицинские сведения, сначала примите согласие на обработку данных здоровья выше на странице. Удаление своих ранее внесённых записей остаётся доступным.</div>}
       {(addMutation.error || reviewMutation.error) && <p className="mt-3 text-sm text-destructive" role="alert">{clinicalErrorMessage(addMutation.error ?? reviewMutation.error)}</p>}
       {(addMutation.isPending || reviewMutation.isPending) && <span className="sr-only" aria-live="polite">Сохраняем изменения</span>}
     </section>
