@@ -1,11 +1,65 @@
 # HC-015 — Code Review Remediation
 
-Status: `PLANNED / BLOCKS NEW ROLLOUTS`  
+Status: `IMPLEMENTED / NOT MERGED`  
 Created: 2026-07-11  
+Implemented: 2026-07-11, branch `claude/hc-015-code-review-remediation-noaeve`  
 Review baseline: `1a61f0307130e19fedeabd95218293d9a5075fe1`  
-Production baseline: `f3d7e8fedcdad5448abce5c74c1bdb698e5e82e6`  
-Production Alembic: `0045 (head)`  
+Implementation base: merge of PR #38 (`265eb0ef80ebd4af2073bd2168bf17be90562fe4`)  
+Production baseline: `f3d7e8fedcdad5448abce5c74c1bdb698e5e82e6` (не изменялся)  
+Production Alembic: `0045 (head)` (не изменялся)  
+Branch Alembic head: `0048` (линейный, единственный head)  
+Deployment: `NOT DEPLOYED`  
 Source: `docs/reviews/CODE-REVIEW-CONSOLIDATED-2026-07-11.md`
+
+## Implementation status — 2026-07-11
+
+Все slices A–F реализованы в одной implementation branch. Статусы ниже
+означают «код и тесты написаны и зелёные локально в CI-эквивалентном
+окружении»; они переводятся в `MERGED / NOT DEPLOYED` только после merge с
+зелёным CI на exact PR head SHA и в verified — только после production
+rollout с evidence.
+
+| Finding | Status | Files changed | Tests | Evidence | Deferred follow-up |
+|---|---|---|---|---|---|
+| CR-01 route collision | IMPLEMENTED / NOT MERGED | `app/api/routes/clinical_context.py`, `app/api/routes/clinical_review.py`, `app/api/router.py`, `app/services/clinical_context.py` | `tests/test_route_table.py`, `tests/test_clinical_context_http.py` | route table без дубликатов method/path; summary валидируется `ClinicalContextSummary`; матрица owner/edit/view/analyze/outsider на HTTP-уровне | — |
+| CR-02 duplicate absorption drift | IMPLEMENTED / NOT MERGED | migration `0046`, definer grants | `tests/test_duplicate_activity_schema_sync_postgres.py` | review-only/intake-only/combined аккаунты не пустые; concurrent review блокирует completion (intent `blocked`, без FK violation); truly-empty поглощается | — |
+| CR-03 scanner-unsafe magic link | IMPLEMENTED / NOT MERGED | `app/api/routes/email_auth.py`, `pyproject.toml` (python-multipart) | `tests/test_magic_link_scanner_safety_http.py` | GET×3 не помечает token used; POST consume ровно один раз; replay/expiry/invalid → friendly redirect; token отсутствует в captured logs | — |
+| CR-04 wrong-domain canonical | IMPLEMENTED / NOT MERGED | migration `0047` (validating trigger, SQLSTATE HC409) | `tests/test_clinical_dictionary_integrity_postgres.py`, `tests/test_clinical_context_http.py` | 4 секции × wrong-domain отклоняются на DB boundary; API → 422 `concept_domain_mismatch` | — |
+| CR-05 stale canonical mapping | IMPLEMENTED / NOT MERGED | migration `0047` | `tests/test_clinical_dictionary_integrity_postgres.py` | очистка code и смена code_system очищают mapping; смена code атомарно перемаппливает; unknown → HC404; invalid uuid → HC422 | — |
+| CR-06 frontend quality gate | IMPLEMENTED / NOT MERGED | `.github/workflows/ci.yml`, `package.json` (`typecheck`), lint fixes в `command.tsx`, `textarea.tsx`, `tailwind.config.ts` | `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` | full-source gate поймал 3 реальные ошибки вне старого списка файлов до их исправления | — |
+| CR-07 alias upsert business key | IMPLEMENTED / NOT MERGED | `app/services/clinical_dictionary_seed.py` | `tests/test_clinical_dictionary_seed_upsert_postgres.py` | повторный import идемпотентен; pre-existing alias с другим UUID merged in place | — |
+| CR-08 account-linking config | IMPLEMENTED / NOT MERGED | `app/core/config.py` | `tests/test_config.py` | production без `ACCOUNT_LINKING_ENABLED=true` падает на startup validation; development override остаётся явным | — |
+| CR-09 void concurrency | IMPLEMENTED / NOT MERGED | `app/schemas/clinical_context.py`, `app/services/clinical_context.py`, void routes | `tests/test_clinical_context_http.py::test_stale_void_returns_conflict_and_fresh_void_succeeds` | stale void → 409; fresh void → 200 | — |
+| CR-10 confirmed-none race | IMPLEMENTED / NOT MERGED | `app/services/clinical_review.py` (advisory lock), `app/api/routes/clinical_review.py` | `tests/test_clinical_context_http.py::test_concurrent_confirmed_none_and_create_never_contradict` | `pg_advisory_xact_lock` сериализует review и первое создание записи; invariant test | — |
+| CR-11 error envelope / request_id | IMPLEMENTED / NOT MERGED | `src/lib/api.ts`, `src/components/ClinicalContextSection.tsx` | `src/lib/api.test.ts` | оба документированных формата парсятся; request_id сохраняется из body или `X-Request-ID`; raw payload не рендерится | единый backend-side envelope — возможный отдельный follow-up |
+| CR-12 unsafe logging | IMPLEMENTED / NOT MERGED | `app/core/logging.py` (JsonFormatter, `redacted_url`), `app/main.py` | `tests/test_logging_redaction.py`, log-capture в magic-link tests | строки логов — валидный JSON; request_id выводится; query string с token не логируется | reverse-proxy access log вне репозитория — задокументированное ограничение |
+| CR-13 migration cycle | IMPLEMENTED / NOT MERGED | `tests/test_migration_cycle.py`, `.github/workflows/ci.yml`, фикс downgrade `0006`, `alembic/env.py` | `tests/test_migration_cycle.py` | `upgrade head → downgrade base → upgrade head` в изолированной DB; честный base (только `alembic_version`); проверены owners, grants, FORCE RLS, PUBLIC EXECUTE | — |
+| CR-14 dictionary search indexes | DEFERRED | — | — | производительность, не корректность; не блокирует rollout | отдельный backlog item «indexed/trigram dictionary search» после HC-015 |
+| CR-15 typeahead stale/debounce | IMPLEMENTED / NOT MERGED | `src/components/ClinicalTypeahead.tsx`, `src/lib/api.ts` (signal) | `src/components/ClinicalTypeahead.test.ts` | debounce 250ms; AbortSignal; cache per exact query string исключает out-of-order подмену | — |
+| CR-16 dose clearing | IMPLEMENTED / NOT MERGED | `src/components/ClinicalContextSection.tsx` | `ClinicalContextSection.test.ts` (dose matrix) | пустая пара → явные null; половинная пара → validation error | — |
+| CR-17 date-only UTC shift | IMPLEMENTED / NOT MERGED | `src/lib/utils.ts`, `src/components/ClinicalContextSection.tsx` | `src/lib/utils.test.ts` (две timezones) | формат без Date-parsing; завершение курса использует локальную календарную дату | — |
+| CR-18 GET logout | IMPLEMENTED / NOT MERGED | `app/api/routes/auth.py`, `src/context/AuthContext.tsx` | `tests/test_logout_http.py` | GET → 405 без revoke; POST revoke; Origin check (403 на чужой origin) | — |
+| CR-19 broad users UPDATE | IMPLEMENTED / NOT MERGED | migration `0048` | `tests/test_users_update_privileges_postgres.py`, migration cycle assertions | app может менять только `display_name`/`updated_at`; email/status → permission denied | — |
+| CR-20 unused CORS config | DEFERRED | — | — | техдолг конфигурации, не functional bug при same-origin deployment | отдельный cleanup follow-up |
+| CR-21 OIDC discovery/JWKS cache | DEFERRED | — | — | производительность; корректность не затронута | follow-up cache hardening |
+| CR-22 docs drift | IMPLEMENTED / NOT MERGED | этот документ, `CURRENT-STATE.md`, `PROJECT-PLAN.md`, `DEVELOPMENT-HISTORY.md`, review register, source register | — | синхронизировано с фактическим кодом branch | — |
+
+Дополнительно исправлено при реализации (за пределами исходного реестра):
+
+- три устаревших backend-теста использовали несуществующий в приложении
+  reverse-proxy префикс `/health/api` и падали при запуске с настроенной
+  test DB (в CI они скрыто скипались);
+- `tests/test_clinical_delete_privileges.py` зашивал head `0045`; теперь
+  сверяется с фактическим script head.
+
+UI/эндпойнт-изменения, требующие внимания reviewer:
+
+- POST create routes четырёх клинических секций теперь принадлежат только
+  review-router (создание + атомарная очистка review state);
+- `GET /api/auth/email/consume` возвращает нейтральную interstitial
+  страницу; consume выполняется `POST /api/auth/email/consume`
+  (форма interstitial). `MAGIC_LINK_CONSUME_URL` менять не нужно;
+- `GET /api/auth/logout` удалён (405); frontend выполняет POST.
 
 ## Goal
 

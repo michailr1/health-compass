@@ -4,8 +4,14 @@
 Проверенный repository HEAD: `1a61f0307130e19fedeabd95218293d9a5075fe1`  
 Production code at review time: `f3d7e8fedcdad5448abce5c74c1bdb698e5e82e6`  
 Production Alembic: `0045 (head)`  
-Статус: `ACCEPTED REVIEW / REMEDIATION REQUIRED`  
-Итоговый verdict: `FIX BEFORE ROLLOUT`
+Статус: `ACCEPTED REVIEW / REMEDIATION IMPLEMENTED, NOT MERGED`  
+Итоговый verdict: `FIX BEFORE ROLLOUT` (снимается только после merge с зелёным CI на exact PR head SHA, independent diff review и controlled rollout)
+
+> Update 2026-07-11: HC-015 реализован в branch
+> `claude/hc-015-code-review-remediation-noaeve` (Alembic head `0048`).
+> Постатусная таблица findings с файлами, тестами и evidence —
+> `docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md`. Production не
+> изменялся: `f3d7e8f` / Alembic `0045`.
 
 ## 1. Источники
 
@@ -42,28 +48,28 @@ Production Alembic: `0045 (head)`
 
 | ID | Severity | Статус | Краткое описание | Решение |
 |---|---|---|---|---|
-| CR-01 | High | подтверждено кодом | Duplicate Clinical Context summary/review routes с несовместимыми contracts | HC-015 Slice A |
-| CR-02 | High | подтверждено кодом; HTTP regression required | Duplicate absorption не учитывает review/intake tables | HC-015 Slice B |
-| CR-03 | High | подтверждено кодом | Magic Link token поглощается через GET | HC-015 Slice C |
-| CR-04 | Medium | подтверждено обоими ревью | `canonical_concept_id` может ссылаться на concept чужого domain | HC-015 Slice D |
-| CR-05 | Medium | подтверждено кодом | Старый `canonical_concept_id` может сохраниться после очистки/смены code | HC-015 Slice D |
-| CR-06 | Medium | подтверждено обоими ревью | CI не запускает полный frontend lint и `tsc --noEmit` | HC-015 Slice E |
-| CR-07 | Medium | подтверждено кодом | Alias seed upsert конфликтует не по полному business key | HC-015 Slice D |
-| CR-08 | Medium | архитектурный/config risk | Безопасный account linking зависит от feature flag и production invariant не зафиксирован кодом | HC-015 Slice C |
-| CR-09 | Medium | подтверждено кодом | Void operations не имеют optimistic concurrency token | HC-015 Slice F |
-| CR-10 | Medium | подтверждено кодом | Race между confirmed-empty review и конкурентным добавлением записи | HC-015 Slice F |
-| CR-11 | Medium | подтверждено кодом | Structured error с `request_id` теряется frontend API client | HC-015 Slice F |
-| CR-12 | Medium | подтверждено кодом | Логи не являются безопасным structured JSON; query string требует redaction | HC-015 Slice C |
-| CR-13 | Medium | подтверждено кодом | Migration downgrade boundary `0041` и полный cycle недостаточно проверены | HC-015 Slice E |
-| CR-14 | Low | подтверждено обоими ревью | Dictionary search не использует `normalized_text` indexes эффективно | follow-up after rollout gate |
-| CR-15 | Low | подтверждено кодом | Typeahead без debounce/AbortSignal создаёт лишние и stale requests | follow-up UI hardening |
-| CR-16 | Low | подтверждено кодом | Dose нельзя надёжно очистить в edit flow | follow-up UI correctness |
-| CR-17 | Low | подтверждено кодом | UTC date conversion может сдвинуть календарную дату | follow-up UI correctness |
-| CR-18 | Low | подтверждено Fable | Logout выполняется через GET | HC-015 Slice C |
-| CR-19 | Low | defense in depth | `users` имеет слишком широкий UPDATE grant | HC-015 Slice B/C security hardening |
-| CR-20 | Low | техдолг | `cors_origins` объявлен, но middleware не подключён | clarify or remove config |
-| CR-21 | Low | performance/architecture | OIDC discovery/JWKS могут загружаться на каждый callback | follow-up cache hardening |
-| CR-22 | Low | документация | `CURRENT-STATE.md` и ближайший plan отстали от production | исправляется этим docs update |
+| CR-01 | High | подтверждено кодом | Duplicate Clinical Context summary/review routes с несовместимыми contracts | HC-015 Slice A — IMPLEMENTED / NOT MERGED |
+| CR-02 | High | подтверждено кодом; HTTP regression required | Duplicate absorption не учитывает review/intake tables | HC-015 Slice B — IMPLEMENTED / NOT MERGED |
+| CR-03 | High | подтверждено кодом | Magic Link token поглощается через GET | HC-015 Slice C — IMPLEMENTED / NOT MERGED |
+| CR-04 | Medium | подтверждено обоими ревью | `canonical_concept_id` может ссылаться на concept чужого domain | HC-015 Slice D — IMPLEMENTED / NOT MERGED |
+| CR-05 | Medium | подтверждено кодом | Старый `canonical_concept_id` может сохраниться после очистки/смены code | HC-015 Slice D — IMPLEMENTED / NOT MERGED |
+| CR-06 | Medium | подтверждено обоими ревью | CI не запускает полный frontend lint и `tsc --noEmit` | HC-015 Slice E — IMPLEMENTED / NOT MERGED |
+| CR-07 | Medium | подтверждено кодом | Alias seed upsert конфликтует не по полному business key | HC-015 Slice D — IMPLEMENTED / NOT MERGED |
+| CR-08 | Medium | архитектурный/config risk | Безопасный account linking зависит от feature flag и production invariant не зафиксирован кодом | HC-015 Slice C — IMPLEMENTED / NOT MERGED |
+| CR-09 | Medium | подтверждено кодом | Void operations не имеют optimistic concurrency token | HC-015 Slice F — IMPLEMENTED / NOT MERGED |
+| CR-10 | Medium | подтверждено кодом | Race между confirmed-empty review и конкурентным добавлением записи | HC-015 Slice F — IMPLEMENTED / NOT MERGED |
+| CR-11 | Medium | подтверждено кодом | Structured error с `request_id` теряется frontend API client | HC-015 Slice F — IMPLEMENTED / NOT MERGED |
+| CR-12 | Medium | подтверждено кодом | Логи не являются безопасным structured JSON; query string требует redaction | HC-015 Slice C — IMPLEMENTED / NOT MERGED |
+| CR-13 | Medium | подтверждено кодом | Migration downgrade boundary `0041` и полный cycle недостаточно проверены | HC-015 Slice E — IMPLEMENTED / NOT MERGED |
+| CR-14 | Low | подтверждено обоими ревью | Dictionary search не использует `normalized_text` indexes эффективно | DEFERRED — отдельный backlog item после rollout gate |
+| CR-15 | Low | подтверждено кодом | Typeahead без debounce/AbortSignal создаёт лишние и stale requests | реализовано в HC-015 Slice F — IMPLEMENTED / NOT MERGED |
+| CR-16 | Low | подтверждено кодом | Dose нельзя надёжно очистить в edit flow | реализовано в HC-015 Slice F — IMPLEMENTED / NOT MERGED |
+| CR-17 | Low | подтверждено кодом | UTC date conversion может сдвинуть календарную дату | реализовано в HC-015 Slice F — IMPLEMENTED / NOT MERGED |
+| CR-18 | Low | подтверждено Fable | Logout выполняется через GET | HC-015 Slice C — IMPLEMENTED / NOT MERGED |
+| CR-19 | Low | defense in depth | `users` имеет слишком широкий UPDATE grant | HC-015 security hardening (migration 0048) — IMPLEMENTED / NOT MERGED |
+| CR-20 | Low | техдолг | `cors_origins` объявлен, но middleware не подключён | DEFERRED — отдельный config cleanup follow-up |
+| CR-21 | Low | performance/architecture | OIDC discovery/JWKS могут загружаться на каждый callback | DEFERRED — follow-up cache hardening |
+| CR-22 | Low | документация | `CURRENT-STATE.md` и ближайший plan отстали от production | закрыто docs updates PR #38 и HC-015 |
 
 ## 4. Findings, блокирующие rollout
 

@@ -6,7 +6,8 @@ Main HEAD на момент независимого ревью: `1a61f0307130e1
 Production code: `f3d7e8fedcdad5448abce5c74c1bdb698e5e82e6`  
 Production Alembic: `0045 (head)`  
 Production URL: `https://health.funti.cc`  
-Текущий engineering verdict: `FIX BEFORE ROLLOUT`
+Текущий engineering verdict: `FIX BEFORE ROLLOUT`  
+HC-015 remediation: `IMPLEMENTED / NOT MERGED` в branch `claude/hc-015-code-review-remediation-noaeve` (Alembic head branch: `0048`; production не изменялся)
 
 ## Что работает в production
 
@@ -135,7 +136,15 @@ HC-015 — Code Review Remediation
 docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md
 ```
 
-До завершения HC-015:
+Статус реализации на 2026-07-11: все slices A–F реализованы в branch
+`claude/hc-015-code-review-remediation-noaeve` (миграции `0046`–`0048`,
+линейный head). Backend unit, PostgreSQL integration/RLS, migration-cycle,
+frontend lint/typecheck/tests/build зелёные локально в CI-эквивалентном
+окружении. Постатусная таблица findings — в HC-015 документе. Остаются:
+independent diff review, merge с зелёным CI на exact PR SHA и controlled
+backup-first rollout. Deployment status: `NOT DEPLOYED`.
+
+До завершения HC-015 (merge + rollout):
 
 - не добавлять новые product features;
 - не выполнять следующий production code rollout;

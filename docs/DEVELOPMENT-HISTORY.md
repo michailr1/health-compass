@@ -422,3 +422,47 @@ HC-015 — Code Review Remediation
 - `docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md`.
 
 До завершения HC-015 новые product features и production code rollout остановлены. Следующий разрешённый шаг — реализация remediation в отдельной branch с полным CI, independent diff review и controlled backup-first rollout.
+
+## 2026-07-11 — HC-015 implementation (branch, not merged)
+
+После merge PR #38 (review evidence и HC-015 specification) все slices A–F
+реализованы в implementation branch `claude/hc-015-code-review-remediation-noaeve`
+от `main` `265eb0ef80ebd4af2073bd2168bf17be90562fe4`.
+
+Ключевые изменения:
+
+- один канонический владелец Clinical Context summary/review routes
+  (`clinical_review`); legacy summary/review service и дублирующие create
+  routes удалены; route-table uniqueness закреплён тестом;
+- migration `0046`: `app_duplicate_user_activity` учитывает
+  `profile_clinical_reviews` и `profile_intake_decisions`; absorption получил
+  FK safety net (controlled `blocked` вместо необработанного FK violation);
+- scanner-safe Email Magic Link: GET показывает нейтральную interstitial
+  страницу, consume выполняется только явным POST; logout только POST с
+  Origin-проверкой; production требует `ACCOUNT_LINKING_ENABLED=true`;
+  логи переведены на настоящий JSON с request_id и redaction query strings;
+- migration `0047`: domain-валидирующий словарный trigger (SQLSTATE
+  HC422/HC404/HC409), атомарная очистка stale canonical mapping, безопасный
+  repair существующих строк, отзыв прямого UPDATE на `canonical_concept_id`;
+  alias seed upsert переведён на реальный business key;
+- migration `0048`: узкий column-level UPDATE grant на `users`
+  (только `display_name`, `updated_at`);
+- CI: full-source `npm run lint`, новый `npm run typecheck`, изолированный
+  migration-cycle test `upgrade head → downgrade base → upgrade head`
+  с проверкой owners/grants/RLS/PUBLIC EXECUTE; исправлен сломанный
+  downgrade `0006`;
+- concurrency: `expected_updated_at` для void (409 на stale) и advisory-lock
+  атомарность `confirmed_none` против конкурентного создания записи;
+- frontend: единый разбор обоих документированных error envelopes с
+  сохранением `request_id`, очистка dose, date-only без UTC-сдвига, ошибки
+  complete-course в нужной карточке, сброс editor state, debounce и
+  cancellation в typeahead.
+
+Локальные результаты в CI-эквивалентном окружении: backend unit
+106 passed; PostgreSQL integration/RLS 73 passed; migration cycle passed;
+frontend lint 0 errors, typecheck clean, 43 tests passed, build успешен.
+
+Alembic head branch: `0048` (линейный). Production не изменялся:
+`f3d7e8fedcdad5448abce5c74c1bdb698e5e82e6`, Alembic `0045`.
+Deployment status: `NOT DEPLOYED`. Далее — independent diff review,
+merge с зелёным CI на exact PR SHA и controlled backup-first rollout.

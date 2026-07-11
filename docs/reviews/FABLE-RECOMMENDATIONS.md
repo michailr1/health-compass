@@ -16,7 +16,7 @@
 | Устанавливать session hash context до AuthSession INSERT | VERIFIED | Google и email auth |
 | Проверять RLS на «тёплых» данных | VERIFIED | интеграционный пакет, 22 PASS |
 | Ввести инвариант-аудит владельцев policy helper-функций | PLANNED | автоматизировать в CI |
-| Сделать scanner-safe magic links | PLANNED | HC-015 Slice C: landing page + explicit POST consume |
+| Сделать scanner-safe magic links | IMPLEMENTED / NOT MERGED | HC-015 Slice C: interstitial GET + explicit POST consume; `tests/test_magic_link_scanner_safety_http.py` |
 | Реализовать invitations только вместе с RLS policies | DEFERRED | до PHASE-06 |
 | Не увеличивать `max_stack_depth` как workaround | ACCEPTED | запрещено как решение рекурсии |
 | Явно разделить роли coding и VPS agents | ACCEPTED | docs + runbook |
@@ -61,23 +61,25 @@
 
 | Finding | Статус | Реализация / решение |
 |---|---|---|
-| Удалить дублирующие и несовместимые Clinical Context summary/review routes | PLANNED | HC-015 Slice A |
-| Учитывать `profile_clinical_reviews` и `profile_intake_decisions` при duplicate assessment | PLANNED | HC-015 Slice B |
-| Запретить canonical concept чужого domain | PLANNED | HC-015 Slice D |
-| Очищать stale `canonical_concept_id` при изменении source code fields | PLANNED | HC-015 Slice D |
-| Запускать full-source frontend lint | PLANNED | HC-015 Slice E |
-| Добавить обязательный TypeScript `tsc --noEmit` | PLANNED | HC-015 Slice E |
-| Проверять полный Alembic cycle `head → base → head` | PLANNED | HC-015 Slice E |
-| Ограничить UPDATE grants на `users` по колонкам | PLANNED | HC-015 security hardening |
-| Перевести logout с GET на POST | PLANNED | HC-015 Slice C |
-| Сделать production account-linking configuration fail-safe | PLANNED | HC-015 Slice C |
-| Исключить token/query leakage из logs | PLANNED | HC-015 Slice C |
+| Удалить дублирующие и несовместимые Clinical Context summary/review routes | IMPLEMENTED / NOT MERGED | HC-015 Slice A; route-table uniqueness + HTTP tests |
+| Учитывать `profile_clinical_reviews` и `profile_intake_decisions` при duplicate assessment | IMPLEMENTED / NOT MERGED | HC-015 Slice B; migration `0046` + PostgreSQL tests |
+| Запретить canonical concept чужого domain | IMPLEMENTED / NOT MERGED | HC-015 Slice D; migration `0047` validating trigger |
+| Очищать stale `canonical_concept_id` при изменении source code fields | IMPLEMENTED / NOT MERGED | HC-015 Slice D; migration `0047` + repair pass |
+| Запускать full-source frontend lint | IMPLEMENTED / NOT MERGED | HC-015 Slice E; `npm run lint` в CI |
+| Добавить обязательный TypeScript `tsc --noEmit` | IMPLEMENTED / NOT MERGED | HC-015 Slice E; `npm run typecheck` в CI |
+| Проверять полный Alembic cycle `head → base → head` | IMPLEMENTED / NOT MERGED | HC-015 Slice E; `tests/test_migration_cycle.py` в изолированной DB |
+| Ограничить UPDATE grants на `users` по колонкам | IMPLEMENTED / NOT MERGED | migration `0048`; privilege tests |
+| Перевести logout с GET на POST | IMPLEMENTED / NOT MERGED | HC-015 Slice C; GET → 405, Origin check |
+| Сделать production account-linking configuration fail-safe | IMPLEMENTED / NOT MERGED | HC-015 Slice C; startup validation |
+| Исключить token/query leakage из logs | IMPLEMENTED / NOT MERGED | HC-015 Slice C; JSON formatter + `redacted_url` |
 | Использовать dictionary normalized columns/index strategy | PLANNED | follow-up после HC-015 |
-| Добавить debounce и cancellation в Clinical Typeahead | PLANNED | follow-up после HC-015 |
+| Добавить debounce и cancellation в Clinical Typeahead | IMPLEMENTED / NOT MERGED | выполнено в HC-015 Slice F |
 | Удалить или осознанно подключить неиспользуемую CORS configuration | DEFERRED | follow-up cleanup |
 
 Канонический отчёт: `docs/reviews/CODE-REVIEW-CONSOLIDATED-2026-07-11.md`.  
-План исправлений: `docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md`.
+План исправлений и постатусная implementation-таблица: `docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md`.
+
+Статус `IMPLEMENTED / NOT MERGED` означает: код и тесты написаны в branch `claude/hc-015-code-review-remediation-noaeve` и зелёные локально; merge, CI на exact PR SHA и production rollout ещё не выполнены.
 
 ## Правило обработки новых ревью
 

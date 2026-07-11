@@ -69,7 +69,10 @@
 
 - Один method/path pair имеет одного канонического владельца route.
 - Нельзя полагаться на порядок `include_router` для выбора корректного API contract.
-- Backend errors используют единый documented envelope и возвращают `request_id` без stack trace.
+- Backend errors используют документированный ограниченный набор envelopes
+  (`{"error": {...}}` глобальных handlers и `detail` route-level HTTPException);
+  `request_id` возвращается в body или `X-Request-ID` и сохраняется frontend;
+  stack traces и SQL details не раскрываются.
 - State-changing GET routes запрещены, если нет отдельного ADR и компенсирующей защиты.
 
 ## CI и migrations
