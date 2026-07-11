@@ -1,6 +1,6 @@
 # Fable — реестр рекомендаций
 
-Статусы: `ACCEPTED`, `VERIFIED`, `PLANNED`, `DEFERRED`, `REJECTED`, `SUPERSEDED`.
+Статусы: `ACCEPTED`, `VERIFIED`, `PLANNED`, `IN PROGRESS`, `DEFERRED`, `REJECTED`, `SUPERSEDED`.
 
 | Рекомендация | Статус | Реализация / решение |
 |---|---|---|
@@ -12,15 +12,15 @@
 | Закрыть self-add в чужой workspace | VERIFIED | policy + negative test |
 | Добавить прямые self-select policies для RETURNING | VERIFIED | `0020` |
 | Исправить identity lookup под FORCE RLS | VERIFIED | definer helper |
-| Добавить users self-update policy | VERIFIED | `0020` |
+| Добавить users self-update policy | VERIFIED | `0020`; column-level narrowing остаётся в HC-015 |
 | Устанавливать session hash context до AuthSession INSERT | VERIFIED | Google и email auth |
 | Проверять RLS на «тёплых» данных | VERIFIED | интеграционный пакет, 22 PASS |
 | Ввести инвариант-аудит владельцев policy helper-функций | PLANNED | автоматизировать в CI |
-| Сделать scanner-safe magic links | PLANNED | landing page + POST confirmation |
+| Сделать scanner-safe magic links | PLANNED | HC-015 Slice C: landing page + explicit POST consume |
 | Реализовать invitations только вместе с RLS policies | DEFERRED | до PHASE-06 |
 | Не увеличивать `max_stack_depth` как workaround | ACCEPTED | запрещено как решение рекурсии |
 | Явно разделить роли coding и VPS agents | ACCEPTED | docs + runbook |
-| Синхронизировать docs с фактическим кодом | IN PROGRESS | новый docs-контур |
+| Синхронизировать docs с фактическим кодом | IN PROGRESS | docs contour + HC-015 update |
 | Маркировать demo health data и не смешивать с реальными | ACCEPTED | UI label; реальный импорт в PHASE-03/04 |
 | Retrieval-grounded AI с обязательными evidence | PLANNED | PHASE-08 + `AI-PRODUCT-SAFETY.md` |
 | Не допускать автоматических диагнозов | ACCEPTED | security invariant |
@@ -56,6 +56,28 @@
 | Для MVP использовать одно поле `sex` | ACCEPTED | `male`, `female`, `not_specified`; поле опционально |
 | Включить этническую принадлежность в обычный intake | REJECTED | только будущий конкретный валидированный алгоритм; не входит в completeness |
 | Хранить исходные Fable artifacts только в чате проекта | REJECTED | исходники должны быть в GitHub reference archive |
+
+## Review 2026-07-11 — принятые технические findings
+
+| Finding | Статус | Реализация / решение |
+|---|---|---|
+| Удалить дублирующие и несовместимые Clinical Context summary/review routes | PLANNED | HC-015 Slice A |
+| Учитывать `profile_clinical_reviews` и `profile_intake_decisions` при duplicate assessment | PLANNED | HC-015 Slice B |
+| Запретить canonical concept чужого domain | PLANNED | HC-015 Slice D |
+| Очищать stale `canonical_concept_id` при изменении source code fields | PLANNED | HC-015 Slice D |
+| Запускать full-source frontend lint | PLANNED | HC-015 Slice E |
+| Добавить обязательный TypeScript `tsc --noEmit` | PLANNED | HC-015 Slice E |
+| Проверять полный Alembic cycle `head → base → head` | PLANNED | HC-015 Slice E |
+| Ограничить UPDATE grants на `users` по колонкам | PLANNED | HC-015 security hardening |
+| Перевести logout с GET на POST | PLANNED | HC-015 Slice C |
+| Сделать production account-linking configuration fail-safe | PLANNED | HC-015 Slice C |
+| Исключить token/query leakage из logs | PLANNED | HC-015 Slice C |
+| Использовать dictionary normalized columns/index strategy | PLANNED | follow-up после HC-015 |
+| Добавить debounce и cancellation в Clinical Typeahead | PLANNED | follow-up после HC-015 |
+| Удалить или осознанно подключить неиспользуемую CORS configuration | DEFERRED | follow-up cleanup |
+
+Канонический отчёт: `docs/reviews/CODE-REVIEW-CONSOLIDATED-2026-07-11.md`.  
+План исправлений: `docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md`.
 
 ## Правило обработки новых ревью
 
