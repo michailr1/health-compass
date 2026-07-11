@@ -201,6 +201,19 @@ def test_full_migration_cycle_restores_all_security_invariants() -> None:
                     ).scalar_one()
                     assert direct_update == 0, table
 
+                users_update_columns = {
+                    row[0]
+                    for row in conn.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.column_privileges "
+                            "WHERE grantee = 'health_compass_app' "
+                            "AND table_schema = 'health_compass' "
+                            "AND table_name = 'users' AND privilege_type = 'UPDATE'"
+                        )
+                    )
+                }
+                assert users_update_columns == {"display_name", "updated_at"}
+
                 definer_grants = conn.execute(
                     text(
                         "SELECT count(*) FROM information_schema.role_table_grants "
