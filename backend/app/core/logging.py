@@ -18,7 +18,7 @@ from app.core.config import settings
 
 # Extra attributes that, when present on a record, are emitted as top-level
 # JSON fields. ``request_id`` keeps operational errors support-friendly.
-_EXTRA_FIELDS = ("request_id", "path")
+_EXTRA_FIELDS = ("request_id", "path", "exception_type")
 
 
 def redacted_url(url: object) -> str:
@@ -31,6 +31,23 @@ def redacted_url(url: object) -> str:
     if parts.scheme and parts.netloc:
         return f"{parts.scheme}://{parts.netloc}{parts.path}"
     return parts.path
+
+
+class RedactAccessPathFilter(logging.Filter):
+    """Remove query strings from Uvicorn access-log request targets.
+
+    Uvicorn stores the request target as the third positional formatting
+    argument. Rewriting that argument preserves useful access logging while
+    ensuring Magic Link and OIDC query parameters never reach the formatter.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name == "uvicorn.access" and isinstance(record.args, tuple):
+            if len(record.args) >= 3:
+                args = list(record.args)
+                args[2] = redacted_url(args[2])
+                record.args = tuple(args)
+        return True
 
 
 class JsonFormatter(logging.Formatter):
@@ -55,18 +72,29 @@ class JsonFormatter(logging.Formatter):
 
 
 def configure_logging() -> None:
-    """Configure structured JSON logging for the application."""
+    """Configure structured JSON logging for the application and access log."""
     log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
+    handler.addFilter(RedactAccessPathFilter())
 
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
-    # Remove default handlers to avoid duplicate output
-    for h in root_logger.handlers[:]:
-        root_logger.removeHandler(h)
+    # Remove default handlers to avoid duplicate output.
+    for existing_handler in root_logger.handlers[:]:
+        root_logger.removeHandler(existing_handler)
     root_logger.addHandler(handler)
+
+    # Uvicorn configures ``uvicorn.access`` with its own handler and
+    # ``propagate=False``. Replace that handler explicitly so request targets
+    # receive the same query-string redaction as application logs.
+    access_logger = logging.getLogger("uvicorn.access")
+    for existing_handler in access_logger.handlers[:]:
+        access_logger.removeHandler(existing_handler)
+    access_logger.addHandler(handler)
+    access_logger.propagate = False
+    access_logger.disabled = False
 
     for name in logging.root.manager.loggerDict:
         logger = logging.getLogger(name)
