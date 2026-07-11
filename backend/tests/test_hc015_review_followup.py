@@ -68,7 +68,7 @@ def test_uvicorn_access_filter_removes_auth_query_string() -> None:
     assert "?token=" not in payload["message"]
 
 
-async def test_global_handler_does_not_interpolate_exception_values(
+async def test_global_handler_omits_exception_values_and_traceback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, Any] = {}
@@ -77,7 +77,7 @@ async def test_global_handler_does_not_interpolate_exception_values(
         captured["args"] = args
         captured["kwargs"] = kwargs
 
-    monkeypatch.setattr("app.main.logger.exception", capture)
+    monkeypatch.setattr("app.main.logger.error", capture)
     request = Request(
         {
             "type": "http",
@@ -100,6 +100,7 @@ async def test_global_handler_does_not_interpolate_exception_values(
 
     assert response.status_code == 500
     assert captured["args"] == ("Unhandled exception",)
+    assert "exc_info" not in captured["kwargs"]
     extra = captured["kwargs"]["extra"]
     assert extra == {
         "request_id": "request-123",
