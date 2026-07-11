@@ -56,9 +56,12 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     """Catch unhandled exceptions and return a safe error response."""
     request_id = getattr(request.state, "request_id", None)
     logger.exception(
-        "Unhandled exception: %s",
-        exc,
-        extra={"request_id": request_id, "path": redacted_url(request.url)},
+        "Unhandled exception",
+        extra={
+            "request_id": request_id,
+            "path": redacted_url(request.url),
+            "exception_type": type(exc).__name__,
+        },
     )
     detail = ErrorDetail(
         code="internal_error",
