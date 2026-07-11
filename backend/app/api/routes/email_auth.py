@@ -1,13 +1,21 @@
-"""Email magic-link authentication routes."""
+"""Email magic-link authentication routes.
+
+The one-time login token is never consumed by GET. Opening the emailed link
+renders a neutral interstitial page; only the explicit POST from that page
+marks the token used and creates a session, so mail scanners and URL prefetch
+cannot burn the link before the user (HC-015 Slice C / CR-03).
+"""
 
 from __future__ import annotations
 
 import datetime
+import html
+import string
 import uuid
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +34,10 @@ router = APIRouter(prefix="/auth/email", tags=["auth"])
 EMAIL_PROVIDER = "email"
 GOOGLE_PROVIDER = "google"
 EMAIL_ISSUER = "health-compass-email"
+
+TOKEN_MIN_LENGTH = 32
+TOKEN_MAX_LENGTH = 256
+_TOKEN_ALPHABET = set(string.ascii_letters + string.digits + "-_")
 
 
 class MagicLinkRequest(BaseModel):
@@ -118,14 +130,105 @@ async def request_magic_link(
     )
 
 
-@router.get("/consume")
+def _token_shape_is_valid(token: str) -> bool:
+    return (
+        TOKEN_MIN_LENGTH <= len(token) <= TOKEN_MAX_LENGTH
+        and set(token) <= _TOKEN_ALPHABET
+    )
+
+
+def _invalid_link_redirect() -> RedirectResponse:
+    response = RedirectResponse(
+        _frontend_url("/auth-link", {"status": "invalid"}),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+def _consume_form_action(request: Request) -> str:
+    """Path the interstitial form posts to, as seen by the browser.
+
+    Production exposes the API behind a reverse-proxy prefix, so the
+    externally visible path comes from MAGIC_LINK_CONSUME_URL; the in-app
+    path is the fallback for development and tests.
+    """
+    if settings.magic_link_consume_url:
+        external_path = urlsplit(settings.magic_link_consume_url).path
+        if external_path:
+            return external_path
+    return request.url.path
+
+
+def _origin_is_allowed(request: Request) -> bool:
+    origin = request.headers.get("origin")
+    if not origin:
+        # Non-browser clients; the one-time token itself is the credential.
+        return True
+    parts = urlsplit(settings.frontend_url)
+    return origin.rstrip("/") == f"{parts.scheme}://{parts.netloc}"
+
+
+@router.get("/consume", response_model=None)
+async def magic_link_interstitial(
+    request: Request,
+    token: str = Query(min_length=1, max_length=1024),
+) -> HTMLResponse | RedirectResponse:
+    """Show a neutral confirmation page. Never touches the token state."""
+    if not settings.email_auth_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    if not _token_shape_is_valid(token):
+        return _invalid_link_redirect()
+
+    page = f"""<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Вход в Health Compass</title>
+<style>
+  body {{ font-family: system-ui, sans-serif; display: grid; place-items: center;
+         min-height: 100vh; margin: 0; background: #f8fafc; color: #0f172a; }}
+  main {{ max-width: 24rem; padding: 2rem; text-align: center; }}
+  button {{ font-size: 1rem; padding: 0.75rem 2.5rem; border: 0; border-radius: 0.75rem;
+            background: #0ea5e9; color: #fff; cursor: pointer; }}
+  p {{ color: #475569; font-size: 0.9rem; line-height: 1.5; }}
+</style>
+</head>
+<body>
+<main>
+<h1>Вход в Health Compass</h1>
+<p>Чтобы завершить вход, нажмите кнопку. Ссылка одноразовая и действует ограниченное время.</p>
+<form method="post" action="{html.escape(_consume_form_action(request))}">
+<input type="hidden" name="token" value="{html.escape(token)}">
+<button type="submit">Войти</button>
+</form>
+<p>Если вы не запрашивали вход, просто закройте эту страницу — ссылка останется неиспользованной.</p>
+</main>
+</body>
+</html>"""
+    response = HTMLResponse(page)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+@router.post("/consume")
 async def consume_magic_link(
     request: Request,
-    token: str = Query(min_length=32, max_length=256),
     session: AsyncSession = Depends(get_session),
 ) -> RedirectResponse:
     if not settings.email_auth_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    if not _origin_is_allowed(request):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid request origin")
+
+    form = await request.form()
+    token = form.get("token")
+    if not isinstance(token, str) or not _token_shape_is_valid(token):
+        return _invalid_link_redirect()
 
     result = await session.execute(
         text("select health_compass.app_consume_email_login_token(:token_hash)"),

@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
 from app.core.config import settings
-from app.core.logging import configure_logging, get_logger
+from app.core.logging import configure_logging, get_logger, redacted_url
 from app.core.request_id import RequestIDMiddleware
 from app.schemas.errors import ErrorDetail, ErrorResponse
 
@@ -58,7 +58,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     logger.exception(
         "Unhandled exception: %s",
         exc,
-        extra={"request_id": request_id, "path": str(request.url)},
+        extra={"request_id": request_id, "path": redacted_url(request.url)},
     )
     detail = ErrorDetail(
         code="internal_error",

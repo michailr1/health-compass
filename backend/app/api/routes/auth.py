@@ -718,7 +718,23 @@ async def callback(
     return await _create_session_response(session, request, user.id)
 
 
-async def _logout_response(request: Request, session: AsyncSession) -> RedirectResponse:
+def _origin_is_allowed(request: Request) -> bool:
+    """Same-origin check for state-changing cookie-authenticated posts."""
+    origin = request.headers.get("origin")
+    if not origin:
+        return True
+    parts = urlsplit(settings.frontend_url)
+    return origin.rstrip("/") == f"{parts.scheme}://{parts.netloc}"
+
+
+@router.post("/logout")
+async def logout_post(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse:
+    """Revoke the local session. State-changing logout is POST-only (CR-18)."""
+    if not _origin_is_allowed(request):
+        raise HTTPException(status_code=403, detail="Invalid request origin")
     token = request.cookies.get(settings.session_cookie_name)
     if token:
         token_hash = hash_token(token)
@@ -733,19 +749,3 @@ async def _logout_response(request: Request, session: AsyncSession) -> RedirectR
     response.delete_cookie(settings.account_link_cookie_name, path="/api/auth")
     _delete_oidc_cookies(response)
     return response
-
-
-@router.get("/logout")
-async def logout_get(
-    request: Request,
-    session: AsyncSession = Depends(get_session),
-) -> RedirectResponse:
-    return await _logout_response(request, session)
-
-
-@router.post("/logout")
-async def logout_post(
-    request: Request,
-    session: AsyncSession = Depends(get_session),
-) -> RedirectResponse:
-    return await _logout_response(request, session)

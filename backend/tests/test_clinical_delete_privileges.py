@@ -6,6 +6,8 @@ import os
 from urllib.parse import urlsplit
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 
 pytestmark = pytest.mark.integration
@@ -39,7 +41,7 @@ def test_app_role_has_no_effective_delete_on_clinical_context_tables() -> None:
             revision = connection.execute(
                 text("SELECT version_num FROM health_compass.alembic_version")
             ).scalar_one()
-            assert revision == "0045"
+            assert revision == ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
 
             effective_delete = {
                 table: connection.execute(
