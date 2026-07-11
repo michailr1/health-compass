@@ -333,3 +333,92 @@ HC-026 completed
 HC-027 completed
 production verified
 ```
+
+## 2026-07-10 — Clinical Context и contextual intake развёрнуты
+
+После account-linking remediation реализованы и развёрнуты следующие части PHASE-02.5:
+
+- Clinical Context conditions, allergies, medications и supplements;
+- explicit review states;
+- typeahead и global/personal dictionary suggestions;
+- optional clarifying questions;
+- contextual intake decisions;
+- profile questionnaire navigation;
+- dashboard context coverage;
+- mobile readability improvements;
+- provenance, consent, append-only audit и void history;
+- optimistic concurrency для update/review paths;
+- FORCE RLS и owner/edit/view/analyze/outsider matrix.
+
+Production Alembic достиг `0045 (head)`.
+
+## 2026-07-10 — HC-014 Clinical Dictionaries v2
+
+Развёрнут Russian-first dictionary foundation и исправлен importer, который первоначально конфликтовал с pre-existing concept UUID при совпадающем business key.
+
+Принятый business key:
+
+```text
+(domain, normalized_text)
+```
+
+Исправленный importer:
+
+- сохраняет существующий concept UUID;
+- использует `RETURNING id`;
+- привязывает aliases к фактическому database concept;
+- остаётся идемпотентным.
+
+Перед повторным apply создан backup:
+
+```text
+/opt/health-compass/backups/clinical_dictionary_before_seed_retry_20260710T224649Z.sql.gz
+```
+
+Финальное production state:
+
+- 69 concepts;
+- 107 aliases;
+- 0 duplicate concept business keys;
+- 0 duplicate aliases;
+- 0 orphan aliases;
+- все 66 reviewed business keys представлены;
+- Alembic остался `0045`;
+- backend остался healthy.
+
+Production code после фикса и документации: `f3d7e8fedcdad5448abce5c74c1bdb698e5e82e6`.
+
+## 2026-07-11 — два независимых code review
+
+Актуальный repository HEAD `1a61f0307130e19fedeabd95218293d9a5075fe1` независимо проверен ChatGPT и Fable 5.
+
+Оба review подтвердили сильную RLS/tenant-isolation foundation и не обнаружили подтверждённого Critical finding, cross-user leak или self-escalation.
+
+Одновременно приняты блокирующие findings:
+
+- overlapping Clinical Context summary/review routes;
+- schema drift duplicate assessment/absorption относительно `profile_clinical_reviews` и `profile_intake_decisions`;
+- scanner-unsafe Magic Link consume через GET;
+- wrong-domain и stale `canonical_concept_id`;
+- неполный frontend lint/typecheck gate;
+- дополнительные concurrency, logging, migration и API-contract defects.
+
+Итоговый engineering verdict:
+
+```text
+FIX BEFORE ROLLOUT
+```
+
+Создана блокирующая задача:
+
+```text
+HC-015 — Code Review Remediation
+```
+
+Канонические документы:
+
+- `docs/reviews/CODE-REVIEW-CONSOLIDATED-2026-07-11.md`;
+- `docs/reviews/FABLE-5-INDEPENDENT-CODE-REVIEW-2026-07-11.md`;
+- `docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md`.
+
+До завершения HC-015 новые product features и production code rollout остановлены. Следующий разрешённый шаг — реализация remediation в отдельной branch с полным CI, independent diff review и controlled backup-first rollout.

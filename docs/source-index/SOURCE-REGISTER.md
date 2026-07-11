@@ -55,10 +55,21 @@
 
 ## Внешние ревью
 
-| Источник | Темы | Отражение |
+| Источник | Темы | Каноническое отражение |
 |---|---|---|
 | `ревью Fable5.txt` | архитектура, продукт, безопасность, эксплуатация | plan, ADR, runbook, recommendation register |
 | `2-Ревью-Fable5-Postgre-рекурсия.txt` | RLS recursion, FORCE RLS, escalation paths | `SECURITY-INVARIANTS.md`, migrations `0020–0021` |
+| Fable 5 independent code review, 2026-07-11 | актуальный backend/frontend, RLS, auth, Clinical Context, CI | `docs/reviews/FABLE-5-INDEPENDENT-CODE-REVIEW-2026-07-11.md` |
+| ChatGPT independent code review, 2026-07-11 | актуальный код, миграции, contracts, security и operations | `docs/reviews/CODE-REVIEW-CONSOLIDATED-2026-07-11.md` |
+
+## Принятые результаты ревью 2026-07-11
+
+| Документ | Назначение |
+|---|---|
+| `docs/reviews/CODE-REVIEW-CONSOLIDATED-2026-07-11.md` | единый verdict и полный реестр findings |
+| `docs/reviews/FABLE-5-INDEPENDENT-CODE-REVIEW-2026-07-11.md` | сохранённый независимый источник Fable 5 |
+| `docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md` | блокирующий план исправлений и критерии приёмки |
+| `docs/reviews/FABLE-RECOMMENDATIONS.md` | статусы принятых рекомендаций |
 
 ## Фактические источники
 
@@ -78,3 +89,4 @@
 5. При расхождении старого источника и фактической реализации отклонение фиксируется в `DEVELOPMENT-HISTORY.md`, ADR или каноническом baseline.
 6. Секреты, персональные медицинские данные и токены не сохраняются в этом реестре.
 7. Исходные артефакты Fable должны храниться в GitHub reference archive; чат/проект не является единственным долговременным хранилищем.
+8. Независимое ревью хранится отдельно от консолидированного решения; accepted findings получают implementation task и status.
