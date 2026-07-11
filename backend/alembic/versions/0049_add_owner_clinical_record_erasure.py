@@ -103,6 +103,10 @@ def upgrade() -> None:
     op.execute(f"GRANT SELECT ON {S}.health_profiles TO {R}")
     op.execute(f"GRANT SELECT, INSERT, DELETE ON {S}.profile_audit_events TO {R}")
 
+    # PostgreSQL requires the prospective function owner to hold CREATE on the
+    # containing schema during ALTER FUNCTION ... OWNER TO. Grant it only for
+    # the ownership transfer and revoke it immediately afterwards.
+    op.execute(f"GRANT CREATE ON SCHEMA {S} TO {R}")
     op.execute(
         f"""
         CREATE OR REPLACE FUNCTION {S}.app_erase_clinical_record(
@@ -237,6 +241,7 @@ def upgrade() -> None:
     op.execute(f"ALTER FUNCTION {FUNCTION_SIGNATURE} SET row_security = off")
     op.execute(f"REVOKE ALL ON FUNCTION {FUNCTION_SIGNATURE} FROM PUBLIC")
     op.execute(f"GRANT EXECUTE ON FUNCTION {FUNCTION_SIGNATURE} TO {APP}")
+    op.execute(f"REVOKE CREATE ON SCHEMA {S} FROM {R}")
 
 
 def downgrade() -> None:
@@ -248,5 +253,6 @@ def downgrade() -> None:
         op.execute(f"REVOKE DELETE ON {S}.{table} FROM {APP}")
     op.execute(f"REVOKE INSERT, DELETE ON {S}.profile_audit_events FROM {R}")
     op.execute(f"REVOKE DELETE ON {S}.profile_audit_events FROM {APP}")
+    op.execute(f"REVOKE CREATE ON SCHEMA {S} FROM {R}")
 
     _replace_audit_constraint(include_erasure=False)
