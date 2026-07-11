@@ -117,7 +117,7 @@ def erasure_fixture() -> dict[str, object]:
             ) VALUES (
               %s, %s, %s, 'condition', %s,
               'condition.created',
-              jsonb_build_object('display_name', jsonb_build_object('old', NULL, 'new', %s)),
+              jsonb_build_object('display_name', jsonb_build_object('old', NULL, 'new', %s::text)),
               'erasure-fixture'
             )
             """,
