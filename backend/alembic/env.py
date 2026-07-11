@@ -35,8 +35,10 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Use migrator URL from settings
-config.set_main_option("sqlalchemy.url", settings.migrator_url)
+# Use the migrator URL from settings unless the caller (e.g. the isolated
+# migration-cycle test) already provided an explicit sqlalchemy.url.
+if not config.get_main_option("sqlalchemy.url"):
+    config.set_main_option("sqlalchemy.url", settings.migrator_url)
 
 target_metadata = Base.metadata
 
