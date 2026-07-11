@@ -75,7 +75,7 @@ async def void_condition(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    return await void_record(session, profile_id, "conditions", record_id, payload.reason, current_user, _request_id(request))
+    return await void_record(session, profile_id, "conditions", record_id, payload.reason, current_user, _request_id(request), payload.expected_updated_at)
 
 
 @router.get("/profiles/{profile_id}/allergies", response_model=list[AllergyResponse])
@@ -109,7 +109,7 @@ async def void_allergy(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    return await void_record(session, profile_id, "allergies", record_id, payload.reason, current_user, _request_id(request))
+    return await void_record(session, profile_id, "allergies", record_id, payload.reason, current_user, _request_id(request), payload.expected_updated_at)
 
 
 @router.get("/profiles/{profile_id}/medications", response_model=list[MedicationResponse])
@@ -143,7 +143,7 @@ async def void_medication(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    return await void_record(session, profile_id, "medications", record_id, payload.reason, current_user, _request_id(request))
+    return await void_record(session, profile_id, "medications", record_id, payload.reason, current_user, _request_id(request), payload.expected_updated_at)
 
 
 @router.get("/profiles/{profile_id}/supplements", response_model=list[SupplementResponse])
@@ -177,7 +177,7 @@ async def void_supplement(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    return await void_record(session, profile_id, "supplements", record_id, payload.reason, current_user, _request_id(request))
+    return await void_record(session, profile_id, "supplements", record_id, payload.reason, current_user, _request_id(request), payload.expected_updated_at)
 
 
 @router.get("/profiles/{profile_id}/clinical-safety-flags", response_model=list[SafetyFlagResponse])
@@ -222,4 +222,4 @@ async def void_safety_flag(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    return await void_record(session, profile_id, "clinical-safety-flags", record_id, payload.reason, current_user, _request_id(request))
+    return await void_record(session, profile_id, "clinical-safety-flags", record_id, payload.reason, current_user, _request_id(request), payload.expected_updated_at)

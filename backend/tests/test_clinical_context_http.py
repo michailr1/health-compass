@@ -155,6 +155,82 @@ async def test_clinical_context_summary_contract_and_access_matrix() -> None:
         await _dispose_app_engine()
 
 
+async def test_stale_void_returns_conflict_and_fresh_void_succeeds() -> None:
+    """HC-015 Slice F (CR-09): void honors expected_updated_at."""
+    with psycopg.connect(_admin_url(), autocommit=True) as connection:
+        profile, actors = _seed_profile_with_actors(connection)
+    owner = actors["owner"]
+
+    try:
+        async with _get_client(owner) as client:
+            created = await client.post(
+                f"/profiles/{profile}/allergies",
+                json={"substance_name": "Арахис"},
+            )
+            assert created.status_code == 201, created.text
+            record = created.json()
+
+            stale = await client.post(
+                f"/profiles/{profile}/allergies/{record['id']}/void",
+                json={
+                    "reason": "запись устарела",
+                    "expected_updated_at": "2001-01-01T00:00:00Z",
+                },
+            )
+            assert stale.status_code == 409, stale.text
+
+            fresh = await client.post(
+                f"/profiles/{profile}/allergies/{record['id']}/void",
+                json={
+                    "reason": "запись устарела",
+                    "expected_updated_at": record["updated_at"],
+                },
+            )
+            assert fresh.status_code == 200, fresh.text
+            assert fresh.json()["voided_at"] is not None
+    finally:
+        await _dispose_app_engine()
+
+
+async def test_concurrent_confirmed_none_and_create_never_contradict() -> None:
+    """HC-015 Slice F (CR-10): confirmed_none is atomic vs record creation."""
+    import asyncio
+
+    for attempt in range(4):
+        with psycopg.connect(_admin_url(), autocommit=True) as connection:
+            profile, actors = _seed_profile_with_actors(connection)
+        owner = actors["owner"]
+
+        try:
+            async with _get_client(owner) as review_client, _get_client(owner) as create_client:
+                review_call = review_client.patch(
+                    f"/profiles/{profile}/clinical-context/sections/allergies/review",
+                    json={"review_state": "confirmed_none"},
+                )
+                create_call = create_client.post(
+                    f"/profiles/{profile}/allergies",
+                    json={"substance_name": f"Гонка {attempt}"},
+                )
+                review_response, create_response = await asyncio.gather(
+                    review_call, create_call, return_exceptions=False
+                )
+                assert create_response.status_code == 201, create_response.text
+                assert review_response.status_code in (200, 409), review_response.text
+
+                summary_response = await review_client.get(
+                    f"/profiles/{profile}/clinical-context"
+                )
+                assert summary_response.status_code == 200
+                summary = ClinicalContextSummary.model_validate(summary_response.json())
+                allergies = summary.sections["allergies"]
+                # The record exists, so confirmed_none must never survive.
+                assert allergies.history_count == 1
+                assert allergies.review_state != "confirmed_none"
+                assert allergies.effective_state == "has_entries"
+        finally:
+            await _dispose_app_engine()
+
+
 async def test_dictionary_integrity_violations_return_controlled_422() -> None:
     """HC-015 Slice D: DB-boundary rejections surface as validation errors."""
     with psycopg.connect(_admin_url(), autocommit=True) as connection:

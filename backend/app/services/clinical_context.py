@@ -244,6 +244,7 @@ async def void_record(
     reason: str,
     current_user: User,
     request_id: str | None,
+    expected_updated_at: datetime.datetime | None = None,
 ) -> Any:
     await _prepare_write(session, profile_id, current_user)
     model = MODEL_BY_SECTION[section]
@@ -255,6 +256,11 @@ async def void_record(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clinical record not found")
     if record.voided_at is not None:
         return record
+    if expected_updated_at is not None and record.updated_at != expected_updated_at:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Clinical record was updated elsewhere",
+        )
 
     now = datetime.datetime.now(datetime.UTC)
     record.voided_at = now

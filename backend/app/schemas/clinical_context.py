@@ -242,6 +242,7 @@ class SafetyFlagPatchRequest(BaseModel):
 
 class ClinicalVoidRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
+    expected_updated_at: datetime.datetime | None = None
 
     @field_validator("reason")
     @classmethod

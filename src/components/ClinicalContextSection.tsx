@@ -8,6 +8,7 @@ import {
 } from "@/components/ClinicalClarifyingQuestions";
 import { ClinicalTypeahead, type ClinicalSelection } from "@/components/ClinicalTypeahead";
 import {
+  ApiError,
   apiGet,
   apiPatch,
   apiPost,
@@ -15,6 +16,7 @@ import {
   type ClinicalReviewState,
   type ClinicalSectionState,
 } from "@/lib/api";
+import { formatDateOnlyRu, localDateOnlyISO } from "@/lib/utils";
 
 export type SectionKey = "conditions" | "allergies" | "medications" | "supplements";
 
@@ -149,6 +151,68 @@ export function clinicalEmptyActionLabel(emptyLabel: string) {
   return `Подтвердить: ${emptyLabel}`;
 }
 
+export function clinicalErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    let message = error.message;
+    if (error.status === 409) {
+      message = "Данные изменились в другом окне или на другом устройстве. Обновите страницу и повторите действие.";
+    }
+    return error.requestId ? `${message} (код запроса: ${error.requestId})` : message;
+  }
+  return error instanceof Error ? error.message : "Не удалось сохранить изменения.";
+}
+
+export type RecordEditorFields = {
+  name: string;
+  frequency: string;
+  doseValue: string;
+  doseUnit: string;
+};
+
+export function recordEditorInitialState(record: ClinicalRecord): RecordEditorFields {
+  return {
+    name: clinicalRecordLabel(record),
+    frequency: record.frequency_text ?? "",
+    doseValue: record.dose_value == null ? "" : String(record.dose_value),
+    doseUnit: record.dose_unit ?? "",
+  };
+}
+
+/**
+ * Build the PATCH payload for the record editor. Clearing both dose fields
+ * explicitly sends nulls so an existing dose can actually be removed;
+ * a half-filled dose pair is a validation error, never silently dropped.
+ */
+export function buildRecordPatchPayload(
+  section: SectionKey,
+  fields: RecordEditorFields,
+): { payload: Record<string, unknown> } | { validationError: string } {
+  const name = fields.name.trim();
+  if (!name) return { validationError: "Название не может быть пустым." };
+  const payload: Record<string, unknown> = section === "allergies"
+    ? { substance_name: name }
+    : { display_name: name };
+  if (section === "medications" || section === "supplements") {
+    payload.frequency_text = fields.frequency.trim() || null;
+    const doseValue = fields.doseValue.trim();
+    const doseUnit = fields.doseUnit.trim();
+    if (doseValue && doseUnit) {
+      const numericDose = Number(doseValue.replace(",", "."));
+      if (!Number.isFinite(numericDose) || numericDose <= 0) {
+        return { validationError: "Доза должна быть положительным числом." };
+      }
+      payload.dose_value = numericDose;
+      payload.dose_unit = doseUnit;
+    } else if (!doseValue && !doseUnit) {
+      payload.dose_value = null;
+      payload.dose_unit = null;
+    } else {
+      return { validationError: "Укажите и дозу, и единицу измерения — или очистите оба поля." };
+    }
+  }
+  return { payload };
+}
+
 export function WhyWeAsk() {
   return (
     <details className="mt-3 rounded-xl border border-border/70 bg-muted/20 px-3 py-2 text-sm">
@@ -176,10 +240,19 @@ function RecordEditor({
   onSaved: () => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(clinicalRecordLabel(record));
-  const [frequency, setFrequency] = useState(record.frequency_text ?? "");
-  const [doseValue, setDoseValue] = useState(record.dose_value == null ? "" : String(record.dose_value));
-  const [doseUnit, setDoseUnit] = useState(record.dose_unit ?? "");
+  const [fields, setFields] = useState<RecordEditorFields>(() => recordEditorInitialState(record));
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const { name, frequency, doseValue, doseUnit } = fields;
+  const setField = (key: keyof RecordEditorFields) => (value: string) =>
+    setFields((current) => ({ ...current, [key]: value }));
+
+  const startEditing = () => {
+    // Re-derive the form from the current record so switching between
+    // records or a save from elsewhere never leaves stale editor state.
+    setFields(recordEditorInitialState(record));
+    setValidationError(null);
+    setEditing(true);
+  };
 
   const mutation = useMutation({
     mutationFn: (payload: Record<string, unknown>) =>
@@ -195,7 +268,7 @@ function RecordEditor({
 
   const completeCourse = () => {
     if (section !== "medications" && section !== "supplements") return;
-    mutation.mutate({ status: "completed", end_date: new Date().toISOString().slice(0, 10) });
+    mutation.mutate({ status: "completed", end_date: localDateOnlyISO() });
   };
 
   if (editing) {
@@ -204,34 +277,31 @@ function RecordEditor({
         className="space-y-2 rounded-xl border border-border bg-background p-3"
         onSubmit={(event) => {
           event.preventDefault();
-          const payload: Record<string, unknown> = section === "allergies"
-            ? { substance_name: name.trim() }
-            : { display_name: name.trim() };
-          if (section === "medications" || section === "supplements") {
-            payload.frequency_text = frequency.trim() || null;
-            if (doseValue && doseUnit.trim()) {
-              payload.dose_value = Number(doseValue);
-              payload.dose_unit = doseUnit.trim();
-            }
+          const result = buildRecordPatchPayload(section, fields);
+          if ("validationError" in result) {
+            setValidationError(result.validationError);
+            return;
           }
-          mutation.mutate(payload);
+          setValidationError(null);
+          mutation.mutate(result.payload);
         }}
       >
-        <input value={name} onChange={(event) => setName(event.target.value)} className="min-h-11 w-full rounded-xl border border-border bg-background px-3 py-2" />
+        <input value={name} onChange={(event) => setField("name")(event.target.value)} className="min-h-11 w-full rounded-xl border border-border bg-background px-3 py-2" />
         {(section === "medications" || section === "supplements") && (
           <>
             <div className="grid grid-cols-2 gap-2">
-              <input value={doseValue} inputMode="decimal" onChange={(event) => setDoseValue(event.target.value)} placeholder="Доза" className="min-h-11 rounded-xl border border-border bg-background px-3 py-2" />
-              <input value={doseUnit} onChange={(event) => setDoseUnit(event.target.value)} placeholder="мг, мл" className="min-h-11 rounded-xl border border-border bg-background px-3 py-2" />
+              <input value={doseValue} inputMode="decimal" onChange={(event) => setField("doseValue")(event.target.value)} placeholder="Доза" className="min-h-11 rounded-xl border border-border bg-background px-3 py-2" />
+              <input value={doseUnit} onChange={(event) => setField("doseUnit")(event.target.value)} placeholder="мг, мл" className="min-h-11 rounded-xl border border-border bg-background px-3 py-2" />
             </div>
-            <input value={frequency} onChange={(event) => setFrequency(event.target.value)} placeholder="Как часто" className="min-h-11 w-full rounded-xl border border-border bg-background px-3 py-2" />
+            <input value={frequency} onChange={(event) => setField("frequency")(event.target.value)} placeholder="Как часто" className="min-h-11 w-full rounded-xl border border-border bg-background px-3 py-2" />
           </>
         )}
         <div className="grid grid-cols-2 gap-2">
           <button type="submit" disabled={!name.trim() || mutation.isPending} className="min-h-10 rounded-xl bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50">Сохранить</button>
           <button type="button" onClick={() => setEditing(false)} className="min-h-10 rounded-xl border border-border px-3 py-2 text-sm">Отмена</button>
         </div>
-        {mutation.error && <p className="text-xs text-destructive">{mutation.error.message}</p>}
+        {validationError && <p className="text-xs text-destructive" role="alert">{validationError}</p>}
+        {mutation.error && <p className="text-xs text-destructive" role="alert">{clinicalErrorMessage(mutation.error)}</p>}
       </form>
     );
   }
@@ -248,9 +318,9 @@ function RecordEditor({
               {record.frequency_text ?? ""}
             </p>
           )}
-          {record.end_date && <p className="mt-1 text-xs text-muted-foreground">Завершено: {new Date(record.end_date).toLocaleDateString("ru-RU")}</p>}
+          {record.end_date && <p className="mt-1 text-xs text-muted-foreground">Завершено: {formatDateOnlyRu(record.end_date)}</p>}
         </div>
-        <button type="button" onClick={() => setEditing(true)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted" aria-label={`Редактировать ${clinicalRecordLabel(record)}`}>
+        <button type="button" onClick={startEditing} className="rounded-lg p-2 text-muted-foreground hover:bg-muted" aria-label={`Редактировать ${clinicalRecordLabel(record)}`}>
           <Pencil className="h-4 w-4" />
         </button>
       </div>
@@ -258,6 +328,9 @@ function RecordEditor({
         <button type="button" disabled={mutation.isPending} onClick={completeCourse} className="mt-2 text-xs font-medium text-primary disabled:opacity-50">
           Завершить курс
         </button>
+      )}
+      {mutation.error && (
+        <p className="mt-2 text-xs text-destructive" role="alert">{clinicalErrorMessage(mutation.error)}</p>
       )}
     </div>
   );
@@ -419,7 +492,7 @@ export function ClinicalContextSection({ profileId, consentActive }: { profileId
       </div>
 
       {!consentActive && <div className="mt-4 rounded-xl border border-border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">Чтобы добавлять медицинские сведения, сначала примите согласие на обработку данных здоровья выше на странице.</div>}
-      {(addMutation.error || reviewMutation.error) && <p className="mt-3 text-sm text-destructive" role="alert">{(addMutation.error ?? reviewMutation.error)?.message}</p>}
+      {(addMutation.error || reviewMutation.error) && <p className="mt-3 text-sm text-destructive" role="alert">{clinicalErrorMessage(addMutation.error ?? reviewMutation.error)}</p>}
       {(addMutation.isPending || reviewMutation.isPending) && <span className="sr-only" aria-live="polite">Сохраняем изменения</span>}
     </section>
   );
