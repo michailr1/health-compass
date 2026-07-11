@@ -244,8 +244,15 @@ async def void_record(
     reason: str,
     current_user: User,
     request_id: str | None,
-    expected_updated_at: datetime.datetime | None = None,
+    expected_updated_at: datetime.datetime | None,
 ) -> Any:
+    """Void a record only with an explicit optimistic-concurrency precondition."""
+    if expected_updated_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_428_PRECONDITION_REQUIRED,
+            detail="expected_updated_at is required",
+        )
+
     await _prepare_write(session, profile_id, current_user)
     model = MODEL_BY_SECTION[section]
     result = await session.execute(
@@ -254,13 +261,13 @@ async def void_record(
     record = result.scalar_one_or_none()
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clinical record not found")
-    if record.voided_at is not None:
-        return record
-    if expected_updated_at is not None and record.updated_at != expected_updated_at:
+    if record.updated_at != expected_updated_at:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Clinical record was updated elsewhere",
         )
+    if record.voided_at is not None:
+        return record
 
     now = datetime.datetime.now(datetime.UTC)
     record.voided_at = now
