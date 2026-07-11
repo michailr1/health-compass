@@ -128,7 +128,7 @@ def upgrade() -> None:
           owner_id uuid;
           target_table text;
           source_entity_type text;
-          deleted_updated_at timestamptz;
+          deleted_count bigint;
           row_exists boolean;
         BEGIN
           actor_id := {S}.app_current_user_id();
@@ -187,14 +187,15 @@ def upgrade() -> None:
           -- waiting on a concurrent writer PostgreSQL rechecks updated_at.
           EXECUTE pg_catalog.format(
             'DELETE FROM %I.%I '
-            'WHERE id = $1 AND profile_id = $2 AND updated_at = $3 '
-            'RETURNING updated_at',
+            'WHERE id = $1 AND profile_id = $2 AND updated_at = $3',
             '{S}', target_table
           )
-          INTO deleted_updated_at
           USING target_record_id, target_profile_id, expected_updated_at;
+          GET DIAGNOSTICS deleted_count = ROW_COUNT;
 
-          IF NOT FOUND THEN
+          -- Dynamic EXECUTE does not change PL/pgSQL FOUND, so use ROW_COUNT
+          -- explicitly to distinguish a stale record from a missing one.
+          IF deleted_count = 0 THEN
             EXECUTE pg_catalog.format(
               'SELECT EXISTS ('
               'SELECT 1 FROM %I.%I WHERE id = $1 AND profile_id = $2'
