@@ -7,6 +7,20 @@ import { useAuth } from "@/context/AuthContext";
 import { ApiError, apiGet, apiPost, type HealthProfile } from "@/lib/api";
 import { apiDelete } from "@/lib/apiDelete";
 
+export function isPermanentErasureOwner(
+  currentUserId: string | null | undefined,
+  ownerUserId: string | null | undefined,
+): boolean {
+  return Boolean(currentUserId && ownerUserId && currentUserId === ownerUserId);
+}
+
+export function buildPermanentErasurePayload(record: Pick<ClinicalRecord, "updated_at">) {
+  return {
+    expected_updated_at: record.updated_at,
+    confirm_permanent_deletion: true as const,
+  };
+}
+
 function actionErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 409) {
@@ -35,7 +49,7 @@ export function ClinicalRecordActions({
     queryFn: () => apiGet<HealthProfile>(`/profiles/${profileId}`),
     staleTime: 5 * 60 * 1000,
   });
-  const isOwner = Boolean(user && profile && user.id === profile.owner_user_id);
+  const isOwner = isPermanentErasureOwner(user?.id, profile?.owner_user_id);
 
   const archiveMutation = useMutation({
     mutationFn: () =>
@@ -51,10 +65,10 @@ export function ClinicalRecordActions({
 
   const eraseMutation = useMutation({
     mutationFn: () =>
-      apiDelete(`/profiles/${profileId}/${section}/${record.id}`, {
-        expected_updated_at: record.updated_at,
-        confirm_permanent_deletion: true,
-      }),
+      apiDelete(
+        `/profiles/${profileId}/${section}/${record.id}`,
+        buildPermanentErasurePayload(record),
+      ),
     onSuccess: () => {
       setConfirmation("none");
       onSaved();
