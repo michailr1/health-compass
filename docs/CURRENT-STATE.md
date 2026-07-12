@@ -2,19 +2,24 @@
 
 Дата: 2026-07-12  
 Основная ветка: `main`  
-Architecture baseline before HC-017 docs: `d32569f3eabbeeee5f803dde11d9b56ccf291cbe`  
+Main HEAD: `ccabab77cf929456a74b69c3478c71f92f167f78`  
 Production URL: `https://health.funti.cc`  
-Последний approved application rollout target: `b8e868825f378195975e2729f3f36c21a1afa2d0`  
-Production Alembic target: `0049`  
-Текущий engineering verdict: `READY FOR HC-017 SLICE B AFTER ARCHITECTURE MERGE`
+Production application target: `b8e868825f378195975e2729f3f36c21a1afa2d0`  
+Production Alembic: `0049`  
+Repository Alembic head: `0050`  
+Текущий engineering verdict: `HC-017 SLICE B MERGED / NOT DEPLOYED`
 
 ## Evidence boundary
 
-Владелец подтвердил 2026-07-12, что production-интерфейс и HC-016 работают.
+Production и repository state теперь намеренно различаются:
 
-В репозитории есть полный automated rollout evidence для HC-015 и Git/CI evidence для HC-016. Детальный финальный VPS-отчёт HC-016 с backup path, release symlink, service output и disposable PostgreSQL checks в каноническую документацию не скопирован. Поэтому эти конкретные operational values здесь не выдумываются.
+- `main` содержит HC-017 Slice B и migration `0050`;
+- production остаётся на application target `b8e868...` и Alembic `0049`;
+- document upload в production отсутствует;
+- `DOCUMENT_UPLOAD_ENABLED` должен оставаться `false`;
+- production startup validation отклоняет попытку включить Slice B upload вне development.
 
-HC-017 на текущем шаге является только архитектурной документацией. Document upload, storage, OCR, worker и Labs code ещё не реализованы и не развёрнуты.
+Владелец ранее подтвердил production HC-016. Детальный VPS-отчёт HC-016 не был перенесён в репозиторий, поэтому отсутствующие operational values не восстанавливаются предположениями.
 
 ## Что работает в production
 
@@ -24,23 +29,20 @@ HC-017 на текущем шаге является только архитек
 - Email Magic Links через Brevo;
 - локальные PostgreSQL sessions;
 - users, identities, workspaces, profiles и permissions;
-- FORCE ROW LEVEL SECURITY и tenant isolation;
-- безопасный account linking и controlled duplicate resolution foundation;
+- FORCE RLS и tenant isolation;
+- account linking и controlled duplicate resolution;
 - Basic Health Profile;
-- история веса, provenance, consent и append-only audit;
+- история веса, consent, provenance и audit;
 - Clinical Context для состояний, аллергий, лекарств и добавок;
-- review states `unknown`, `deferred`, `confirmed_none`, `has_entries`;
-- contextual intake decisions;
-- mobile-oriented questionnaire flow;
-- Clinical Dictionaries v2 с Russian-first search и free-text fallback;
-- dashboard context coverage и переходы к заполнению профиля;
+- review states и contextual intake;
+- Clinical Dictionaries v2;
 - отдельные действия **Убрать из профиля** и **Удалить навсегда** для клинических записей.
 
 ## HC-014 — Clinical Dictionaries v2
 
-Reviewed seed set развёрнут и подтверждён:
+Production seed подтверждён:
 
-- 69 concepts total;
+- 69 concepts;
 - 107 aliases;
 - 0 duplicate concept business keys;
 - 0 duplicate aliases;
@@ -49,51 +51,39 @@ Reviewed seed set развёрнут и подтверждён:
 - повторный apply идемпотентен;
 - существовавшие UUID сохранены.
 
-Известные content gaps первого seed set:
-
-- `мигрень` / `migraine`;
-- `hypertension`;
-- singular English `penicillin`;
-- English phrase `vitamin d`.
-
-Free-text entry остаётся доступным; gaps не являются importer defect.
+Free-text fallback остаётся доступным.
 
 ## HC-015 — Code Review Remediation
 
 Статус: `DEPLOYED / AUTOMATED VERIFIED / OWNER SMOKE CONFIRMED`.
 
-Production rollout evidence:
+Production application commit:
+
+```text
+c87723d7b4d0e4d2db9f1e0df4e936fbfd543346
+```
+
+Alembic после HC-015:
+
+```text
+0048
+```
+
+Canonical evidence:
 
 ```text
 docs/implementation/HC-015-PRODUCTION-EVIDENCE-2026-07-11.md
 ```
 
-HC-015 закрыл блокирующие findings независимых review:
-
-- duplicate Clinical Context routes;
-- duplicate-resolution schema drift;
-- scanner-unsafe Magic Link GET consume;
-- wrong-domain и stale clinical dictionary mappings;
-- неполный frontend lint/typecheck gate;
-- void/review concurrency defects;
-- unsafe logging и query-token exposure для новых логов;
-- слишком широкие privileges на `users`;
-- неполный migration-cycle gate.
-
-HC-015 application commit: `c87723d7b4d0e4d2db9f1e0df4e936fbfd543346`.  
-Alembic после HC-015: `0048`.
-
 ## Safari Magic Link regression
 
-После HC-015 scanner-safe interstitial был выявлен Safari-specific origin regression. Он исправлен отдельным hotfix.
-
-Hotfix commit:
+Исправлен hotfix:
 
 ```text
 8c09c02fa007cd5e5945c5a93b4913ce63868e68
 ```
 
-Владелец подтвердил работу Email Magic Link на iPhone Safari.
+Работа Email Magic Link на iPhone Safari подтверждена владельцем.
 
 ## HC-016 — Owner-controlled Clinical Record Erasure
 
@@ -101,8 +91,8 @@ Hotfix commit:
 
 Source PRs:
 
-- PR `#44` — owner-controlled permanent clinical record erasure;
-- PR `#45` — удаление лишней фразы о backup retention из пользовательского предупреждения.
+- PR `#44` — permanent clinical record erasure;
+- PR `#45` — удаление backup-retention sentence из пользовательского предупреждения.
 
 Merged application target:
 
@@ -110,189 +100,175 @@ Merged application target:
 b8e868825f378195975e2729f3f36c21a1afa2d0
 ```
 
-Alembic head:
+Alembic:
 
 ```text
 0049
 ```
 
-Продукт различает:
-
-1. **Убрать из профиля** — void/soft removal с сохранением защищённой истории.
-2. **Удалить навсегда** — owner-only erasure записи и value-bearing audit events.
-
 Security contract:
 
-- у `health_compass_app` нет прямого DELETE на clinical tables;
-- runtime erasure выполняется только через `health_compass.app_erase_clinical_record(...)`;
-- функция принадлежит `health_compass_rls_definer`;
-- PUBLIC EXECUTE отозван;
-- editor/viewer/outsider не могут выполнить permanent erasure;
-- stale `expected_updated_at` не удаляет данные;
-- удаление доступно после отзыва medical consent;
-- сохраняется только content-free tombstone `clinical_record.erased`.
+- у runtime app нет прямого DELETE на clinical tables;
+- owner-only erasure идёт через restricted `SECURITY DEFINER` function;
+- stale `expected_updated_at` ничего не удаляет;
+- erasure доступен после отзыва consent;
+- value-bearing audit rows удаляются;
+- остаётся только content-free tombstone.
 
-Текущий UI-текст:
+## HC-017 — Human Documents, OCR Review and Labs
 
-```text
-Запись и содержащие её медицинские значения в журнале изменений будут удалены. Отменить это действие нельзя.
-```
+### Architecture
 
-Канонические документы:
+Status: `MERGED` through PR `#47`.
 
-```text
-docs/implementation/HC-016-CLINICAL-RECORD-ERASURE.md
-docs/implementation/HC-016-PRODUCTION-ACCEPTANCE-2026-07-12.md
-```
-
-## HC-017 — Human Documents, OCR Review and Labs Foundation
-
-Статус: `ARCHITECTURE DEFINED / NOT IMPLEMENTED / NOT DEPLOYED`.
-
-Канонический документ:
+Canonical document:
 
 ```text
 docs/implementation/HC-017-DOCUMENTS-OCR-LABS-FOUNDATION.md
 ```
 
-Зафиксированный vertical slice:
+### Slice B — Secure Document Intake Foundation
+
+Status: `IMPLEMENTED / MERGED / NOT DEPLOYED`.
+
+Source PR:
 
 ```text
-Upload analysis
-→ quarantine
-→ malware and format validation
-→ OCR processing
-→ human review
-→ explicit confirmation
-→ confirmed lab observations
-→ metric dynamics
-→ contextual intake
+#48
 ```
 
-Принятые архитектурные решения:
+Verified implementation head:
 
-- первые форматы: PDF, JPEG и PNG;
-- backend-enforced лимиты: 20 MiB, до 50 PDF pages, до 25 megapixels;
-- потоковая загрузка, без чтения целого файла в память;
-- quarantine-first и scanner fail closed;
-- raw documents только в private object storage abstraction;
-- server-generated storage keys без filename/profile/medical values;
-- отдельная worker role, не равная app или migrator;
-- OCR candidates всегда `needs_review`;
-- explicit user confirmation перед созданием `lab_observations`;
-- `analyze` видит confirmed observations, но не raw files и OCR drafts;
-- patient mismatch является отдельным safety gate;
-- никакой автоматической unit conversion в первом срезе;
-- permanent document erasure owner-only и охватывает raw, derived, OCR и sole-provenance labs;
-- обычные логи не содержат filenames, OCR text, patient identifiers или medical values;
-- внешний OCR/LLM не используется без отдельного consent и provider review.
+```text
+46c5ea89d35cc85be0af3b80a9c56f40d5705ac5
+```
 
-Первый implementation slice B намеренно ограничен:
+Merge commit:
+
+```text
+ccabab77cf929456a74b69c3478c71f92f167f78
+```
+
+CI:
+
+```text
+#402 — success
+```
+
+Repository migration:
+
+```text
+0049 → 0050
+```
+
+Implemented in repository:
 
 - `profile_documents`;
-- processing jobs и content-free audit;
-- RLS/access matrix;
-- storage adapter interface;
-- streamed upload into quarantine;
-- type/size/magic-byte validation;
-- list/detail/status UI;
-- только demo/test documents;
-- без OCR и без реальных lab observations.
+- `document_processing_jobs`;
+- RLS + FORCE RLS;
+- owner/edit insert;
+- owner/edit/view metadata visibility;
+- analyze excluded from document metadata;
+- no direct runtime UPDATE/DELETE;
+- streamed development/test upload into private quarantine;
+- PDF/JPEG/PNG checks;
+- 20 MiB file limit;
+- pre-parser multipart body limit, including chunked uploads;
+- 25 MP image limit;
+- opaque UUID-based keys;
+- rollback cleanup for route, commit and cancellation failures;
+- content-free audit;
+- duplicate-account activity protection;
+- profile-aware capabilities API;
+- upload/list/detail API;
+- `/app/documents` metadata/status UI.
 
-Migration `0050` пока не назначена окончательно. Перед implementation необходимо проверить актуальный Alembic head и открытые migration PR.
+Not implemented:
 
-## Подтверждённые security properties
+- production object storage;
+- malware scanner;
+- safe PDF inspection;
+- worker role and processing service;
+- preview or download;
+- OCR;
+- extraction review;
+- confirmed Labs observations;
+- metric dynamics;
+- document void/permanent erasure;
+- production rollout.
 
-- runtime role `NOBYPASSRLS`;
-- отдельный `health_compass_rls_definer NOLOGIN BYPASSRLS`;
-- ограниченные `SECURITY DEFINER` functions;
-- фиксированные `search_path` и `row_security` settings;
-- PUBLIC EXECUTE отозван у чувствительных definer functions;
-- PKCE, state, nonce, issuer/audience/azp и verified-email checks;
-- consent, provenance, void и audit для clinical data;
-- одна DB transaction на request для transaction-local RLS context;
-- прямой runtime DELETE клинических записей запрещён;
-- optimistic concurrency применяется к destructive clinical actions.
-
-## Известные ограничения продукта
-
-- OCR/import документов ещё не реализован;
-- реальные загрузки лабораторных документов ещё не реализованы;
-- Labs core и динамика лабораторных показателей ещё не реализованы;
-- approved production document storage backend и scanner ещё не подключены;
-- Oura и другие wearable integrations не реализованы;
-- invitations и совместный доступ не завершены как user flow;
-- AI explanation, evidence retrieval и doctor report не реализованы;
-- clinical safety flags не выводятся автоматически из свободного текста;
-- система не диагностирует заболевания и не рассчитывает дозы;
-- словарь остаётся assistive и не заменяет free text.
-
-## Технические follow-ups
-
-Не блокируют разработку HC-017 Slice B, но должны оставаться отдельными маленькими PR:
-
-- revoke unnecessary PUBLIC EXECUTE у двух обычных trigger functions;
-- переход с deprecated `authlib.jose` на `joserfc`;
-- dictionary search indexes/trigram optimisation;
-- cleanup неиспользуемой CORS configuration;
-- OIDC discovery/JWKS caching;
-- ограниченное хранение и штатная ротация исторических Apache logs, созданных до query-safe logging fix;
-- добавить детальный HC-016 VPS rollout report, если исходный отчёт будет доступен.
-
-## Следующий разрешённый шаг
-
-После merge HC-017 architecture docs:
+Canonical evidence:
 
 ```text
-HC-017 Slice B — Secure Document Intake Foundation
+docs/implementation/HC-017-SLICE-B-IMPLEMENTATION-2026-07-12.md
 ```
 
-Перед code branch:
+## Confirmed security properties
 
-1. проверить current main и Alembic heads;
-2. проверить открытые PR с migrations;
-3. подтвердить candidate revision после `0049`;
-4. реализовать только quarantine upload foundation на demo/test files;
-5. не подключать OCR, внешний AI или реальные документы в первом PR.
+- runtime role `NOBYPASSRLS`;
+- dedicated `health_compass_rls_definer NOLOGIN BYPASSRLS`;
+- sensitive definer functions have fixed settings and no PUBLIC EXECUTE;
+- one transaction per request for transaction-local RLS context;
+- document metadata uses a narrower read boundary than normal profile data;
+- `analyze` cannot access raw document metadata;
+- storage key never contains user filename or medical values;
+- external quarantine artifact is removed when the database transaction fails;
+- oversized document requests are rejected before multipart parsing;
+- document rows block incorrect “empty duplicate account” absorption.
 
-## Роли
+## Current product limitations
 
-### ChatGPT / coding role
+- production document upload is not available;
+- OCR is not available;
+- Labs core is not available;
+- metric dynamics is not available;
+- no production document storage or scanner is approved;
+- no background document worker exists;
+- Oura and other wearable integrations are not implemented;
+- invitations and collaborative access are incomplete as a user flow;
+- AI explanation, evidence retrieval and doctor report are not implemented;
+- the system does not diagnose diseases or calculate medication doses.
 
-- архитектура и data contracts;
-- product code;
-- migrations, RLS и tests;
-- frontend;
-- документация;
-- точные задачи VPS-agent.
+## Next required stage
 
-### VPS-agent
+```text
+HC-017 Slice C — Scanner and Safe Rendering
+```
 
-- работает только с production host;
-- фиксирует HEAD/Alembic before;
-- создаёт backup;
-- получает конкретный approved commit;
-- выполняет build, migrations, systemd/release switch;
-- запускает smoke tests;
-- не принимает архитектурных решений;
-- не использует production DB для destructive automated tests;
-- не выводит secrets.
+Before implementation:
 
-## Stop conditions
+1. perform an independent security review of Slice B;
+2. choose the production private-storage model;
+3. choose and threat-review the malware scanner;
+4. define isolated worker role and credentials;
+5. define bounded PDF inspection and rasterization;
+6. recheck current main and Alembic head;
+7. create a separate Slice C branch.
 
-Остановить merge или rollout при:
+No VPS deployment task should be created for Slice B.
 
-- несовпадении expected HEAD;
-- dirty production worktree;
-- неуспешном backup;
-- нескольких Alembic heads;
-- неуспешной migration;
-- признаках cross-user leak;
-- upload без backend limits или quarantine;
-- scanner bypass/fail-open;
-- public/raw object access;
-- worker с app/migrator credentials или broad profile access;
-- OCR facts без explicit confirmation;
-- `5xx`, `54001`, `42501`, `permission denied` или Traceback;
-- CI, запущенном не на exact deployed SHA;
-- появлении tokens, filenames, document contents, OCR text или medical values в logs.
+## Non-blocking technical follow-ups
+
+- revoke unnecessary PUBLIC EXECUTE from ordinary trigger functions;
+- migrate deprecated `authlib.jose` usage to `joserfc`;
+- add dictionary search indexes;
+- clean unused CORS configuration;
+- cache OIDC discovery/JWKS;
+- retain restricted historical Apache logs according to policy.
+
+## Stop conditions for Slice C
+
+Stop merge or rollout when:
+
+- production storage is public or inside the web root;
+- scanner is absent, stubbed or fail-open;
+- scanner outage permits promotion or OCR;
+- worker uses app or migrator credentials;
+- worker can enumerate arbitrary profiles;
+- raw PDF is embedded directly in the browser;
+- page, CPU, memory or timeout limits are absent;
+- storage key or signed URL appears in logs;
+- document contents or medical values appear in ordinary logs;
+- cross-profile access is possible;
+- migration has multiple heads;
+- exact-head CI or PostgreSQL negative tests are missing.
