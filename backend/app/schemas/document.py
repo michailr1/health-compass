@@ -24,6 +24,15 @@ DocumentStatus = Literal[
     "erased",
 ]
 
+ScannerStatus = Literal[
+    "not_scanned",
+    "scanning",
+    "clean",
+    "infected",
+    "error",
+    "stale",
+]
+
 
 class DocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -31,6 +40,7 @@ class DocumentResponse(BaseModel):
     id: uuid.UUID
     profile_id: uuid.UUID
     status: DocumentStatus
+    scanner_status: ScannerStatus
     original_filename: str
     declared_media_type: str
     detected_media_type: str
