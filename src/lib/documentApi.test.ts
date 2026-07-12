@@ -4,8 +4,12 @@ import {
   DOCUMENT_ACCEPT,
   documentStatusLabel,
   formatDocumentSize,
+  ocrStatusLabel,
+  renderStatusLabel,
   scannerStatusLabel,
   type DocumentStatus,
+  type OCRStatus,
+  type RenderStatus,
   type ScannerStatus,
 } from "./documentApi";
 
@@ -53,6 +57,38 @@ describe("document intake helpers", () => {
     }
     expect(scannerStatusLabel("infected")).toBe("Отклонён как небезопасный");
     expect(scannerStatusLabel("error")).not.toContain("ClamAV");
+  });
+
+  it("has safe labels for every rendering state", () => {
+    const statuses: RenderStatus[] = [
+      "not_started",
+      "queued",
+      "rendering",
+      "ready",
+      "error",
+    ];
+    for (const status of statuses) {
+      expect(renderStatusLabel(status)).not.toBe("");
+    }
+    expect(renderStatusLabel("ready")).toBe("Безопасные страницы готовы");
+    expect(renderStatusLabel("error")).not.toContain("ImageMagick");
+    expect(renderStatusLabel("error")).not.toContain("Poppler");
+  });
+
+  it("has draft-oriented labels for every OCR state", () => {
+    const statuses: OCRStatus[] = [
+      "not_started",
+      "queued",
+      "processing",
+      "review_required",
+      "error",
+    ];
+    for (const status of statuses) {
+      expect(ocrStatusLabel(status)).not.toBe("");
+    }
+    expect(ocrStatusLabel("review_required")).toBe("Текст нужно проверить");
+    expect(ocrStatusLabel("error")).not.toContain("Tesseract");
+    expect(ocrStatusLabel("review_required")).not.toContain("подтверждён");
   });
 
   it("advertises only the supported file formats", () => {
