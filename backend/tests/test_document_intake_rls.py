@@ -147,16 +147,17 @@ def _insert_document(
     actor_id: uuid.UUID,
     suffix: str,
 ) -> None:
+    storage_key = f"quarantine/{document_id}/original"
     connection.execute(
         """
         INSERT INTO health_compass.profile_documents (
           id, profile_id, uploaded_by_user_id, status, original_filename,
           declared_media_type, detected_media_type, byte_size, sha256,
-          storage_backend, quarantine_storage_key
+          storage_backend, quarantine_storage_key, current_storage_key
         ) VALUES (
           %s, %s, %s, 'quarantined', %s,
           'application/pdf', 'application/pdf', 10, %s,
-          'local', %s
+          'local', %s, %s
         )
         """,
         (
@@ -165,7 +166,8 @@ def _insert_document(
             actor_id,
             f"analysis-{suffix}.pdf",
             suffix * 64,
-            f"quarantine/{document_id}/original",
+            storage_key,
+            storage_key,
         ),
     )
 

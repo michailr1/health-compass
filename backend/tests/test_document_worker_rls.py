@@ -84,17 +84,19 @@ def worker_fixture() -> dict[str, object]:
             document_id = ids[f"{kind}_document"]
             job_id = ids[f"{kind}_job"]
             digest = f"{index:x}" * 64
+            storage_key = f"quarantine/{document_id}/original.hcenc"
             connection.execute(
                 """
                 INSERT INTO health_compass.profile_documents (
                   id, profile_id, uploaded_by_user_id, status, original_filename,
                   declared_media_type, detected_media_type, byte_size, encrypted_size,
                   sha256, storage_backend, quarantine_storage_key,
-                  encryption_format, encryption_key_id, scanner_status
+                  current_storage_key, encryption_format, encryption_key_id,
+                  scanner_status
                 ) VALUES (
                   %s, %s, %s, 'quarantined', %s,
                   'application/pdf', 'application/pdf', 10, 64,
-                  %s, 'local_encrypted', %s,
+                  %s, 'local_encrypted', %s, %s,
                   'hcenc1', 'test-key', 'not_scanned'
                 )
                 """,
@@ -104,7 +106,8 @@ def worker_fixture() -> dict[str, object]:
                     ids["owner"],
                     f"{kind}.pdf",
                     digest,
-                    f"quarantine/{document_id}/original.hcenc",
+                    storage_key,
+                    storage_key,
                 ),
             )
             connection.execute(
