@@ -1,0 +1,49 @@
+name: Apply E1 test fix
+
+on:
+  push:
+    branches: [feat/hc-017-lab-drafts]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/hc-017-lab-drafts
+          fetch-depth: 0
+      - name: Apply confirmed test fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/tests/test_lab_observation_drafts_rls.py")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              "import datetime\nimport json",
+              "from decimal import Decimal\n\nimport json",
+              1,
+          )
+          text = text.replace(
+              'assert row == ("ready", "Глюкоза", "5.4", "ммоль/л", 5.4)',
+              'assert row == (\n'
+              '            "ready",\n'
+              '            "Глюкоза",\n'
+              '            "5.4",\n'
+              '            "ммоль/л",\n'
+              '            Decimal("5.400000000000"),\n'
+              '        )',
+              1,
+          )
+          path.write_text(text, encoding="utf-8")
+          Path(".github/workflows/e1-fix-test.yml").unlink()
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/tests/test_lab_observation_drafts_rls.py .github/workflows/e1-fix-test.yml
+          git commit -m "test: compare PostgreSQL numeric values exactly"
+          git push origin HEAD:feat/hc-017-lab-drafts
