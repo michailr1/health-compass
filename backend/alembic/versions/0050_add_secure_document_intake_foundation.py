@@ -67,19 +67,22 @@ def _replace_audit_constraint(*, include_document_upload: bool) -> None:
 def _create_document_view_function() -> None:
     # Raw-document metadata is intentionally narrower than normal profile read
     # access: analyze may use confirmed structured observations in later slices,
-    # but cannot see source-document metadata or OCR drafts.
+    # but cannot see source-document metadata or OCR drafts. PL/pgSQL defers body
+    # compilation until first execution, after ownership has moved to the
+    # dedicated BYPASSRLS definer role.
     op.execute(f"GRANT CREATE ON SCHEMA {S} TO {R}")
     op.execute(
         f"""
         CREATE FUNCTION {S}.app_can_view_document(target_profile_id uuid)
         RETURNS boolean
-        LANGUAGE sql
+        LANGUAGE plpgsql
         STABLE
         SECURITY DEFINER
         SET search_path = ''
         SET row_security = off
         AS $$
-          SELECT EXISTS (
+        BEGIN
+          RETURN EXISTS (
             SELECT 1
             FROM {S}.health_profiles hp
             WHERE hp.id = target_profile_id
@@ -90,7 +93,8 @@ def _create_document_view_function() -> None:
             WHERE pp.profile_id = target_profile_id
               AND pp.user_id = {S}.app_current_user_id()
               AND pp.permission IN ('owner', 'edit', 'view')
-          )
+          );
+        END;
         $$
         """
     )
