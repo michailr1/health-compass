@@ -153,6 +153,62 @@ NOT DEPLOYED
 PRODUCTION UPLOAD DISABLED
 ```
 
+## HC-017 combined C1+C2 security review
+
+| Source | Purpose |
+|---|---|
+| `docs/reviews/HC-017-C1-C2-COMBINED-SECURITY-REVIEW-2026-07-12.md` | combined encryption/scanner/quota/render/reconciliation review |
+| repository baseline `ac9e21f3315c4624a845e633c2a90881d348ca30` | reviewed canonical baseline |
+| CI `#414`, `#433`, `#435` | exact implementation and documentation verification |
+
+Review verdict:
+
+```text
+ACCEPT FOR REPOSITORY FOUNDATION
+NO UNRESOLVED CRITICAL OR HIGH FINDING
+NOT APPROVED FOR PRODUCTION DEPLOYMENT
+```
+
+## HC-017 Slice D architecture evidence
+
+| Source | Purpose |
+|---|---|
+| `docs/implementation/HC-017-SLICE-D-OCR-CANDIDATES-AND-HUMAN-REVIEW.md` | canonical D1/D2 OCR and review contract |
+| Tesseract command-line documentation | fixed local OCR command and TSV output contract |
+| Tesseract data-file documentation | language/traineddata provisioning contract |
+| Tesseract quality documentation | page segmentation and quality constraints |
+| Tesseract user manual | supported engine/version baseline |
+
+Selected architecture:
+
+```text
+C2 encrypted safe_page
+→ full GCM verification
+→ sealed memory input
+→ bounded local Tesseract 5.x --oem 1 rus+eng TSV
+→ encrypted TSV provenance
+→ strict parser
+→ owner/edit-only needs_review candidates
+→ explicit patient matching
+→ no automatic clinical or Labs fact
+```
+
+Official technical references:
+
+- `https://tesseract-ocr.github.io/tessdoc/Command-Line-Usage.html`;
+- `https://tesseract-ocr.github.io/tessdoc/Data-Files.html`;
+- `https://tesseract-ocr.github.io/tessdoc/ImproveQuality.html`;
+- `https://tesseract-ocr.github.io/tessdoc/Home.html`.
+
+Slice D status:
+
+```text
+ARCHITECTURE DEFINED
+NOT IMPLEMENTED
+NOT DEPLOYED
+PRODUCTION UNCHANGED
+```
+
 ## Current factual sources
 
 - Git commits and pull requests;
@@ -173,5 +229,5 @@ PRODUCTION UPLOAD DISABLED
 6. Secrets, credentials, encryption keys, object paths, OCR text and medical values are excluded.
 7. Manual acceptance does not invent absent operational metrics.
 8. Every rollout record names an exact SHA.
-9. HC-017 C1+C2 must not be described as production-ready before host provisioning, independent review and controlled rollout gates pass.
+9. HC-017 C1+C2 must not be described as production-ready before host provisioning, review and controlled rollout gates pass.
 10. OCR output can never be treated as a clinical fact without explicit human review and later confirmation.
