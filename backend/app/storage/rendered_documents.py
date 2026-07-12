@@ -61,8 +61,8 @@ class RenderedDocumentStorage:
         return path
 
     @staticmethod
-    def accepted_key(document_id: uuid.UUID, run_id: uuid.UUID) -> str:
-        return f"accepted/{document_id}/{run_id}/original.hcenc"
+    def accepted_key(document_id: uuid.UUID) -> str:
+        return f"accepted/{document_id}/original.hcenc"
 
     @staticmethod
     def page_key(
@@ -82,10 +82,9 @@ class RenderedDocumentStorage:
         verified_descriptor: int,
         *,
         document_id: uuid.UUID,
-        run_id: uuid.UUID,
         max_plaintext_bytes: int,
     ) -> tuple[str, EncryptedObjectMetadata]:
-        key = self.accepted_key(document_id, run_id)
+        key = self.accepted_key(document_id)
         with os.fdopen(os.dup(verified_descriptor), "rb") as source:
             source.seek(0)
             metadata = encrypt_stream_to_path(
