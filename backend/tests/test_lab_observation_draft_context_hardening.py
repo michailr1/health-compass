@@ -15,9 +15,9 @@ from test_lab_observation_drafts_rls import (
     _draft_payload,
     _set_user,
     _sync_url,
-    lab_fixture,
 )
 
+pytest_plugins = ("test_lab_observation_drafts_rls",)
 pytestmark = pytest.mark.integration
 
 
