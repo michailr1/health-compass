@@ -16,13 +16,13 @@ from psycopg.rows import dict_row
 from app.core.config import settings
 from app.scanning.clamav import (
     ClamAVClient,
-    ScanResult,
     ScannerEncryptedObjectError,
     ScannerError,
     ScannerProtocolError,
     ScannerSignatureStaleError,
     ScannerStreamTooLargeError,
     ScannerUnavailableError,
+    ScanResult,
 )
 from app.storage.documents import EncryptedLocalDocumentStorage
 from app.storage.encrypted_objects import DocumentKeyring
