@@ -59,21 +59,37 @@ class LabDraftFields(BaseModel):
     @model_validator(mode="after")
     def validate_explicit_source_contract(self) -> "LabDraftFields":
         if self.value_kind == "numeric":
-            if self.numeric_value is None or self.text_value is not None or self.qualitative_value_text is not None:
+            if (
+                self.numeric_value is None
+                or self.text_value is not None
+                or self.qualitative_value_text is not None
+            ):
                 raise ValueError("numeric value requires only numeric_value")
         elif self.value_kind == "text":
-            if self.text_value is None or self.numeric_value is not None or self.qualitative_value_text is not None:
+            if (
+                self.text_value is None
+                or self.numeric_value is not None
+                or self.qualitative_value_text is not None
+            ):
                 raise ValueError("text value requires only text_value")
             if self.comparator is not None:
                 raise ValueError("text value cannot have comparator")
         else:
-            if self.qualitative_value_text is None or self.numeric_value is not None or self.text_value is not None:
-                raise ValueError("qualitative value requires only qualitative_value_text")
+            if (
+                self.qualitative_value_text is None
+                or self.numeric_value is not None
+                or self.text_value is not None
+            ):
+                raise ValueError(
+                    "qualitative value requires only qualitative_value_text"
+                )
             if self.comparator is not None:
                 raise ValueError("qualitative value cannot have comparator")
 
         if self.unit_not_present == (self.source_unit_text is not None):
-            raise ValueError("unit text and unit_not_present must be explicit alternatives")
+            raise ValueError(
+                "unit text and unit_not_present must be explicit alternatives"
+            )
         if self.reference_range_not_present == (
             self.source_reference_range_text is not None
         ):
@@ -124,7 +140,7 @@ class LabDraftResponse(LabDraftFields):
     ocr_run_id: uuid.UUID
     patient_decision_id: uuid.UUID
     status: LabDraftStatus
-    sources: list[LabDraftSourceResponse] = []
+    sources: list[LabDraftSourceResponse] = Field(default_factory=list)
     created_at: datetime.datetime
     updated_at: datetime.datetime
 
