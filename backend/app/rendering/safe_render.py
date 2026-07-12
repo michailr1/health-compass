@@ -105,7 +105,8 @@ class SafeDocumentRenderer:
     def _new_memfd(name: str) -> int:
         if not hasattr(os, "memfd_create"):
             raise RenderProcessError("Anonymous memory files are unavailable")
-        return os.memfd_create(name, getattr(os, "MFD_CLOEXEC", 0))
+        flags = getattr(os, "MFD_CLOEXEC", 0) | getattr(os, "MFD_ALLOW_SEALING", 0)
+        return os.memfd_create(name, flags)
 
     @staticmethod
     def _seal_readonly(descriptor: int) -> None:
@@ -164,10 +165,11 @@ class SafeDocumentRenderer:
             os.close(output_descriptor)
             raise
         finally:
-            try:
-                error_handle.close()
-            except Exception:
-                pass
+            for handle in (output_handle, error_handle):
+                try:
+                    handle.close()
+                except Exception:
+                    pass
             os.close(error_descriptor)
 
     @staticmethod
@@ -176,9 +178,16 @@ class SafeDocumentRenderer:
         if size < 1 or size > max_bytes:
             raise RenderProcessError("Parser metadata output is outside limits")
         os.lseek(descriptor, 0, os.SEEK_SET)
-        payload = os.read(descriptor, size)
+        payload = bytearray()
+        while len(payload) < size:
+            chunk = os.read(descriptor, size - len(payload))
+            if not chunk:
+                break
+            payload.extend(chunk)
+        if len(payload) != size:
+            raise RenderProcessError("Parser metadata output is truncated")
         try:
-            return payload.decode("utf-8", errors="strict")
+            return bytes(payload).decode("utf-8", errors="strict")
         except UnicodeDecodeError as exc:
             raise RenderProcessError("Parser metadata output is invalid") from exc
 
