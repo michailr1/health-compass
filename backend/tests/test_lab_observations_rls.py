@@ -110,6 +110,8 @@ def test_confirmation_is_atomic_immutable_and_visible_only_when_confirmed(
         )
         assert different_key_replay == observation_id
 
+    with psycopg.connect(_sync_url(APP_ENV)) as connection:
+        _set_user(connection, ids["owner"])
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             connection.execute(
                 """
@@ -243,7 +245,7 @@ def test_confirmation_requires_edit_access_current_sources_and_consent(
         connection.execute(
             """
             UPDATE health_compass.document_ocr_candidates
-            SET reviewed_text = 'изменено', updated_at = clock_timestamp()
+            SET updated_at = clock_timestamp()
             WHERE id = %s
             """,
             (ids["candidate_value"],),
@@ -295,6 +297,9 @@ def test_not_present_requires_additional_assignment_acknowledgement(
             finalized_at,
             decision_updated_at,
         ) = _create_ready_draft(connection, ids)
+
+    with psycopg.connect(_sync_url(APP_ENV)) as connection:
+        _set_user(connection, ids["owner"])
         with pytest.raises(psycopg.DatabaseError) as missing_ack:
             _confirm(
                 connection,
