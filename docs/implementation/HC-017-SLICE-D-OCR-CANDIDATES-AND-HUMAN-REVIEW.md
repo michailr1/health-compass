@@ -1,21 +1,22 @@
 # HC-017 Slice D — OCR Candidates and Human Review
 
-Status: `ARCHITECTURE DEFINED / NOT IMPLEMENTED / NOT DEPLOYED`  
+Status: `D1 IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED; D2 NEXT`  
 Created: 2026-07-12  
-Base main: `ac9e21f3315c4624a845e633c2a90881d348ca30`  
-Repository Alembic head: `0053`  
+Updated: 2026-07-12  
+Repository main: `a33c3d515b885c6ea0e8f51291a1d25bed77cd7d`  
+Repository Alembic head: `0054`  
 Production: `b8e868825f378195975e2729f3f36c21a1afa2d0 / 0049`
 
 ## 1. Goal
 
-Convert encrypted C2 safe-page images into reviewable OCR text candidates without creating medical facts.
+Convert encrypted C2 safe-page images into reviewable OCR transcription without creating medical facts.
 
 ```text
 encrypted safe_page
 → full GCM verification
 → sealed read-only memory input
 → bounded local OCR
-→ encrypted OCR provenance artifact
+→ encrypted OCR provenance
 → strict TSV parsing
 → needs_review candidates
 → owner/edit human review
@@ -39,217 +40,193 @@ Even accepted or edited OCR text remains document transcription. It is not autom
 - a laboratory observation;
 - an AI conclusion.
 
-Clinical/Labs facts require a later, separate confirmation transaction.
+Clinical or Labs facts require a later independent confirmation transaction.
 
-## 3. OCR engine decision
+## 3. Slice decomposition
+
+### D1 — Local OCR Candidate Extraction
+
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
+
+```text
+PR: #56
+verified head: dc28e9e220dd51264e6dab1244ce8d8696f501b2
+merge: a33c3d515b885c6ea0e8f51291a1d25bed77cd7d
+CI: #442
+migration: 0054
+```
+
+Implemented:
+
+- OCR run, encrypted provenance and candidate schema;
+- dedicated OCR worker role and restricted functions;
+- safe-page claim, lease, heartbeat and retry;
+- bounded local Tesseract execution;
+- encrypted TSV provenance;
+- strict TSV parser;
+- deterministic `needs_review` candidate aggregation;
+- owner/edit-only candidate reads;
+- OCR status and candidate APIs;
+- no human mutation endpoints;
+- no automatic Clinical Context, measurement or Labs creation.
+
+Canonical evidence:
+
+```text
+docs/implementation/HC-017-SLICE-D1-OCR-CANDIDATES-EVIDENCE-2026-07-12.md
+```
+
+### D2 — Human Review and Patient Matching
+
+Status: `NEXT / NOT IMPLEMENTED / NOT DEPLOYED`.
+
+Required:
+
+- candidate accept, edit, reject and defer actions;
+- optimistic concurrency;
+- explicit patient-match decision;
+- atomic review finalization;
+- content-free audit;
+- accessible review UI;
+- still no Labs creation.
+
+## 4. OCR engine contract
 
 MVP engine:
 
 ```text
 local Tesseract 5.x
-LSTM engine: --oem 1
+--oem 1
+language: rus+eng
 output: TSV
 ```
 
-Rationale:
+Rules:
 
-- no medical document is sent to an external processor;
-- TSV provides word confidence and bounding boxes;
-- the command-line boundary can be sandboxed similarly to C2 rendering;
-- language models can be explicitly provisioned and versioned.
+- no external OCR processor;
+- absolute executable and tessdata paths;
+- no shell;
+- approved PSM allowlist only;
+- no arbitrary user-supplied options;
+- exact engine, language and traineddata manifest recorded;
+- missing or unsafe language files fail closed;
+- no silent fallback to another language.
 
-Initial language configuration:
-
-```text
-rus+eng
-```
-
-Production readiness requires exact installed engine and traineddata versions. Missing language data fails closed; it must not silently fall back to another language.
-
-Official technical references:
+Official references:
 
 - `https://tesseract-ocr.github.io/tessdoc/Command-Line-Usage.html`;
 - `https://tesseract-ocr.github.io/tessdoc/Data-Files.html`;
 - `https://tesseract-ocr.github.io/tessdoc/ImproveQuality.html`;
 - `https://tesseract-ocr.github.io/tessdoc/Home.html`.
 
-## 4. Slice decomposition
-
-### D1 — OCR extraction foundation
-
-- OCR run and candidate schema;
-- dedicated OCR worker role/functions;
-- safe-page claim and lease;
-- bounded Tesseract execution;
-- encrypted TSV provenance artifact;
-- strict parser;
-- owner/edit-only candidate reads;
-- no human mutation endpoints yet.
-
-### D2 — Human review and patient matching
-
-- candidate accept/edit/reject/defer;
-- optimistic concurrency;
-- page-region review UI;
-- explicit patient-match decision;
-- atomic review finalization;
-- no Labs creation.
-
-## 5. Required PostgreSQL role
+## 5. PostgreSQL role boundary
 
 ```text
 health_compass_ocr_worker LOGIN NOBYPASSRLS
 ```
 
-The role receives:
+The OCR role receives:
 
-- CONNECT to the application database;
+- database CONNECT;
 - schema USAGE;
-- EXECUTE only on OCR claim/heartbeat/complete/fail functions;
-- no direct SELECT/INSERT/UPDATE/DELETE on documents, artifacts, candidates, profiles, audit or clinical tables;
+- EXECUTE only on OCR claim, heartbeat, complete and fail functions;
+- no direct SELECT, INSERT, UPDATE or DELETE on document, OCR, profile, audit or clinical tables;
 - no membership in app, migrator, renderer, reconciler or definer roles;
 - no BYPASSRLS, SUPERUSER, CREATEDB, CREATEROLE or REPLICATION.
 
-## 6. Proposed schema
+## 6. D1 schema
 
-Candidate migration after current head:
-
-```text
-0054
-```
-
-The number must be rechecked against `main` and open migration PRs before implementation.
+Migration `0054` adds:
 
 ### `document_ocr_runs`
 
-Purpose: one versioned OCR attempt over one safe-page artifact set.
+One versioned OCR attempt over one current render run.
 
-Suggested columns:
+Important metadata:
 
-- `id uuid primary key`;
-- `document_id uuid`;
-- `profile_id uuid`;
-- `render_run_id uuid`;
-- `status`: queued / leased / succeeded / failed / cancelled;
-- `attempt integer`;
-- `idempotency_key`;
-- `input_artifact_manifest_sha256`;
-- `engine_name`;
-- `engine_version`;
-- `language_spec`;
-- `traineddata_manifest_sha256`;
-- `psm integer`;
-- `lease_owner`;
-- `lease_expires_at`;
-- `next_attempt_at`;
-- `started_at`;
-- `completed_at`;
-- `safe_error_code`;
-- timestamps.
-
-Constraints:
-
-- one active/succeeded run per document/render run/engine/model configuration;
-- attempt and lease state consistency;
-- safe error-code allowlist;
-- status transitions only through restricted functions.
+- document, profile and render-run IDs;
+- queued/leased/succeeded/failed state;
+- attempt and idempotency key;
+- input/output manifest hashes;
+- engine, version, language and traineddata provenance;
+- PSM;
+- lease owner/expiry;
+- retry and completion timestamps;
+- safe error code.
 
 ### `document_ocr_artifacts`
 
-Purpose: encrypted machine-output provenance, not user-facing clinical data.
+Encrypted machine-output provenance, not a user-facing clinical record.
 
-Suggested columns:
-
-- `id uuid primary key`;
-- `document_id`, `profile_id`, `ocr_run_id`;
-- `page_number`;
-- `artifact_type = 'tesseract_tsv'`;
-- `storage_backend`;
-- opaque `storage_key`;
-- `byte_size`, `encrypted_size`, `sha256`;
-- `encryption_format`, `encryption_key_id`;
-- `engine_name`, `engine_version`;
-- `language_spec`;
-- status/timestamps/deletion fields.
-
-Storage key:
+Opaque key:
 
 ```text
 ocr/{document_uuid}/{ocr_run_uuid}/page-{page_number}.tsv.hcenc
 ```
 
-The object contains no user filename in its key.
+Metadata includes safe-page source, page number, sizes, hash, encryption key ID and engine provenance.
 
 ### `document_ocr_candidates`
 
-Purpose: reviewable text blocks derived from TSV words.
+Reviewable text blocks derived from TSV words.
 
-Suggested columns:
+Each row contains:
 
-- `id uuid primary key`;
-- `document_id`, `profile_id`, `ocr_run_id`;
-- `page_artifact_id`;
-- `page_number`;
-- `candidate_index`;
-- `status`: needs_review / accepted / edited / rejected / deferred;
-- `original_text`;
-- `reviewed_text` nullable;
-- `confidence_min`, `confidence_mean`;
-- `left_px`, `top_px`, `width_px`, `height_px`;
-- `source_word_count`;
-- `reviewed_by_user_id`;
-- `reviewed_at`;
-- `review_note` optional bounded text;
-- `created_at`, `updated_at`.
+- OCR run and safe-page provenance;
+- page and deterministic candidate index;
+- status;
+- original OCR text;
+- nullable reviewed text;
+- minimum and mean confidence;
+- bounding box;
+- source word count;
+- future reviewer metadata;
+- timestamps.
 
-Candidate text is sensitive medical document text.
+Every D1 candidate starts as `needs_review`.
 
 ## 7. Access matrix
 
 | Action | owner | edit | view | analyze | outsider | OCR worker |
 |---|---:|---:|---:|---:|---:|---:|
-| View OCR run status | yes | yes | yes | no | no | through function only |
-| View candidate text | yes | yes | no | no | no | no direct table access |
-| Review/edit candidate | yes | yes | no | no | no | no |
-| View encrypted OCR object key | no | no | no | no | no | claim function only |
-| Claim/complete OCR run | no | no | no | no | no | yes |
-| Create clinical/Labs fact | no in Slice D | no in Slice D | no | no | no | no |
+| View OCR run status | yes | yes | yes | no | no | function only |
+| View candidate text | yes | yes | no | no | no | no direct access |
+| Review/edit candidate | D2 | D2 | no | no | no | no |
+| View encrypted object key | no | no | no | no | no | claim function only |
+| Claim/complete OCR | no | no | no | no | no | yes |
+| Create clinical/Labs fact | no | no | no | no | no | no |
 
-Candidate text requires a narrower helper than normal document metadata:
+Candidate text uses a narrower owner/edit helper:
 
 ```text
-app_can_review_document_ocr(profile_id)
+health_compass.app_can_review_document_ocr(profile_id)
 ```
 
-It should allow owner/edit only.
-
-## 8. OCR worker functions
-
-Candidate functions:
+## 8. D1 worker functions
 
 ```text
-app_claim_document_ocr_run(worker_id, lease_seconds, max_attempts)
-app_heartbeat_document_ocr_run(run_id, worker_id, expected_lease, lease_seconds)
-app_complete_document_ocr_run(run_id, worker_id, expected_lease, provenance, candidates)
-app_fail_document_ocr_run(run_id, worker_id, expected_lease, safe_error_code, retryable)
+app_queue_document_ocr(...)
+app_claim_document_ocr_run(...)
+app_heartbeat_document_ocr_run(...)
+app_complete_document_ocr_run(...)
+app_fail_document_ocr_run(...)
 ```
 
 Properties:
 
-- `SECURITY DEFINER`;
+- SECURITY DEFINER;
 - owner `health_compass_rls_definer`;
-- fixed empty search path;
+- fixed empty search path and `row_security=off`;
 - PUBLIC EXECUTE revoked;
-- app/scanner/renderer/reconciler execution revoked;
-- OCR-worker execution only;
+- execution granted only to the intended role;
 - static SQL;
-- lease ownership and expiry checked;
-- render run, artifact manifest and source hashes checked;
-- completion is idempotent for identical run/output manifest;
-- different output for a completed run is conflict;
-- candidates and provenance inserted atomically;
-- candidate payload count and total text bytes are bounded;
-- audit contains no OCR text.
+- lease ownership and expiry checks;
+- current render run and artifact-manifest checks;
+- idempotent identical completion;
+- conflicting output rejected;
+- candidates and encrypted provenance inserted atomically;
+- bounded candidate count and text bytes;
+- content-free audit.
 
 ## 9. Safe-page input contract
 
@@ -259,43 +236,38 @@ OCR may consume only artifacts satisfying all conditions:
 - status `ready`;
 - document status `accepted`;
 - document render status `ready`;
-- artifact belongs to current `render_run_id`;
-- encrypted object format `hcenc1`;
+- artifact belongs to current render run;
+- object format `hcenc1`;
 - complete GCM verification succeeds;
-- PNG structural validation succeeds again before OCR;
-- page number is within the accepted document page count.
+- PNG structural validation succeeds again;
+- page number matches accepted document page count.
 
 The source PDF is never passed to OCR.
 
-## 10. Tesseract subprocess boundary
+## 10. Tesseract process boundary
 
-Suggested fixed command shape:
+Fixed command shape:
 
 ```text
 tesseract /proc/self/fd/<sealed_png_fd> stdout \
+  --tessdata-dir <fixed_path> \
   --oem 1 \
   --psm <approved_mode> \
   -l rus+eng \
   tsv
 ```
 
-Implementation rules:
+Controls:
 
-- absolute executable path;
-- no shell;
 - sealed read-only input memfd;
-- bounded output memfd;
-- fixed environment and explicit tessdata directory;
-- CPU, memory, output, file-descriptor and process limits;
+- bounded output and stderr memfds;
+- CPU, address-space, output-size, descriptor and process limits;
 - finite per-page timeout;
 - process-group kill on timeout;
-- stderr converted to safe codes only;
-- no filename, document text or stderr in ordinary logs;
-- exact engine and traineddata manifest recorded.
+- fixed minimal environment;
+- no filename, document text or stderr in ordinary logs.
 
-Initial approved page segmentation modes should be a small allowlist. The implementation must not accept arbitrary user-supplied Tesseract options.
-
-## 11. TSV parser contract
+## 11. Strict TSV parser
 
 Expected columns:
 
@@ -304,43 +276,54 @@ level page_num block_num par_num line_num word_num
 left top width height conf text
 ```
 
-Parser requirements:
+The parser enforces:
 
-- UTF-8 only;
-- exact header;
-- bounded row count and total bytes;
-- fixed column count;
-- integer coordinates and hierarchy fields;
-- finite confidence in expected range or explicit negative sentinel handling;
-- no negative dimensions;
-- bounding boxes must fit page dimensions;
-- control characters rejected or normalized by a documented rule;
-- text length bounded per word and candidate;
-- malformed row fails the run safely;
-- no formula/CSV interpretation;
-- original word order and page provenance retained.
+- UTF-8 and exact header;
+- bounded total bytes and rows;
+- exact column count;
+- numeric hierarchy and coordinates;
+- confidence range;
+- positive dimensions;
+- bounding boxes inside the page;
+- bounded word and candidate text;
+- rejection of control characters;
+- deterministic source word ordering;
+- no medical correction, translation or unit normalization.
 
-## 12. Candidate aggregation
+## 12. D1 API
 
-D1 creates text-line or bounded-block candidates, not analyte/value facts.
+```text
+GET /profiles/{profile_id}/documents/{document_id}/ocr/status
+GET /profiles/{profile_id}/documents/{document_id}/ocr/candidates
+```
 
-Aggregation rules:
+The status endpoint follows document metadata access. The candidate endpoint requires owner/edit access.
 
-- words are grouped by page/block/paragraph/line identifiers;
-- empty and negative-confidence rows are skipped under an explicit rule;
-- original text is preserved;
-- candidate bounding box is the union of source words;
-- minimum and mean confidence retained;
-- candidate word count retained;
-- maximum candidate characters and source words enforced;
-- no medical vocabulary correction;
-- no automatic translation;
-- no unit normalization;
-- no dictionary-based rewriting.
+There is no raw PDF, safe-page or TSV download endpoint.
 
-## 13. Human review contract
+## 13. D1 verification
 
-D2 candidate actions:
+Exact head `dc28e9e...` passed CI `#442`:
+
+- Python compile and Ruff;
+- backend unit tests;
+- frontend lint, typecheck, tests and build;
+- migration `0054` boundary;
+- full isolated `head → base → head` cycle;
+- OCR role, lease, idempotency and RLS integration.
+
+Tests prove:
+
+- OCR worker cannot query OCR tables directly;
+- view/analyze/outsider cannot read candidate text;
+- stale lease fails;
+- identical completion is idempotent;
+- audit is content-free;
+- OCR creates zero conditions, allergies, medications, supplements and body measurements.
+
+## 14. D2 candidate review contract
+
+Actions:
 
 ```text
 accept
@@ -352,7 +335,7 @@ defer
 All mutations require:
 
 - owner/edit authorization;
-- health-data consent;
+- active health-data consent;
 - `expected_updated_at` optimistic concurrency;
 - bounded review note;
 - explicit action enum;
@@ -362,16 +345,14 @@ All mutations require:
 State behavior:
 
 - accept: reviewed text equals original text;
-- edit: reviewed text is explicit user-entered replacement;
+- edit: reviewed text is explicit user replacement;
 - reject: candidate excluded from later extraction;
-- defer: remains unresolved and blocks review finalization;
-- accepted/edited text remains document transcription only.
+- defer: unresolved and blocks finalization;
+- accepted/edited text remains transcription only.
 
-## 14. Patient matching
+## 15. D2 patient matching
 
-Patient matching is separate from candidate review.
-
-Suggested states:
+States:
 
 ```text
 unknown
@@ -380,181 +361,76 @@ mismatch
 not_present
 ```
 
-Decision includes:
-
-- explicit user action;
-- optional bounded explanation;
-- reviewer and timestamp;
-- optimistic concurrency;
-- source/document provenance;
-- no storage of unnecessary identifiers in ordinary logs.
-
 Rules:
 
-- `unknown` blocks review finalization;
-- `mismatch` blocks later Labs confirmation for the selected profile;
-- `not_present` may allow transcription review but requires explicit acknowledgement;
-- the system never infers a patient match solely from OCR text.
+- explicit user action only;
+- optional bounded explanation;
+- reviewer/timestamp/provenance;
+- optimistic concurrency;
+- `unknown` blocks finalization;
+- `mismatch` blocks later Labs confirmation for this profile;
+- `not_present` requires explicit acknowledgement;
+- no inference solely from OCR text.
 
-## 15. Review finalization
+## 16. D2 finalization
 
-Candidate function:
+Finalization must require:
 
-```text
-app_finalize_document_ocr_review(
-  document_id,
-  expected_document_updated_at,
-  expected_candidate_manifest,
-  patient_match_decision_id
-)
-```
-
-Finalization requires:
-
-- all candidates are accepted, edited or rejected;
-- no deferred/needs_review candidate;
-- patient-match decision is explicit and not mismatch;
-- candidate manifest has not changed;
-- document/render/OCR runs are current;
+- all candidates accepted, edited or rejected;
+- no deferred or `needs_review` candidate;
+- explicit patient decision that is not mismatch;
+- unchanged candidate manifest;
+- current document/render/OCR runs;
 - owner/edit authorization;
-- consent;
+- active consent;
 - one atomic transaction.
 
-Finalization changes only review state. It creates no Clinical Context or Labs row.
+Finalization changes review state only. It creates no Clinical Context, measurement or Labs row.
 
-## 16. API outline
-
-D1:
-
-```text
-GET /profiles/{profile_id}/documents/{document_id}/ocr/status
-GET /profiles/{profile_id}/documents/{document_id}/ocr/candidates
-```
-
-D2:
+## 17. D2 API outline
 
 ```text
 PATCH /profiles/{profile_id}/documents/{document_id}/ocr/candidates/{candidate_id}
-PUT   /profiles/{profile_id}/documents/{document_id}/patient-match
+PUT   /profiles/{profile_id}/documents/{document_id}/ocr/patient-match
 POST  /profiles/{profile_id}/documents/{document_id}/ocr/finalize
 ```
 
-No OCR artifact download route is required.
+## 18. D2 required tests
 
-## 17. UI outline
+- owner/editor successful actions;
+- view/analyze/outsider denied;
+- missing consent denied;
+- stale candidate timestamp rejected without mutation;
+- accept/edit/reject/defer semantics;
+- reviewed text and notes bounded;
+- patient decision optimistic concurrency;
+- unknown/mismatch finalization blocked;
+- unresolved candidate finalization blocked;
+- manifest change blocked;
+- current run mismatch blocked;
+- repeated finalization idempotent;
+- audit contains no OCR or reviewed text;
+- no clinical/Labs rows created.
 
-Review screen:
+## 19. Production boundary
 
-- selected profile remains visible;
-- page number and safe-page thumbnail/region are shown through a later authorized derivative-delivery boundary;
-- OCR text and confidence are shown as draft;
-- low-confidence candidates are visually marked without medical interpretation;
-- actions: Accept, Edit, Reject, Review later;
-- patient matching is a separate mandatory section;
-- concurrent modification receives a clear reload/compare message;
-- finalization explains that confirmed transcription is not yet a health fact.
-
-Slice D must not display raw PDF.
-
-## 18. Logging
-
-Allowed:
-
-- request/run/document/candidate UUIDs;
-- page and candidate counts;
-- durations;
-- engine/model identifiers;
-- confidence aggregates without text;
-- status transitions;
-- safe error codes;
-- retry count.
-
-Forbidden:
-
-- OCR text;
-- patient names or identifiers;
-- filenames;
-- source/derived object paths;
-- TSV content;
-- parser stderr;
-- medical values;
-- review text or notes.
-
-## 19. Required tests
-
-### Worker and parser
-
-- valid `rus+eng` TSV;
-- empty page;
-- malformed header/row;
-- oversized output/row count/text;
-- invalid UTF-8;
-- out-of-page bounding box;
-- timeout and memory limit;
-- missing language data;
-- engine nonzero exit;
-- corrupted encrypted safe page;
-- wrong render run or artifact manifest;
-- output encryption and no plaintext artifact.
-
-### PostgreSQL/RLS
-
-- OCR worker has no direct table grants;
-- exact execute matrix;
-- concurrent claim only once;
-- stale lease rejected;
-- idempotent completion;
-- owner/edit candidate text only;
-- view/analyze/outsider get no candidate rows;
-- no-user context fails closed;
-- candidate completion creates no clinical/measurement/Labs rows;
-- full `head → base → head` cycle.
-
-### Human review
-
-- every action and transition;
-- stale `expected_updated_at` conflict;
-- invalid edit text;
-- patient-match unknown/mismatch blocks finalization;
-- deferred candidate blocks finalization;
-- manifest change blocks finalization;
-- duplicate finalization is idempotent;
-- content-free audit.
-
-## 20. Production boundary
-
-Slice D implementation PR is not a rollout PR.
-
-It must not:
-
-- enable document upload in production;
-- install Tesseract or language data on production;
-- create production OS users or credentials;
-- apply production migrations;
-- expose safe-page or OCR download endpoints;
-- create Labs observations.
-
-## 21. Stop conditions
-
-Stop merge or rollout when:
-
-- OCR receives raw PDF or unauthenticated bytes;
-- arbitrary OCR command options are accepted;
-- output is unbounded;
-- OCR text enters logs;
-- candidate text is visible to view/analyze;
-- worker has direct table access;
-- candidate status begins as accepted;
-- patient matching is inferred automatically;
-- OCR creates clinical/Labs facts;
-- optimistic concurrency is absent;
-- migration has multiple heads;
-- exact-head CI and negative PostgreSQL tests are absent.
-
-## 22. Current status
+Production remains:
 
 ```text
-SLICE_D_ARCHITECTURE_DEFINED
-SLICE_D_NOT_IMPLEMENTED
+application: b8e868825f378195975e2729f3f36c21a1afa2d0
+Alembic: 0049
+DOCUMENT_UPLOAD_ENABLED=false
+```
+
+D1 merge does not authorize package installation, worker provisioning, migration application or production upload.
+
+## 20. Final status
+
+```text
+D1_IMPLEMENTED
+D1_MERGED
+D1_CI_VERIFIED
+D1_NOT_DEPLOYED
+D2_NEXT
 PRODUCTION_UNCHANGED
 ```
