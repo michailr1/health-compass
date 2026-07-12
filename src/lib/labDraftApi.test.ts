@@ -9,9 +9,8 @@ import {
 describe("Lab draft helpers", () => {
   it("has an explicit label for every non-clinical draft state", () => {
     const statuses: LabDraftStatus[] = ["draft", "ready", "rejected"];
-    for (const status of statuses) {
-      expect(labDraftStatusLabel(status)).not.toBe("");
-    }
+    const labels = statuses.map((status) => labDraftStatusLabel(status));
+    expect(new Set(labels).size).toBe(statuses.length);
     expect(labDraftStatusLabel("draft")).toBe("Черновик");
     expect(labDraftStatusLabel("ready")).toContain("отдельному подтверждению");
     expect(labDraftStatusLabel("rejected")).toBe("Исключено");
