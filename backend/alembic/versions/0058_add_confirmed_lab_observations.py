@@ -283,6 +283,13 @@ def _create_confirmation_function() -> None:
               USING ERRCODE = 'HC409';
           END IF;
 
+          PERFORM c.id
+          FROM {S}.lab_observation_draft_sources ds
+          JOIN {S}.document_ocr_candidates c ON c.id = ds.candidate_id
+          WHERE ds.draft_id = target_draft.id
+          ORDER BY c.id
+          FOR UPDATE OF c;
+
           SELECT count(*) INTO source_count
           FROM {S}.lab_observation_draft_sources ds
           WHERE ds.draft_id = target_draft.id;
