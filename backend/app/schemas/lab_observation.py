@@ -1,4 +1,4 @@
-"""API schemas for HC-017 E1 source-preserving laboratory drafts."""
+"""API schemas for HC-017 E1 drafts and E2 confirmed observations."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.document_ocr import DocumentOCRCandidateResponse
 
-LabDraftStatus = Literal["draft", "ready", "rejected"]
+LabDraftStatus = Literal["draft", "ready", "rejected", "confirmed"]
+LabObservationStatus = Literal["active"]
 LabValueKind = Literal["numeric", "text", "qualitative"]
 LabComparator = Literal["<", "<=", "=", ">=", ">"]
 ObservedPrecision = Literal["unknown", "date", "datetime"]
@@ -141,6 +142,8 @@ class LabDraftResponse(LabDraftFields):
     patient_decision_id: uuid.UUID
     status: LabDraftStatus
     sources: list[LabDraftSourceResponse] = Field(default_factory=list)
+    confirmed_at: datetime.datetime | None = None
+    confirmed_observation_id: uuid.UUID | None = None
     created_at: datetime.datetime
     updated_at: datetime.datetime
 
@@ -193,3 +196,72 @@ class SetLabDraftSourcesRequest(LabDraftContextVersions):
 class SetLabDraftStatusRequest(LabDraftContextVersions):
     status: Literal["ready", "rejected"]
     expected_updated_at: datetime.datetime
+
+
+class ConfirmLabObservationRequest(LabDraftContextVersions):
+    idempotency_key: str = Field(
+        min_length=16,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
+    expected_draft_updated_at: datetime.datetime
+    acknowledge_source_matches: bool
+    acknowledge_unit_and_range: bool
+    acknowledge_observed_at: bool
+    acknowledge_profile: bool
+    acknowledge_structured_record: bool
+    acknowledge_not_present_assignment: bool = False
+
+    @model_validator(mode="after")
+    def validate_acknowledgements(self) -> "ConfirmLabObservationRequest":
+        required = (
+            self.acknowledge_source_matches,
+            self.acknowledge_unit_and_range,
+            self.acknowledge_observed_at,
+            self.acknowledge_profile,
+            self.acknowledge_structured_record,
+        )
+        if not all(required):
+            raise ValueError("all confirmation acknowledgements are required")
+        return self
+
+
+class LabObservationConfirmationPreview(BaseModel):
+    draft: LabDraftResponse
+    patient_decision: Literal["match", "not_present"]
+    requires_not_present_assignment_ack: bool
+    expected_document_updated_at: datetime.datetime
+    expected_review_finalized_at: datetime.datetime
+    expected_patient_decision_updated_at: datetime.datetime
+
+
+class LabObservationSourceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    candidate_id: uuid.UUID
+    source_role: LabSourceRole
+    candidate_updated_at: datetime.datetime
+    page_artifact_id: uuid.UUID
+    page_number: int
+    reviewed_text_snapshot: str
+
+
+class LabObservationResponse(LabDraftFields):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    profile_id: uuid.UUID
+    document_id: uuid.UUID
+    ocr_run_id: uuid.UUID
+    patient_decision_id: uuid.UUID
+    source_draft_id: uuid.UUID
+    status: LabObservationStatus
+    patient_decision: Literal["match", "not_present"]
+    sources: list[LabObservationSourceResponse] = Field(default_factory=list)
+    source_draft_updated_at: datetime.datetime
+    source_document_updated_at: datetime.datetime
+    source_review_finalized_at: datetime.datetime
+    source_patient_decision_updated_at: datetime.datetime
+    confirmed_by_user_id: uuid.UUID
+    confirmed_at: datetime.datetime
+    created_at: datetime.datetime

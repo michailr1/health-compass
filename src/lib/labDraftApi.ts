@@ -2,7 +2,7 @@ import { ApiError, apiGet, apiPatch, apiPost, parseApiError } from "./api";
 import type { OCRCandidate } from "./documentOcrReviewApi";
 
 export type LabValueKind = "numeric" | "text" | "qualitative";
-export type LabDraftStatus = "draft" | "ready" | "rejected";
+export type LabDraftStatus = "draft" | "ready" | "rejected" | "confirmed";
 export type LabSourceRole =
   | "analyte"
   | "value"
@@ -51,6 +51,8 @@ export interface LabDraft extends LabDraftFields {
   patient_decision_id: string;
   status: LabDraftStatus;
   sources: LabDraftSource[];
+  confirmed_at?: string | null;
+  confirmed_observation_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -65,6 +67,52 @@ export interface LabDraftContext {
   patient_decision: "match" | "not_present";
   patient_decision_updated_at: string;
   candidates: OCRCandidate[];
+}
+
+export interface LabObservationSource {
+  candidate_id: string;
+  source_role: LabSourceRole;
+  candidate_updated_at: string;
+  page_artifact_id: string;
+  page_number: number;
+  reviewed_text_snapshot: string;
+}
+
+export interface LabObservation extends LabDraftFields {
+  id: string;
+  profile_id: string;
+  document_id: string;
+  ocr_run_id: string;
+  patient_decision_id: string;
+  source_draft_id: string;
+  status: "active";
+  patient_decision: "match" | "not_present";
+  sources: LabObservationSource[];
+  source_draft_updated_at: string;
+  source_document_updated_at: string;
+  source_review_finalized_at: string;
+  source_patient_decision_updated_at: string;
+  confirmed_by_user_id: string;
+  confirmed_at: string;
+  created_at: string;
+}
+
+export interface LabConfirmationPreview {
+  draft: LabDraft;
+  patient_decision: "match" | "not_present";
+  requires_not_present_assignment_ack: boolean;
+  expected_document_updated_at: string;
+  expected_review_finalized_at: string;
+  expected_patient_decision_updated_at: string;
+}
+
+export interface LabConfirmationAcknowledgements {
+  acknowledge_source_matches: boolean;
+  acknowledge_unit_and_range: boolean;
+  acknowledge_observed_at: boolean;
+  acknowledge_profile: boolean;
+  acknowledge_structured_record: boolean;
+  acknowledge_not_present_assignment: boolean;
 }
 
 async function apiPut<T>(path: string, body: unknown): Promise<T> {
@@ -174,11 +222,56 @@ export function setLabDraftStatus(
   });
 }
 
+export function getLabConfirmationPreview(
+  profileId: string,
+  documentId: string,
+  draftId: string,
+): Promise<LabConfirmationPreview> {
+  return apiGet<LabConfirmationPreview>(
+    `${basePath(profileId, documentId)}/${draftId}/confirmation`,
+  );
+}
+
+export function confirmLabObservation(
+  profileId: string,
+  documentId: string,
+  preview: LabConfirmationPreview,
+  acknowledgements: LabConfirmationAcknowledgements,
+  idempotencyKey: string,
+): Promise<LabObservation> {
+  return apiPost<LabObservation>(
+    `${basePath(profileId, documentId)}/${preview.draft.id}/confirm`,
+    {
+      idempotency_key: idempotencyKey,
+      expected_draft_updated_at: preview.draft.updated_at,
+      expected_document_updated_at: preview.expected_document_updated_at,
+      expected_review_finalized_at: preview.expected_review_finalized_at,
+      expected_patient_decision_updated_at:
+        preview.expected_patient_decision_updated_at,
+      ...acknowledgements,
+    },
+  );
+}
+
+export function listLabObservations(profileId: string): Promise<LabObservation[]> {
+  return apiGet<LabObservation[]>(`/profiles/${profileId}/lab-observations`);
+}
+
+export function getLabObservation(
+  profileId: string,
+  observationId: string,
+): Promise<LabObservation> {
+  return apiGet<LabObservation>(
+    `/profiles/${profileId}/lab-observations/${observationId}`,
+  );
+}
+
 export function labDraftStatusLabel(status: LabDraftStatus): string {
   const labels: Record<LabDraftStatus, string> = {
     draft: "Черновик",
     ready: "Готово к отдельному подтверждению",
     rejected: "Исключено",
+    confirmed: "Подтверждено",
   };
   return labels[status];
 }
