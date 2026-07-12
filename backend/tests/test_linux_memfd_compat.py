@@ -10,13 +10,28 @@ import pytest
 from app.compat import linux_memfd
 
 
-def test_stdlib_memfd_surface_is_available_after_app_import() -> None:
+def test_installer_restores_missing_cpython_memfd_surface(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in ("memfd_create", "MFD_CLOEXEC", "MFD_ALLOW_SEALING"):
+        monkeypatch.delattr(os, name, raising=False)
+    for name in (
+        "F_ADD_SEALS",
+        "F_GET_SEALS",
+        "F_SEAL_SEAL",
+        "F_SEAL_SHRINK",
+        "F_SEAL_GROW",
+        "F_SEAL_WRITE",
+    ):
+        monkeypatch.delattr(fcntl, name, raising=False)
+
+    assert linux_memfd.install_linux_memfd_compat() is True
     assert hasattr(os, "memfd_create")
-    assert hasattr(os, "MFD_CLOEXEC")
-    assert hasattr(os, "MFD_ALLOW_SEALING")
-    assert hasattr(fcntl, "F_ADD_SEALS")
-    assert hasattr(fcntl, "F_GET_SEALS")
-    assert hasattr(fcntl, "F_SEAL_WRITE")
+    assert getattr(os, "MFD_CLOEXEC") == linux_memfd.MFD_CLOEXEC
+    assert getattr(os, "MFD_ALLOW_SEALING") == linux_memfd.MFD_ALLOW_SEALING
+    assert getattr(fcntl, "F_ADD_SEALS") == linux_memfd.F_ADD_SEALS
+    assert getattr(fcntl, "F_GET_SEALS") == linux_memfd.F_GET_SEALS
+    assert getattr(fcntl, "F_SEAL_WRITE") == linux_memfd.F_SEAL_WRITE
 
 
 def test_libc_fallback_creates_and_seals_memfd(monkeypatch: pytest.MonkeyPatch) -> None:
