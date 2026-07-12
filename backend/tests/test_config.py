@@ -61,13 +61,11 @@ def test_production_rejects_missing_required_settings(field: str, message: str) 
 
 
 def test_production_rejects_disabled_account_linking() -> None:
-    """CR-08: duplicate-account protection must be fail-safe in production."""
     with pytest.raises(ValueError, match="ACCOUNT_LINKING_ENABLED"):
         production_settings(account_linking_enabled=False).validate_production()
 
 
 def test_production_rejects_default_account_linking_flag() -> None:
-    """The absence of the environment variable must not disable protection."""
     values = production_settings().model_dump()
     values.pop("account_linking_enabled")
     with pytest.raises(ValueError, match="ACCOUNT_LINKING_ENABLED"):
@@ -75,18 +73,20 @@ def test_production_rejects_default_account_linking_flag() -> None:
 
 
 def test_development_allows_disabled_account_linking() -> None:
-    """Disabling the protection stays an explicit development-only override."""
     Settings(
         _env_file=None, environment="development", account_linking_enabled=False
     ).validate_production()
 
 
-def test_document_intake_defaults_to_disabled() -> None:
+def test_document_intake_defaults_to_disabled_and_encrypted() -> None:
     settings = Settings(_env_file=None)
     assert settings.document_upload_enabled is False
-    assert settings.document_storage_backend == "local"
+    assert settings.document_storage_backend == "local_encrypted"
     assert settings.document_max_bytes == 20 * 1024 * 1024
     assert settings.document_max_image_pixels == 25_000_000
+    assert settings.document_min_free_bytes == 512 * 1024 * 1024
+    assert settings.document_encryption_active_key_id == "dev-document-key"
+    assert settings.document_scanner_socket == "/run/clamav/clamd.ctl"
 
 
 def test_production_rejects_document_upload_enablement() -> None:
@@ -105,13 +105,37 @@ def test_development_allows_explicit_document_upload_enablement() -> None:
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
-        ("document_storage_backend", "s3", "DOCUMENT_STORAGE_BACKEND"),
+        ("document_storage_backend", "local", "DOCUMENT_STORAGE_BACKEND"),
         ("document_storage_root", "", "DOCUMENT_STORAGE_ROOT"),
         ("document_max_bytes", 20 * 1024 * 1024 + 1, "DOCUMENT_MAX_BYTES"),
         ("document_max_image_pixels", 25_000_001, "DOCUMENT_MAX_IMAGE_PIXELS"),
+        ("document_min_free_bytes", -1, "DOCUMENT_MIN_FREE_BYTES"),
+        (
+            "document_encryption_active_key_id",
+            "",
+            "DOCUMENT_ENCRYPTION_ACTIVE_KEY_ID",
+        ),
+        (
+            "document_credentials_directory",
+            "",
+            "DOCUMENT_CREDENTIALS_DIRECTORY",
+        ),
+        ("document_scanner_socket", "relative.sock", "DOCUMENT_SCANNER_SOCKET"),
+        (
+            "document_scanner_timeout_seconds",
+            301,
+            "DOCUMENT_SCANNER_TIMEOUT_SECONDS",
+        ),
+        (
+            "document_scanner_max_signature_age_hours",
+            169,
+            "DOCUMENT_SCANNER_MAX_SIGNATURE_AGE_HOURS",
+        ),
+        ("document_worker_lease_seconds", 10, "DOCUMENT_WORKER_LEASE_SECONDS"),
+        ("document_worker_max_attempts", 11, "DOCUMENT_WORKER_MAX_ATTEMPTS"),
     ],
 )
-def test_document_intake_rejects_unsupported_slice_b_configuration(
+def test_document_intake_rejects_unsupported_slice_c1_configuration(
     field: str,
     value: object,
     message: str,
