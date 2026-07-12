@@ -1,4 +1,4 @@
-"""Secure document intake metadata models for HC-017."""
+"""Secure document intake, processing and artifact metadata models."""
 
 from __future__ import annotations
 
@@ -31,6 +31,10 @@ class ProfileDocument(Base):
             "quarantine_storage_key",
             name="uq_profile_documents_quarantine_storage_key",
         ),
+        UniqueConstraint(
+            "current_storage_key",
+            name="uq_profile_documents_current_storage_key",
+        ),
         {"schema": SCHEMA},
     )
 
@@ -52,6 +56,7 @@ class ProfileDocument(Base):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     storage_backend: Mapped[str] = mapped_column(String(32), nullable=False)
     quarantine_storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    current_storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
     accepted_storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     encryption_format: Mapped[str | None] = mapped_column(String(32), nullable=True)
     encryption_key_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -67,6 +72,17 @@ class ProfileDocument(Base):
         DateTime(timezone=True), nullable=True
     )
     scanner_completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    render_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="not_started"
+    )
+    render_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    render_engine: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    render_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    render_completed_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -140,4 +156,62 @@ class DocumentProcessingJob(Base):
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class DocumentArtifact(Base):
+    __tablename__ = "document_artifacts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["document_id", "profile_id"],
+            [
+                f"{SCHEMA}.profile_documents.id",
+                f"{SCHEMA}.profile_documents.profile_id",
+            ],
+            name="fk_document_artifacts_document_profile",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "document_id",
+            "run_id",
+            "artifact_type",
+            "page_number",
+            name="uq_document_artifacts_page",
+        ),
+        UniqueConstraint("storage_key", name="uq_document_artifacts_storage_key"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    profile_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey(f"{SCHEMA}.health_profiles.id"), nullable=False
+    )
+    run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    artifact_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    page_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    storage_backend: Mapped[str] = mapped_column(String(32), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    media_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    encrypted_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    encryption_format: Mapped[str] = mapped_column(String(32), nullable=False)
+    encryption_key_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    width: Mapped[int] = mapped_column(Integer, nullable=False)
+    height: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    deletion_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    erased_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
