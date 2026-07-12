@@ -21,16 +21,7 @@ pytestmark = pytest.mark.integration
 
 CYCLE_DB = "health_compass_cycle_test"
 
-DEFINER_FUNCTIONS = (
-    "app_duplicate_user_activity(uuid)",
-    "app_duplicate_user_activity_pre_documents(uuid)",
-    "app_assess_duplicate_user_pair(uuid, uuid)",
-    "app_apply_duplicate_absorption(uuid)",
-    "app_can_edit_profile(uuid)",
-    "app_can_view_profile(uuid)",
-    "app_can_view_document(uuid)",
-    "app_lookup_identity_user_id(text, text)",
-    "app_consume_email_login_token(text)",
+SCANNER_FUNCTIONS = (
     "app_claim_document_job(text, integer, integer)",
     "app_heartbeat_document_job(uuid, text, timestamp with time zone, integer)",
     (
@@ -43,17 +34,42 @@ DEFINER_FUNCTIONS = (
     ),
 )
 
-WORKER_FUNCTIONS = (
-    "app_claim_document_job(text, integer, integer)",
-    "app_heartbeat_document_job(uuid, text, timestamp with time zone, integer)",
+RENDERER_FUNCTIONS = (
+    "app_claim_render_job(text, integer, integer)",
+    "app_heartbeat_render_job(uuid, text, timestamp with time zone, integer)",
     (
-        "app_complete_document_scan(uuid, text, timestamp with time zone, text, text, "
-        "text, timestamp with time zone, text, uuid, text, uuid)"
+        "app_complete_document_render(uuid, text, timestamp with time zone, uuid, text, "
+        "bigint, text, text, integer, text, text, jsonb, uuid)"
     ),
     (
-        "app_fail_document_job(uuid, text, timestamp with time zone, text, boolean, "
+        "app_fail_render_job(uuid, text, timestamp with time zone, text, boolean, "
         "integer, integer)"
     ),
+)
+
+RECONCILER_FUNCTIONS = (
+    "app_list_document_storage_references()",
+    "app_mark_document_object_missing(text, text, uuid)",
+)
+
+APP_DOCUMENT_FUNCTIONS = (
+    "app_reserve_document_upload(uuid, bigint, bigint, bigint, integer, integer)",
+)
+
+DEFINER_FUNCTIONS = (
+    "app_duplicate_user_activity(uuid)",
+    "app_duplicate_user_activity_pre_documents(uuid)",
+    "app_assess_duplicate_user_pair(uuid, uuid)",
+    "app_apply_duplicate_absorption(uuid)",
+    "app_can_edit_profile(uuid)",
+    "app_can_view_profile(uuid)",
+    "app_can_view_document(uuid)",
+    "app_lookup_identity_user_id(text, text)",
+    "app_consume_email_login_token(text)",
+    *SCANNER_FUNCTIONS,
+    *RENDERER_FUNCTIONS,
+    *RECONCILER_FUNCTIONS,
+    *APP_DOCUMENT_FUNCTIONS,
 )
 
 FORCE_RLS_TABLES = (
@@ -75,6 +91,7 @@ FORCE_RLS_TABLES = (
     "profile_intake_decisions",
     "profile_documents",
     "document_processing_jobs",
+    "document_artifacts",
 )
 
 CANONICAL_TABLES = (
@@ -87,6 +104,13 @@ CANONICAL_TABLES = (
 DOCUMENT_TABLES = (
     "profile_documents",
     "document_processing_jobs",
+    "document_artifacts",
+)
+
+WORKER_ROLES = (
+    "health_compass_worker",
+    "health_compass_renderer",
+    "health_compass_reconciler",
 )
 
 
@@ -113,7 +137,8 @@ def _provision_cycle_database(admin_url: str) -> None:
         conn.execute(f"DROP DATABASE IF EXISTS {CYCLE_DB} WITH (FORCE)")
         conn.execute(f"CREATE DATABASE {CYCLE_DB} OWNER health_compass_migrator")
         conn.execute(f"GRANT CONNECT ON DATABASE {CYCLE_DB} TO health_compass_app")
-        conn.execute(f"GRANT CONNECT ON DATABASE {CYCLE_DB} TO health_compass_worker")
+        for role in WORKER_ROLES:
+            conn.execute(f"GRANT CONNECT ON DATABASE {CYCLE_DB} TO {role}")
     with psycopg.connect(_admin_dsn(_cycle_url(admin_url)), autocommit=True) as conn:
         conn.execute("CREATE SCHEMA health_compass AUTHORIZATION health_compass_migrator")
         conn.execute("GRANT USAGE ON SCHEMA health_compass TO health_compass_app")
@@ -131,11 +156,21 @@ def _migrator_cycle_url() -> str:
     return _cycle_url(url)
 
 
+def _has_execute(conn, role: str, signature: str) -> bool:
+    return conn.execute(
+        text(
+            "SELECT has_function_privilege(:role, :sig ::regprocedure, 'EXECUTE')"
+        ),
+        {"role": role, "sig": f"health_compass.{signature}"},
+    ).scalar_one()
+
+
 def test_full_migration_cycle_restores_all_security_invariants() -> None:
     admin_url = _admin_url()
-    if not urlsplit(admin_url.replace("postgresql+psycopg://", "postgresql://", 1)).path.endswith(
-        "_test"
-    ):
+    parsed_admin = urlsplit(
+        admin_url.replace("postgresql+psycopg://", "postgresql://", 1)
+    )
+    if not parsed_admin.path.endswith("_test"):
         pytest.fail("migration cycle test requires a *_test admin database URL")
 
     config = Config("alembic.ini")
@@ -190,33 +225,30 @@ def test_full_migration_cycle_restores_all_security_invariants() -> None:
                         {"sig": f"health_compass.{signature}"},
                     ).scalar_one()
                     assert owner == "health_compass_rls_definer", (signature, owner)
+                    assert _has_execute(conn, "public", signature) is False, signature
 
-                    public_execute = conn.execute(
-                        text(
-                            "SELECT has_function_privilege('public', "
-                            ":sig ::regprocedure, 'EXECUTE')"
-                        ),
-                        {"sig": f"health_compass.{signature}"},
-                    ).scalar_one()
-                    assert public_execute is False, signature
+                for signature in SCANNER_FUNCTIONS:
+                    assert _has_execute(conn, "health_compass_worker", signature) is True
+                    assert _has_execute(conn, "health_compass_app", signature) is False
+                    assert _has_execute(conn, "health_compass_renderer", signature) is False
+                    assert _has_execute(conn, "health_compass_reconciler", signature) is False
 
-                for signature in WORKER_FUNCTIONS:
-                    app_execute = conn.execute(
-                        text(
-                            "SELECT has_function_privilege('health_compass_app', "
-                            ":sig ::regprocedure, 'EXECUTE')"
-                        ),
-                        {"sig": f"health_compass.{signature}"},
-                    ).scalar_one()
-                    worker_execute = conn.execute(
-                        text(
-                            "SELECT has_function_privilege('health_compass_worker', "
-                            ":sig ::regprocedure, 'EXECUTE')"
-                        ),
-                        {"sig": f"health_compass.{signature}"},
-                    ).scalar_one()
-                    assert app_execute is False, signature
-                    assert worker_execute is True, signature
+                for signature in RENDERER_FUNCTIONS:
+                    assert _has_execute(conn, "health_compass_renderer", signature) is True
+                    assert _has_execute(conn, "health_compass_app", signature) is False
+                    assert _has_execute(conn, "health_compass_worker", signature) is False
+                    assert _has_execute(conn, "health_compass_reconciler", signature) is False
+
+                for signature in RECONCILER_FUNCTIONS:
+                    assert _has_execute(conn, "health_compass_reconciler", signature) is True
+                    assert _has_execute(conn, "health_compass_app", signature) is False
+                    assert _has_execute(conn, "health_compass_worker", signature) is False
+                    assert _has_execute(conn, "health_compass_renderer", signature) is False
+
+                for signature in APP_DOCUMENT_FUNCTIONS:
+                    assert _has_execute(conn, "health_compass_app", signature) is True
+                    for role in WORKER_ROLES:
+                        assert _has_execute(conn, role, signature) is False
 
                 rls_rows = conn.execute(
                     text(
@@ -244,30 +276,30 @@ def test_full_migration_cycle_restores_all_security_invariants() -> None:
                     ).scalar_one()
                     assert direct_update == 0, table
 
-                document_mutation_grants = conn.execute(
+                artifact_mutation_grants = conn.execute(
                     text(
-                        "SELECT table_name, privilege_type "
+                        "SELECT privilege_type "
                         "FROM information_schema.role_table_grants "
                         "WHERE grantee = 'health_compass_app' "
                         "AND table_schema = 'health_compass' "
-                        "AND table_name = ANY(:tables) "
-                        "AND privilege_type IN ('UPDATE', 'DELETE')"
-                    ),
-                    {"tables": list(DOCUMENT_TABLES)},
+                        "AND table_name = 'document_artifacts' "
+                        "AND privilege_type IN ('INSERT', 'UPDATE', 'DELETE')"
+                    )
                 ).all()
-                assert document_mutation_grants == []
+                assert artifact_mutation_grants == []
 
-                worker_table_grants = conn.execute(
-                    text(
-                        "SELECT table_name, privilege_type "
-                        "FROM information_schema.role_table_grants "
-                        "WHERE grantee = 'health_compass_worker' "
-                        "AND table_schema = 'health_compass' "
-                        "AND table_name = ANY(:tables)"
-                    ),
-                    {"tables": list(DOCUMENT_TABLES)},
-                ).all()
-                assert worker_table_grants == []
+                for role in WORKER_ROLES:
+                    worker_table_grants = conn.execute(
+                        text(
+                            "SELECT table_name, privilege_type "
+                            "FROM information_schema.role_table_grants "
+                            "WHERE grantee = :role "
+                            "AND table_schema = 'health_compass' "
+                            "AND table_name = ANY(:tables)"
+                        ),
+                        {"role": role, "tables": list(DOCUMENT_TABLES)},
+                    ).all()
+                    assert worker_table_grants == [], role
 
                 users_update_columns = {
                     row[0]
