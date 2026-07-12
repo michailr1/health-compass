@@ -195,6 +195,25 @@ def _create_confirmation_function() -> None:
           FROM {S}.lab_observations lo
           WHERE lo.source_draft_id = target_draft.id;
           IF existing_observation.id IS NOT NULL THEN
+            IF existing_observation.source_draft_updated_at
+                  <> p_expected_draft_updated_at
+               OR existing_observation.source_document_updated_at
+                  <> p_expected_document_updated_at
+               OR existing_observation.source_review_finalized_at
+                  <> p_expected_review_finalized_at
+               OR existing_observation.source_patient_decision_updated_at
+                  <> p_expected_patient_decision_updated_at
+               OR existing_observation.ack_source <> p_ack_source
+               OR existing_observation.ack_unit_range <> p_ack_unit_range
+               OR existing_observation.ack_observed_at <> p_ack_observed_at
+               OR existing_observation.ack_profile <> p_ack_profile
+               OR existing_observation.ack_structured_record
+                    <> p_ack_structured_record
+               OR existing_observation.ack_not_present_assignment
+                    <> coalesce(p_ack_not_present_assignment, false) THEN
+              RAISE EXCEPTION 'Confirmation replay conflict'
+                USING ERRCODE = 'HC409';
+            END IF;
             RETURN existing_observation.id;
           END IF;
 
@@ -384,6 +403,28 @@ def _create_confirmation_function() -> None:
           RETURN p_observation_id;
         EXCEPTION
           WHEN unique_violation THEN
+            SELECT lo.* INTO existing_observation
+            FROM {S}.lab_observations lo
+            WHERE lo.source_draft_id = p_draft_id;
+            IF existing_observation.id IS NOT NULL
+               AND existing_observation.source_draft_updated_at
+                    = p_expected_draft_updated_at
+               AND existing_observation.source_document_updated_at
+                    = p_expected_document_updated_at
+               AND existing_observation.source_review_finalized_at
+                    = p_expected_review_finalized_at
+               AND existing_observation.source_patient_decision_updated_at
+                    = p_expected_patient_decision_updated_at
+               AND existing_observation.ack_source = p_ack_source
+               AND existing_observation.ack_unit_range = p_ack_unit_range
+               AND existing_observation.ack_observed_at = p_ack_observed_at
+               AND existing_observation.ack_profile = p_ack_profile
+               AND existing_observation.ack_structured_record
+                    = p_ack_structured_record
+               AND existing_observation.ack_not_present_assignment
+                    = coalesce(p_ack_not_present_assignment, false) THEN
+              RETURN existing_observation.id;
+            END IF;
             RAISE EXCEPTION 'Confirmation conflict' USING ERRCODE = 'HC409';
         END;
         $$
