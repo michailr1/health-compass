@@ -23,7 +23,9 @@ function errorMessage(error: unknown): string {
       return "Исходный документ или проверенный текст изменились. Обновите страницу.";
     }
     if (error.status === 422) return "Проверьте заполненные поля.";
-    if (error.status === 428) return "Не хватает версии данных для безопасного сохранения.";
+    if (error.status === 428) {
+      return "Не хватает версии данных для безопасного сохранения.";
+    }
     return error.message;
   }
   return "Не удалось сохранить лабораторный черновик.";
@@ -74,14 +76,17 @@ export default function LabDrafts() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      if (!profile || !documentId || !context) throw new Error("Context unavailable");
+      if (!profile || !documentId || !context) {
+        throw new Error("Context unavailable");
+      }
       const fields: LabDraftFields = {
         source_analyte_text: analyteText.trim(),
         source_value_text: valueText.trim(),
         value_kind: valueKind,
         numeric_value: valueKind === "numeric" ? numericValue.trim() : null,
         text_value: valueKind === "text" ? textValue.trim() : null,
-        qualitative_value_text: valueKind === "qualitative" ? textValue.trim() : null,
+        qualitative_value_text:
+          valueKind === "qualitative" ? textValue.trim() : null,
         source_unit_text: unitMissing ? null : unitText.trim(),
         unit_not_present: unitMissing,
         source_reference_range_text: rangeMissing ? null : rangeText.trim(),
@@ -92,7 +97,12 @@ export default function LabDrafts() {
         observed_at: null,
         observed_precision: observedUnknown ? "unknown" : "date",
       };
-      const draft = await createLabDraft(profile.id, documentId, context, fields);
+      const draft = await createLabDraft(
+        profile.id,
+        documentId,
+        context,
+        fields,
+      );
       const analyteCandidate = candidateById.get(analyteCandidateId);
       const valueCandidate = candidateById.get(valueCandidateId);
       if (!analyteCandidate || !valueCandidate) {
@@ -112,7 +122,10 @@ export default function LabDrafts() {
       ]);
     },
     onSuccess: (draft) => {
-      queryClient.setQueryData<LabDraft[]>(draftsKey, (current = []) => [...current, draft]);
+      queryClient.setQueryData<LabDraft[]>(draftsKey, (current = []) => [
+        ...current,
+        draft,
+      ]);
       toast.success("Лабораторный черновик сохранён");
       setAnalyteText("");
       setValueText("");
@@ -136,17 +149,27 @@ export default function LabDrafts() {
     onError: (error) => toast.error(errorMessage(error)),
   });
 
-  if (profilesQuery.isLoading || contextQuery.isLoading || draftsQuery.isLoading) {
-    return <div className="hm-card p-5 text-sm text-muted-foreground">Загрузка…</div>;
+  if (
+    profilesQuery.isLoading ||
+    contextQuery.isLoading ||
+    draftsQuery.isLoading
+  ) {
+    return (
+      <div className="hm-card p-5 text-sm text-muted-foreground">Загрузка…</div>
+    );
   }
   if (!profile || !documentId || contextQuery.isError || !context) {
     return (
       <div className="space-y-4">
-        <Link to="/app/documents" className="inline-flex items-center gap-2 text-sm text-primary">
+        <Link
+          to="/app/documents"
+          className="inline-flex items-center gap-2 text-sm text-primary"
+        >
           <ArrowLeft className="h-4 w-4" /> Назад к документам
         </Link>
         <div className="hm-card p-5 text-sm text-destructive">
-          Лабораторные черновики доступны только после завершённой проверки OCR и решения о пациенте.
+          Лабораторные черновики доступны только после завершённой проверки OCR
+          и решения о пациенте.
         </div>
       </div>
     );
@@ -157,10 +180,13 @@ export default function LabDrafts() {
     valueText.trim().length > 0 &&
     analyteCandidateId.length > 0 &&
     valueCandidateId.length > 0 &&
-    (valueKind === "numeric" ? numericValue.trim().length > 0 : textValue.trim().length > 0) &&
+    (valueKind === "numeric"
+      ? numericValue.trim().length > 0
+      : textValue.trim().length > 0) &&
     (unitMissing || unitText.trim().length > 0) &&
     (rangeMissing || rangeText.trim().length > 0) &&
-    (observedUnknown || (observedText.trim().length > 0 && observedDate.length > 0));
+    (observedUnknown ||
+      (observedText.trim().length > 0 && observedDate.length > 0));
 
   return (
     <div className="space-y-6">
@@ -176,7 +202,9 @@ export default function LabDrafts() {
           Лабораторные черновики
         </h1>
         <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-          Структурируйте только то, что явно указано в документе. Черновик не является подтверждённым показателем и не используется в динамике или AI-анализе.
+          Структурируйте только то, что явно указано в документе. Черновик не
+          является подтверждённым показателем и не используется в динамике или
+          AI-анализе.
         </p>
       </header>
 
@@ -184,9 +212,15 @@ export default function LabDrafts() {
         <div className="flex items-start gap-3">
           <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
           <div>
-            <h2 className="font-display text-lg font-semibold">Источник зафиксирован</h2>
+            <h2 className="font-display text-lg font-semibold">
+              Источник зафиксирован
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              OCR-проверка завершена. Решение о пациенте: {context.patient_decision === "match" ? "совпадает с профилем" : "имя пациента не указано"}.
+              OCR-проверка завершена. Решение о пациенте:{" "}
+              {context.patient_decision === "match"
+                ? "совпадает с профилем"
+                : "имя пациента не указано"}
+              .
             </p>
           </div>
         </div>
@@ -200,26 +234,35 @@ export default function LabDrafts() {
 
         <div className="grid gap-4 md:grid-cols-2">
           <label className="block text-sm">
-            <span className="mb-1.5 block font-medium">Фрагмент с названием показателя</span>
+            <span className="mb-1.5 block font-medium">
+              Фрагмент с названием показателя
+            </span>
             <select
               value={analyteCandidateId}
               onChange={(event) => {
                 setAnalyteCandidateId(event.target.value);
                 const candidate = candidateById.get(event.target.value);
-                if (candidate) setAnalyteText(candidate.reviewed_text ?? candidate.original_text);
+                if (candidate) {
+                  setAnalyteText(
+                    candidate.reviewed_text ?? candidate.original_text,
+                  );
+                }
               }}
               className="w-full rounded-xl border border-border bg-background px-3 py-2"
             >
               <option value="">Выберите фрагмент</option>
               {candidates.map((candidate) => (
                 <option key={candidate.id} value={candidate.id}>
-                  Стр. {candidate.page_number}: {candidate.reviewed_text ?? candidate.original_text}
+                  Стр. {candidate.page_number}:{" "}
+                  {candidate.reviewed_text ?? candidate.original_text}
                 </option>
               ))}
             </select>
           </label>
           <label className="block text-sm">
-            <span className="mb-1.5 block font-medium">Название как в источнике</span>
+            <span className="mb-1.5 block font-medium">
+              Название как в источнике
+            </span>
             <input
               value={analyteText}
               onChange={(event) => setAnalyteText(event.target.value)}
@@ -228,26 +271,35 @@ export default function LabDrafts() {
             />
           </label>
           <label className="block text-sm">
-            <span className="mb-1.5 block font-medium">Фрагмент со значением</span>
+            <span className="mb-1.5 block font-medium">
+              Фрагмент со значением
+            </span>
             <select
               value={valueCandidateId}
               onChange={(event) => {
                 setValueCandidateId(event.target.value);
                 const candidate = candidateById.get(event.target.value);
-                if (candidate) setValueText(candidate.reviewed_text ?? candidate.original_text);
+                if (candidate) {
+                  setValueText(
+                    candidate.reviewed_text ?? candidate.original_text,
+                  );
+                }
               }}
               className="w-full rounded-xl border border-border bg-background px-3 py-2"
             >
               <option value="">Выберите фрагмент</option>
               {candidates.map((candidate) => (
                 <option key={candidate.id} value={candidate.id}>
-                  Стр. {candidate.page_number}: {candidate.reviewed_text ?? candidate.original_text}
+                  Стр. {candidate.page_number}:{" "}
+                  {candidate.reviewed_text ?? candidate.original_text}
                 </option>
               ))}
             </select>
           </label>
           <label className="block text-sm">
-            <span className="mb-1.5 block font-medium">Значение как в источнике</span>
+            <span className="mb-1.5 block font-medium">
+              Значение как в источнике
+            </span>
             <input
               value={valueText}
               onChange={(event) => setValueText(event.target.value)}
@@ -259,7 +311,9 @@ export default function LabDrafts() {
             <span className="mb-1.5 block font-medium">Тип значения</span>
             <select
               value={valueKind}
-              onChange={(event) => setValueKind(event.target.value as LabValueKind)}
+              onChange={(event) =>
+                setValueKind(event.target.value as LabValueKind)
+              }
               className="w-full rounded-xl border border-border bg-background px-3 py-2"
             >
               <option value="numeric">Число</option>
@@ -269,7 +323,9 @@ export default function LabDrafts() {
           </label>
           <label className="block text-sm">
             <span className="mb-1.5 block font-medium">
-              {valueKind === "numeric" ? "Числовое значение" : "Проверенное представление"}
+              {valueKind === "numeric"
+                ? "Числовое значение"
+                : "Проверенное представление"}
             </span>
             <input
               value={valueKind === "numeric" ? numericValue : textValue}
@@ -285,7 +341,9 @@ export default function LabDrafts() {
 
         <div className="grid gap-4 md:grid-cols-3">
           <label className="block text-sm">
-            <span className="mb-1.5 block font-medium">Единица как в источнике</span>
+            <span className="mb-1.5 block font-medium">
+              Единица как в источнике
+            </span>
             <input
               value={unitText}
               onChange={(event) => setUnitText(event.target.value)}
@@ -293,11 +351,18 @@ export default function LabDrafts() {
               className="w-full rounded-xl border border-border bg-background px-3 py-2 disabled:opacity-60"
             />
             <span className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-              <input type="checkbox" checked={unitMissing} onChange={(event) => setUnitMissing(event.target.checked)} /> В документе единица не указана
+              <input
+                type="checkbox"
+                checked={unitMissing}
+                onChange={(event) => setUnitMissing(event.target.checked)}
+              />{" "}
+              В документе единица не указана
             </span>
           </label>
           <label className="block text-sm">
-            <span className="mb-1.5 block font-medium">Референсный диапазон</span>
+            <span className="mb-1.5 block font-medium">
+              Референсный диапазон
+            </span>
             <input
               value={rangeText}
               onChange={(event) => setRangeText(event.target.value)}
@@ -305,11 +370,18 @@ export default function LabDrafts() {
               className="w-full rounded-xl border border-border bg-background px-3 py-2 disabled:opacity-60"
             />
             <span className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-              <input type="checkbox" checked={rangeMissing} onChange={(event) => setRangeMissing(event.target.checked)} /> В документе диапазон не указан
+              <input
+                type="checkbox"
+                checked={rangeMissing}
+                onChange={(event) => setRangeMissing(event.target.checked)}
+              />{" "}
+              В документе диапазон не указан
             </span>
           </label>
           <label className="block text-sm">
-            <span className="mb-1.5 block font-medium">Дата как в источнике</span>
+            <span className="mb-1.5 block font-medium">
+              Дата как в источнике
+            </span>
             <input
               value={observedText}
               onChange={(event) => setObservedText(event.target.value)}
@@ -325,7 +397,12 @@ export default function LabDrafts() {
               />
             )}
             <span className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-              <input type="checkbox" checked={observedUnknown} onChange={(event) => setObservedUnknown(event.target.checked)} /> Дата в документе не указана
+              <input
+                type="checkbox"
+                checked={observedUnknown}
+                onChange={(event) => setObservedUnknown(event.target.checked)}
+              />{" "}
+              Дата в документе не указана
             </span>
           </label>
         </div>
@@ -341,15 +418,21 @@ export default function LabDrafts() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="font-display text-xl font-semibold">Сохранённые черновики</h2>
+        <h2 className="font-display text-xl font-semibold">
+          Сохранённые черновики
+        </h2>
         {(draftsQuery.data ?? []).length === 0 ? (
-          <div className="hm-card p-5 text-sm text-muted-foreground">Черновиков пока нет.</div>
+          <div className="hm-card p-5 text-sm text-muted-foreground">
+            Черновиков пока нет.
+          </div>
         ) : (
           (draftsQuery.data ?? []).map((draft) => (
             <article key={draft.id} className="hm-card p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-display text-lg font-semibold">{draft.source_analyte_text}</h3>
+                  <h3 className="font-display text-lg font-semibold">
+                    {draft.source_analyte_text}
+                  </h3>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {draft.source_value_text}
                     {draft.source_unit_text ? ` ${draft.source_unit_text}` : ""}
@@ -360,7 +443,8 @@ export default function LabDrafts() {
                 </span>
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
-                Источников: {draft.sources.length}. Обновлено {new Date(draft.updated_at).toLocaleString("ru-RU")}.
+                Источников: {draft.sources.length}. Обновлено{" "}
+                {new Date(draft.updated_at).toLocaleString("ru-RU")}.
               </p>
               {draft.status === "draft" && (
                 <button
@@ -373,6 +457,21 @@ export default function LabDrafts() {
                   Готово к отдельному подтверждению
                 </button>
               )}
+              {draft.status === "ready" && (
+                <Link
+                  to={`/app/documents/${documentId}/labs/${draft.id}/confirm`}
+                  className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Проверить и подтвердить запись
+                </Link>
+              )}
+              {draft.status === "confirmed" &&
+                draft.confirmed_observation_id && (
+                  <p className="mt-4 text-sm text-success">
+                    Создана неизменяемая подтверждённая запись.
+                  </p>
+                )}
             </article>
           ))
         )}
