@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import desc, select
+from sqlalchemy import desc, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -26,6 +27,8 @@ from app.storage.documents import (
     EncryptedLocalDocumentStorage,
 )
 from app.storage.encrypted_objects import DocumentKeyring
+
+ENCRYPTED_OBJECT_QUOTA_OVERHEAD = 1024
 
 
 async def document_capabilities(
@@ -56,6 +59,58 @@ def _storage() -> EncryptedLocalDocumentStorage:
             settings.document_encryption_active_key_id,
         ),
         min_free_bytes=settings.document_min_free_bytes,
+    )
+
+
+def _upload_size(upload: UploadFile) -> int:
+    handle = upload.file
+    handle.seek(0, os.SEEK_END)
+    size = handle.tell()
+    handle.seek(0)
+    return size
+
+
+async def _reserve_upload_quota(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+    plaintext_size: int,
+) -> None:
+    result = await session.execute(
+        text(
+            """
+            SELECT health_compass.app_reserve_document_upload(
+              :profile_id, :additional_bytes, :profile_max_bytes,
+              :global_max_bytes, :profile_max_documents,
+              :profile_max_queued_jobs
+            )
+            """
+        ),
+        {
+            "profile_id": profile_id,
+            "additional_bytes": plaintext_size + ENCRYPTED_OBJECT_QUOTA_OVERHEAD,
+            "profile_max_bytes": settings.document_profile_max_bytes,
+            "global_max_bytes": settings.document_global_max_bytes,
+            "profile_max_documents": settings.document_profile_max_documents,
+            "profile_max_queued_jobs": settings.document_profile_max_queued_jobs,
+        },
+    )
+    payload = result.scalar_one()
+    if payload.get("allowed") is True:
+        return
+
+    code = str(payload.get("code") or "document_quota_exceeded")
+    if code == "profile_document_queue_full":
+        status_code = status.HTTP_429_TOO_MANY_REQUESTS
+        message = "Слишком много документов уже ожидают обработки."
+    elif code == "global_document_quota_exceeded":
+        status_code = status.HTTP_507_INSUFFICIENT_STORAGE
+        message = "Хранилище документов временно достигло общего лимита."
+    else:
+        status_code = status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+        message = "Для этого профиля достигнут лимит хранения документов."
+    raise HTTPException(
+        status_code=status_code,
+        detail={"error": {"code": code, "message": message}},
     )
 
 
@@ -115,6 +170,29 @@ async def create_document(
     await require_profile_edit_access(session, profile_id)
     await require_health_data_consent(session, current_user.id)
 
+    source_size = _upload_size(upload)
+    if source_size < 1:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": {
+                    "code": "empty_document",
+                    "message": "Файл пуст.",
+                }
+            },
+        )
+    if source_size > settings.document_max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail={
+                "error": {
+                    "code": "document_too_large",
+                    "message": "Файл превышает допустимый размер.",
+                }
+            },
+        )
+    await _reserve_upload_quota(session, profile_id, source_size)
+
     document_id = uuid.uuid4()
     storage = _storage()
     stored = None
@@ -144,9 +222,11 @@ async def create_document(
             sha256=stored.sha256,
             storage_backend=storage.backend_name,
             quarantine_storage_key=stored.storage_key,
+            current_storage_key=stored.storage_key,
             encryption_format=stored.encryption_format,
             encryption_key_id=stored.encryption_key_id,
             scanner_status="not_scanned",
+            render_status="not_started",
             page_count=stored.page_count,
         )
         session.add(document)
