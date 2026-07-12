@@ -101,7 +101,7 @@ def test_valid_png_is_structurally_verified() -> None:
 
 def test_png_crc_and_metadata_are_rejected() -> None:
     corrupted = bytearray(_png())
-    corrupted[-5] ^= 0x01
+    corrupted[-1] ^= 0x01
     descriptor = _descriptor(bytes(corrupted))
     try:
         with pytest.raises(InvalidRenderedImageError, match="CRC"):
