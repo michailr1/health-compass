@@ -44,9 +44,21 @@ function uploadErrorMessage(error: unknown): string {
     if (error.status === 413) {
       return "Файл превышает безопасный лимит размера или разрешения.";
     }
+    if (error.status === 503) {
+      return "Загрузка документов пока отключена.";
+    }
     return error.message;
   }
   return "Не удалось загрузить документ.";
+}
+
+function mediaTypeLabel(mediaType: string): string {
+  const labels: Record<string, string> = {
+    "application/pdf": "PDF",
+    "image/jpeg": "JPEG",
+    "image/png": "PNG",
+  };
+  return labels[mediaType] ?? "Файл";
 }
 
 export default function Documents() {
@@ -60,9 +72,10 @@ export default function Documents() {
   });
   const profile = profiles?.[0] ?? null;
 
-  const { data: capabilities } = useQuery({
-    queryKey: ["document-intake-capabilities"],
-    queryFn: getDocumentIntakeCapabilities,
+  const { data: capabilities, isLoading: capabilitiesLoading } = useQuery({
+    queryKey: ["document-intake-capabilities", profile?.id],
+    queryFn: () => getDocumentIntakeCapabilities(profile!.id),
+    enabled: Boolean(profile),
   });
 
   const { data: documents, isLoading: documentsLoading } = useQuery({
@@ -126,12 +139,13 @@ export default function Documents() {
               просмотра, пока находится в карантине.
             </p>
 
-            {!capabilities?.upload_enabled && (
+            {!capabilitiesLoading && capabilities && !capabilities.upload_enabled && (
               <div className="mt-4 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
-                  Загрузка пока отключена: текущий срез проверяет только безопасный intake
-                  foundation. OCR и production-хранилище подключаются отдельно.
+                  Загрузка для этого профиля сейчас недоступна. На текущем этапе готова
+                  только основа безопасного приёма файлов; распознавание и производственное
+                  хранилище подключаются отдельно.
                 </span>
               </div>
             )}
@@ -178,7 +192,8 @@ export default function Documents() {
           <div>
             <h2 className="font-display text-lg font-semibold">Загруженные документы</h2>
             <p className="text-sm text-muted-foreground">
-              На этом этапе доступны только metadata и статус карантина — без preview и OCR.
+              На этом этапе доступны только метаданные и статус карантина — без просмотра
+              исходника и распознавания.
             </p>
           </div>
           <LockKeyhole className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
@@ -199,7 +214,7 @@ export default function Documents() {
             <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
             <p className="mt-3 font-medium">Документов пока нет</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              После включения тестового intake загруженный файл появится здесь со статусом
+              После включения тестовой загрузки файл появится здесь со статусом
               «В карантине».
             </p>
           </div>
@@ -216,7 +231,7 @@ export default function Documents() {
                   <div className="min-w-0">
                     <h3 className="truncate font-medium">{document.original_filename}</h3>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {formatDocumentSize(document.byte_size)} · {document.detected_media_type}
+                      {formatDocumentSize(document.byte_size)} · {mediaTypeLabel(document.detected_media_type)}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Загружен {new Date(document.created_at).toLocaleString("ru-RU")}
