@@ -21,9 +21,9 @@ from app.services.health_profile import (
     require_profile_edit_access,
 )
 from app.storage.documents import (
+    SUPPORTED_MEDIA_TYPES,
     DocumentValidationError,
     LocalDocumentStorage,
-    SUPPORTED_MEDIA_TYPES,
 )
 
 
