@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     account_link_cookie_name: str = "hc_account_link"
 
     # HC-017 stays disabled outside development until encrypted storage,
-    # scanner, rendering and deployment controls are independently approved.
+    # scanner, rendering, OCR and deployment controls are independently approved.
     document_upload_enabled: bool = False
     document_storage_backend: str = "local_encrypted"
     document_storage_root: str = "/tmp/health-compass-documents"
@@ -97,6 +97,23 @@ class Settings(BaseSettings):
     document_orphan_grace_seconds: int = 60 * 60
     document_orphan_delete_seconds: int = 7 * 24 * 60 * 60
 
+    # Local OCR worker. It consumes only authenticated safe-page PNG artifacts.
+    document_ocr_database_url: str = ""
+    document_tesseract_path: str = "/usr/bin/tesseract"
+    document_tessdata_directory: str = "/usr/share/tesseract-ocr/5/tessdata"
+    document_ocr_language_spec: str = "rus+eng"
+    document_ocr_psm: int = 6
+    document_ocr_timeout_seconds: int = 30
+    document_ocr_cpu_seconds: int = 20
+    document_ocr_memory_bytes: int = 512 * 1024 * 1024
+    document_ocr_max_output_bytes: int = 10 * 1024 * 1024
+    document_ocr_max_rows: int = 100_000
+    document_ocr_max_candidates: int = 5_000
+    document_ocr_max_candidate_chars: int = 4_000
+    document_ocr_max_candidate_words: int = 200
+    document_ocr_lease_seconds: int = 300
+    document_ocr_max_attempts: int = 3
+
     allow_dev_auth: bool = False
     cors_origins: list[str] = ["https://health.funti.cc"]
 
@@ -119,7 +136,7 @@ class Settings(BaseSettings):
             raise ValueError("ACCOUNT_LINK_INTENT_TTL_SECONDS must be between 60 and 1800")
         if self.document_storage_backend.strip().lower() != "local_encrypted":
             raise ValueError(
-                "DOCUMENT_STORAGE_BACKEND must be 'local_encrypted' in HC-017 Slice C"
+                "DOCUMENT_STORAGE_BACKEND must be 'local_encrypted' in HC-017"
             )
         if not self.document_storage_root.strip():
             raise ValueError("DOCUMENT_STORAGE_ROOT must not be empty")
@@ -162,9 +179,11 @@ class Settings(BaseSettings):
             ("DOCUMENT_PDFINFO_PATH", self.document_pdfinfo_path),
             ("DOCUMENT_PDFTOCAIRO_PATH", self.document_pdftocairo_path),
             ("DOCUMENT_MAGICK_PATH", self.document_magick_path),
+            ("DOCUMENT_TESSERACT_PATH", self.document_tesseract_path),
+            ("DOCUMENT_TESSDATA_DIRECTORY", self.document_tessdata_directory),
         ):
             if not value.strip().startswith("/"):
-                raise ValueError(f"{field_name} must be an absolute executable path")
+                raise ValueError(f"{field_name} must be an absolute path")
         if not 1 <= self.document_render_timeout_seconds <= 300:
             raise ValueError("DOCUMENT_RENDER_TIMEOUT_SECONDS must be between 1 and 300")
         if not 1 <= self.document_render_cpu_seconds <= 120:
@@ -191,12 +210,44 @@ class Settings(BaseSettings):
             raise ValueError(
                 "DOCUMENT_ORPHAN_DELETE_SECONDS must exceed DOCUMENT_ORPHAN_GRACE_SECONDS"
             )
+        if not self.document_ocr_language_spec or len(self.document_ocr_language_spec) > 64:
+            raise ValueError("DOCUMENT_OCR_LANGUAGE_SPEC is invalid")
+        if self.document_ocr_psm not in {3, 4, 6, 11, 12}:
+            raise ValueError("DOCUMENT_OCR_PSM must be one of 3, 4, 6, 11 or 12")
+        if not 1 <= self.document_ocr_timeout_seconds <= 300:
+            raise ValueError("DOCUMENT_OCR_TIMEOUT_SECONDS must be between 1 and 300")
+        if not 1 <= self.document_ocr_cpu_seconds <= 120:
+            raise ValueError("DOCUMENT_OCR_CPU_SECONDS must be between 1 and 120")
+        if not 64 * 1024 * 1024 <= self.document_ocr_memory_bytes <= 2 * 1024 * 1024 * 1024:
+            raise ValueError(
+                "DOCUMENT_OCR_MEMORY_BYTES must be between 67108864 and 2147483648"
+            )
+        if not 1024 <= self.document_ocr_max_output_bytes <= 50 * 1024 * 1024:
+            raise ValueError(
+                "DOCUMENT_OCR_MAX_OUTPUT_BYTES must be between 1024 and 52428800"
+            )
+        if not 1 <= self.document_ocr_max_rows <= 500_000:
+            raise ValueError("DOCUMENT_OCR_MAX_ROWS must be between 1 and 500000")
+        if not 1 <= self.document_ocr_max_candidates <= 5_000:
+            raise ValueError("DOCUMENT_OCR_MAX_CANDIDATES must be between 1 and 5000")
+        if not 1 <= self.document_ocr_max_candidate_chars <= 4_000:
+            raise ValueError(
+                "DOCUMENT_OCR_MAX_CANDIDATE_CHARS must be between 1 and 4000"
+            )
+        if not 1 <= self.document_ocr_max_candidate_words <= 200:
+            raise ValueError(
+                "DOCUMENT_OCR_MAX_CANDIDATE_WORDS must be between 1 and 200"
+            )
+        if not 30 <= self.document_ocr_lease_seconds <= 1800:
+            raise ValueError("DOCUMENT_OCR_LEASE_SECONDS must be between 30 and 1800")
+        if not 1 <= self.document_ocr_max_attempts <= 10:
+            raise ValueError("DOCUMENT_OCR_MAX_ATTEMPTS must be between 1 and 10")
         if not self.is_production:
             return
         if self.document_upload_enabled:
             raise ValueError(
                 "DOCUMENT_UPLOAD_ENABLED must remain false outside development "
-                "until scanner, renderer, reconciliation and rollout are approved"
+                "until scanner, renderer, OCR and rollout are approved"
             )
         if not self.database_url:
             raise ValueError("DATABASE_URL is required outside development")
