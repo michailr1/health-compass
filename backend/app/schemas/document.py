@@ -41,6 +41,14 @@ RenderStatus = Literal[
     "error",
 ]
 
+OCRStatus = Literal[
+    "not_started",
+    "queued",
+    "processing",
+    "review_required",
+    "error",
+]
+
 
 class DocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -50,6 +58,7 @@ class DocumentResponse(BaseModel):
     status: DocumentStatus
     scanner_status: ScannerStatus
     render_status: RenderStatus
+    ocr_status: OCRStatus
     original_filename: str
     declared_media_type: str
     detected_media_type: str
@@ -68,4 +77,4 @@ class DocumentIntakeCapabilities(BaseModel):
     max_image_pixels: int
     quarantine_only: Literal[True] = True
     preview_available: Literal[False] = False
-    ocr_available: Literal[False] = False
+    ocr_available: bool = False

@@ -85,6 +85,15 @@ class ProfileDocument(Base):
     render_completed_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    ocr_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="not_started"
+    )
+    current_ocr_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    ocr_completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     failure_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(

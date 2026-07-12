@@ -23,11 +23,27 @@ export type ScannerStatus =
   | "error"
   | "stale";
 
+export type RenderStatus =
+  | "not_started"
+  | "queued"
+  | "rendering"
+  | "ready"
+  | "error";
+
+export type OCRStatus =
+  | "not_started"
+  | "queued"
+  | "processing"
+  | "review_required"
+  | "error";
+
 export interface ProfileDocument {
   id: string;
   profile_id: string;
   status: DocumentStatus;
   scanner_status: ScannerStatus;
+  render_status: RenderStatus;
+  ocr_status: OCRStatus;
   original_filename: string;
   declared_media_type: string;
   detected_media_type: string;
@@ -46,7 +62,24 @@ export interface DocumentIntakeCapabilities {
   max_image_pixels: number;
   quarantine_only: true;
   preview_available: false;
-  ocr_available: false;
+  ocr_available: boolean;
+}
+
+export interface DocumentOCRStatus {
+  document_id: string;
+  profile_id: string;
+  status: OCRStatus;
+  run_id: string | null;
+  run_status: "queued" | "leased" | "succeeded" | "failed" | "cancelled" | null;
+  attempt: number | null;
+  language_spec: string | null;
+  psm: number | null;
+  engine_name: string | null;
+  engine_version: string | null;
+  candidate_count: number;
+  needs_review_count: number;
+  completed_at: string | null;
+  safe_error_code: string | null;
 }
 
 export const DOCUMENT_ACCEPT = ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png";
@@ -60,6 +93,15 @@ export function getDocumentIntakeCapabilities(
 ): Promise<DocumentIntakeCapabilities> {
   return apiGet<DocumentIntakeCapabilities>(
     `/profiles/${profileId}/document-intake/capabilities`,
+  );
+}
+
+export function getDocumentOCRStatus(
+  profileId: string,
+  documentId: string,
+): Promise<DocumentOCRStatus> {
+  return apiGet<DocumentOCRStatus>(
+    `/profiles/${profileId}/documents/${documentId}/ocr/status`,
   );
 }
 
@@ -125,6 +167,28 @@ export function scannerStatusLabel(status: ScannerStatus): string {
     infected: "Отклонён как небезопасный",
     error: "Проверка временно не завершена",
     stale: "Ожидает обновления проверки",
+  };
+  return labels[status];
+}
+
+export function renderStatusLabel(status: RenderStatus): string {
+  const labels: Record<RenderStatus, string> = {
+    not_started: "Ожидает подготовки",
+    queued: "В очереди на подготовку",
+    rendering: "Готовятся безопасные страницы",
+    ready: "Безопасные страницы готовы",
+    error: "Не удалось подготовить страницы",
+  };
+  return labels[status];
+}
+
+export function ocrStatusLabel(status: OCRStatus): string {
+  const labels: Record<OCRStatus, string> = {
+    not_started: "Распознавание не начато",
+    queued: "В очереди на распознавание",
+    processing: "Распознаётся",
+    review_required: "Текст нужно проверить",
+    error: "Распознавание не завершено",
   };
   return labels[status];
 }

@@ -47,6 +47,23 @@ RENDERER_FUNCTIONS = (
     ),
 )
 
+OCR_FUNCTIONS = (
+    "app_claim_document_ocr_run(text, integer, integer)",
+    "app_heartbeat_document_ocr_run(uuid, text, timestamp with time zone, integer)",
+    (
+        "app_complete_document_ocr_run(uuid, text, timestamp with time zone, text, text, "
+        "text, text, jsonb, jsonb, uuid)"
+    ),
+    (
+        "app_fail_document_ocr_run(uuid, text, timestamp with time zone, text, boolean, "
+        "integer, integer, uuid)"
+    ),
+)
+
+RENDERER_OCR_FUNCTIONS = (
+    "app_queue_document_ocr(uuid, uuid, uuid, text, text, text, integer)",
+)
+
 RECONCILER_FUNCTIONS = (
     "app_list_document_storage_references()",
     "app_mark_document_object_missing(text, text, uuid)",
@@ -54,6 +71,7 @@ RECONCILER_FUNCTIONS = (
 
 APP_DOCUMENT_FUNCTIONS = (
     "app_reserve_document_upload(uuid, bigint, bigint, bigint, integer, integer)",
+    "app_can_review_document_ocr(uuid)",
 )
 
 DEFINER_FUNCTIONS = (
@@ -68,6 +86,8 @@ DEFINER_FUNCTIONS = (
     "app_consume_email_login_token(text)",
     *SCANNER_FUNCTIONS,
     *RENDERER_FUNCTIONS,
+    *OCR_FUNCTIONS,
+    *RENDERER_OCR_FUNCTIONS,
     *RECONCILER_FUNCTIONS,
     *APP_DOCUMENT_FUNCTIONS,
 )
@@ -92,6 +112,9 @@ FORCE_RLS_TABLES = (
     "profile_documents",
     "document_processing_jobs",
     "document_artifacts",
+    "document_ocr_runs",
+    "document_ocr_artifacts",
+    "document_ocr_candidates",
 )
 
 CANONICAL_TABLES = (
@@ -105,12 +128,16 @@ DOCUMENT_TABLES = (
     "profile_documents",
     "document_processing_jobs",
     "document_artifacts",
+    "document_ocr_runs",
+    "document_ocr_artifacts",
+    "document_ocr_candidates",
 )
 
 WORKER_ROLES = (
     "health_compass_worker",
     "health_compass_renderer",
     "health_compass_reconciler",
+    "health_compass_ocr_worker",
 )
 
 
@@ -229,21 +256,53 @@ def test_full_migration_cycle_restores_all_security_invariants() -> None:
 
                 for signature in SCANNER_FUNCTIONS:
                     assert _has_execute(conn, "health_compass_worker", signature) is True
-                    assert _has_execute(conn, "health_compass_app", signature) is False
-                    assert _has_execute(conn, "health_compass_renderer", signature) is False
-                    assert _has_execute(conn, "health_compass_reconciler", signature) is False
+                    for role in (
+                        "health_compass_app",
+                        "health_compass_renderer",
+                        "health_compass_reconciler",
+                        "health_compass_ocr_worker",
+                    ):
+                        assert _has_execute(conn, role, signature) is False
 
                 for signature in RENDERER_FUNCTIONS:
                     assert _has_execute(conn, "health_compass_renderer", signature) is True
-                    assert _has_execute(conn, "health_compass_app", signature) is False
-                    assert _has_execute(conn, "health_compass_worker", signature) is False
-                    assert _has_execute(conn, "health_compass_reconciler", signature) is False
+                    for role in (
+                        "health_compass_app",
+                        "health_compass_worker",
+                        "health_compass_reconciler",
+                        "health_compass_ocr_worker",
+                    ):
+                        assert _has_execute(conn, role, signature) is False
+
+                for signature in OCR_FUNCTIONS:
+                    assert _has_execute(conn, "health_compass_ocr_worker", signature) is True
+                    for role in (
+                        "health_compass_app",
+                        "health_compass_worker",
+                        "health_compass_renderer",
+                        "health_compass_reconciler",
+                    ):
+                        assert _has_execute(conn, role, signature) is False
+
+                for signature in RENDERER_OCR_FUNCTIONS:
+                    assert _has_execute(conn, "health_compass_renderer", signature) is True
+                    for role in (
+                        "health_compass_app",
+                        "health_compass_worker",
+                        "health_compass_reconciler",
+                        "health_compass_ocr_worker",
+                    ):
+                        assert _has_execute(conn, role, signature) is False
 
                 for signature in RECONCILER_FUNCTIONS:
                     assert _has_execute(conn, "health_compass_reconciler", signature) is True
-                    assert _has_execute(conn, "health_compass_app", signature) is False
-                    assert _has_execute(conn, "health_compass_worker", signature) is False
-                    assert _has_execute(conn, "health_compass_renderer", signature) is False
+                    for role in (
+                        "health_compass_app",
+                        "health_compass_worker",
+                        "health_compass_renderer",
+                        "health_compass_ocr_worker",
+                    ):
+                        assert _has_execute(conn, role, signature) is False
 
                 for signature in APP_DOCUMENT_FUNCTIONS:
                     assert _has_execute(conn, "health_compass_app", signature) is True
@@ -278,11 +337,11 @@ def test_full_migration_cycle_restores_all_security_invariants() -> None:
 
                 artifact_mutation_grants = conn.execute(
                     text(
-                        "SELECT privilege_type "
+                        "SELECT table_name, privilege_type "
                         "FROM information_schema.role_table_grants "
                         "WHERE grantee = 'health_compass_app' "
                         "AND table_schema = 'health_compass' "
-                        "AND table_name = 'document_artifacts' "
+                        "AND table_name IN ('document_artifacts', 'document_ocr_artifacts') "
                         "AND privilege_type IN ('INSERT', 'UPDATE', 'DELETE')"
                     )
                 ).all()
