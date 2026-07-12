@@ -62,7 +62,9 @@ def _read_exact(connection: socket.socket, count: int) -> bytes:
 def _read_null_command(connection: socket.socket) -> bytes:
     data = bytearray()
     while not data.endswith(b"\x00"):
-        chunk = connection.recv(128)
+        # Read exactly through the command terminator. A larger recv() may also
+        # consume the first INSTREAM frame because Unix sockets are streams.
+        chunk = connection.recv(1)
         if not chunk:
             break
         data.extend(chunk)
