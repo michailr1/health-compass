@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
+import hashlib
 import json
 import os
 import socket
@@ -150,6 +151,26 @@ class DocumentRendererWorker:
             for item in artifacts
         ]
 
+    @staticmethod
+    def _ocr_input_manifest(artifacts: list[StoredPageArtifact]) -> str:
+        manifest = [
+            {
+                "id": str(item.id),
+                "page_number": item.page_number,
+                "sha256": item.metadata.plaintext_sha256,
+                "width": item.width,
+                "height": item.height,
+            }
+            for item in sorted(artifacts, key=lambda value: value.page_number)
+        ]
+        encoded = json.dumps(
+            manifest,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("ascii")
+        return hashlib.sha256(encoded).hexdigest()
+
     def _complete(
         self,
         job: ClaimedRenderJob,
@@ -158,7 +179,10 @@ class DocumentRendererWorker:
         accepted_key: str,
         accepted_metadata: EncryptedObjectMetadata,
         artifacts: list[StoredPageArtifact],
+        ocr_run_id: uuid.UUID,
     ) -> None:
+        artifact_payload = self._artifact_payload(artifacts)
+        input_manifest = self._ocr_input_manifest(artifacts)
         with self._connect() as connection:
             row = connection.execute(
                 """
@@ -179,12 +203,31 @@ class DocumentRendererWorker:
                     len(artifacts),
                     "hc-safe-renderer",
                     "1",
-                    json.dumps(self._artifact_payload(artifacts)),
+                    json.dumps(artifact_payload),
                     uuid.uuid4(),
                 ),
             ).fetchone()
             if row is None or row["completed"] is not True:
                 raise RuntimeError("Document render completion was not confirmed")
+            queued = connection.execute(
+                """
+                SELECT health_compass.app_queue_document_ocr(
+                  %s, %s, %s, %s, %s, %s, %s
+                ) AS queued
+                """,
+                (
+                    job.document_id,
+                    run_id,
+                    ocr_run_id,
+                    f"ocr:{job.document_id}:{run_id}:{settings.document_ocr_language_spec}:"
+                    f"{settings.document_ocr_psm}",
+                    input_manifest,
+                    settings.document_ocr_language_spec,
+                    settings.document_ocr_psm,
+                ),
+            ).fetchone()
+            if queued is None or queued["queued"] is not True:
+                raise RuntimeError("Document OCR queue was not confirmed")
 
     def _fail(
         self,
@@ -270,6 +313,7 @@ class DocumentRendererWorker:
             return True
 
         run_id = uuid.uuid4()
+        ocr_run_id = uuid.uuid4()
         created_keys: list[str] = []
         completed = False
         try:
@@ -283,8 +327,6 @@ class DocumentRendererWorker:
             ) as verified_descriptor:
                 artifacts: list[StoredPageArtifact] = []
                 for page_number in self._page_numbers(job, verified_descriptor):
-                    # Renew before each parser invocation so any later failure is
-                    # reported with the current lease value.
                     job = self.heartbeat(job)
                     rendered = self._render_page(job, verified_descriptor, page_number)
                     try:
@@ -315,12 +357,10 @@ class DocumentRendererWorker:
                     accepted_key=accepted_key,
                     accepted_metadata=accepted_metadata,
                     artifacts=artifacts,
+                    ocr_run_id=ocr_run_id,
                 )
                 completed = True
         except psycopg.DatabaseError as exc:
-            # HC409/HC422 prove that completion was rejected. Connection errors
-            # are ambiguous: leave staged objects for reconciliation rather than
-            # deleting data that may already be committed.
             if exc.sqlstate in {"HC409", "HC422"}:
                 self._delete_created_keys(created_keys)
             raise
@@ -336,9 +376,6 @@ class DocumentRendererWorker:
             return True
 
         if completed:
-            # The database already points at accepted/artifact objects. Failure
-            # to remove the old quarantine copy must never roll back committed
-            # data; reconciliation will isolate it after the grace period.
             try:
                 self.storage.delete_key(job.source_storage_key)
             except OSError:
