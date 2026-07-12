@@ -17,7 +17,7 @@ from starlette.types import Message, Receive, Scope, Send
 MULTIPART_OVERHEAD_BYTES = 1024 * 1024
 
 
-class _DocumentRequestTooLarge(Exception):
+class _DocumentRequestTooLargeError(Exception):
     pass
 
 
@@ -71,12 +71,12 @@ class DocumentUploadLimitMiddleware:
                 body = message.get("body", b"")
                 received += len(body)
                 if received > self.max_body_bytes:
-                    raise _DocumentRequestTooLarge
+                    raise _DocumentRequestTooLargeError
             return message
 
         try:
             await self.app(scope, limited_receive, send)
-        except _DocumentRequestTooLarge:
+        except _DocumentRequestTooLargeError:
             await self._reject(scope, receive, send)
 
     async def _reject(self, scope: Scope, receive: Receive, send: Send) -> None:
