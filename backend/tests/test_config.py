@@ -21,6 +21,7 @@ def production_settings(**overrides: object) -> Settings:
         "smtp_from_email": "health@example.com",
         "allow_dev_auth": False,
         "account_linking_enabled": True,
+        "document_upload_enabled": False,
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)
@@ -78,3 +79,42 @@ def test_development_allows_disabled_account_linking() -> None:
     Settings(
         _env_file=None, environment="development", account_linking_enabled=False
     ).validate_production()
+
+
+def test_document_intake_defaults_to_disabled() -> None:
+    settings = Settings(_env_file=None)
+    assert settings.document_upload_enabled is False
+    assert settings.document_storage_backend == "local"
+    assert settings.document_max_bytes == 20 * 1024 * 1024
+    assert settings.document_max_image_pixels == 25_000_000
+
+
+def test_production_rejects_document_upload_enablement() -> None:
+    with pytest.raises(ValueError, match="DOCUMENT_UPLOAD_ENABLED"):
+        production_settings(document_upload_enabled=True).validate_production()
+
+
+def test_development_allows_explicit_document_upload_enablement() -> None:
+    Settings(
+        _env_file=None,
+        environment="development",
+        document_upload_enabled=True,
+    ).validate_production()
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("document_storage_backend", "s3", "DOCUMENT_STORAGE_BACKEND"),
+        ("document_storage_root", "", "DOCUMENT_STORAGE_ROOT"),
+        ("document_max_bytes", 20 * 1024 * 1024 + 1, "DOCUMENT_MAX_BYTES"),
+        ("document_max_image_pixels", 25_000_001, "DOCUMENT_MAX_IMAGE_PIXELS"),
+    ],
+)
+def test_document_intake_rejects_unsupported_slice_b_configuration(
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        Settings(_env_file=None, **{field: value}).validate_production()

@@ -51,6 +51,15 @@ class Settings(BaseSettings):
     account_link_intent_ttl_seconds: int = 10 * 60
     account_link_cookie_name: str = "hc_account_link"
 
+    # HC-017 Slice B is intentionally disabled by default and cannot be enabled
+    # outside development until the scanner and production object-storage slice
+    # is implemented and separately reviewed.
+    document_upload_enabled: bool = False
+    document_storage_backend: str = "local"
+    document_storage_root: str = "/tmp/health-compass-documents"
+    document_max_bytes: int = 20 * 1024 * 1024
+    document_max_image_pixels: int = 25_000_000
+
     allow_dev_auth: bool = False
     cors_origins: list[str] = ["https://health.funti.cc"]
 
@@ -71,8 +80,26 @@ class Settings(BaseSettings):
             raise ValueError("ALLOW_DEV_AUTH must be false outside development")
         if self.account_link_intent_ttl_seconds < 60 or self.account_link_intent_ttl_seconds > 1800:
             raise ValueError("ACCOUNT_LINK_INTENT_TTL_SECONDS must be between 60 and 1800")
+        if self.document_storage_backend.strip().lower() != "local":
+            raise ValueError("DOCUMENT_STORAGE_BACKEND must be 'local' in HC-017 Slice B")
+        if not self.document_storage_root.strip():
+            raise ValueError("DOCUMENT_STORAGE_ROOT must not be empty")
+        if self.document_max_bytes < 1 or self.document_max_bytes > 20 * 1024 * 1024:
+            raise ValueError("DOCUMENT_MAX_BYTES must be between 1 and 20971520")
+        if (
+            self.document_max_image_pixels < 1
+            or self.document_max_image_pixels > 25_000_000
+        ):
+            raise ValueError(
+                "DOCUMENT_MAX_IMAGE_PIXELS must be between 1 and 25000000"
+            )
         if not self.is_production:
             return
+        if self.document_upload_enabled:
+            raise ValueError(
+                "DOCUMENT_UPLOAD_ENABLED must remain false outside development "
+                "until scanner and private object-storage readiness are reviewed"
+            )
         if not self.database_url:
             raise ValueError("DATABASE_URL is required outside development")
         if "changeme" in self.database_url.lower():

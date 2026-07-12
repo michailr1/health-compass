@@ -32,7 +32,14 @@ jobs:
       - name: Compile
         run: python -m compileall -q app tests alembic
       - name: Ruff
-        run: ruff check app tests alembic
+        id: backend_ruff
+        shell: bash
+        run: |
+          set -o pipefail
+          ruff check app tests alembic > backend-ruff.log 2>&1 || {
+            cat backend-ruff.log
+            exit 1
+          }
       - name: Unit tests
         id: backend_tests
         shell: bash
@@ -43,13 +50,19 @@ jobs:
             cat backend-failure-tail.log
             exit 1
           }
-      - name: Upload backend failure tail
-        if: failure() && steps.backend_tests.outcome == 'failure'
+      - name: Upload backend failure diagnostics
+        if: >-
+          failure() && (
+            steps.backend_ruff.outcome == 'failure' ||
+            steps.backend_tests.outcome == 'failure'
+          )
         uses: actions/upload-artifact@v4
         with:
-          name: backend-failure-tail
-          path: backend/backend-failure-tail.log
-          if-no-files-found: error
+          name: backend-failure-diagnostics
+          path: |
+            backend/backend-ruff.log
+            backend/backend-failure-tail.log
+          if-no-files-found: ignore
           retention-days: 3
 
   migrations:

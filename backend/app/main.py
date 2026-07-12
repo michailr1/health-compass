@@ -9,6 +9,10 @@ from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
 from app.core.config import settings
+from app.core.document_upload_limit import (
+    MULTIPART_OVERHEAD_BYTES,
+    DocumentUploadLimitMiddleware,
+)
 from app.core.logging import configure_logging, get_logger, redacted_url
 from app.core.request_id import RequestIDMiddleware
 from app.schemas.errors import ErrorDetail, ErrorResponse
@@ -41,7 +45,12 @@ app = FastAPI(
     openapi_url="/openapi.json" if not settings.is_production else None,
 )
 
-# Middleware
+# Middleware. DocumentUploadLimitMiddleware is added first so Starlette wraps it
+# inside RequestIDMiddleware; rejected uploads retain the standard request ID.
+app.add_middleware(
+    DocumentUploadLimitMiddleware,
+    max_body_bytes=settings.document_max_bytes + MULTIPART_OVERHEAD_BYTES,
+)
 app.add_middleware(RequestIDMiddleware)
 
 # Routes

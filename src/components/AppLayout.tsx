@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Database,
   Dna,
+  FileText,
   HeartPulse,
   History,
   KeyRound,
@@ -18,6 +19,7 @@ import { apiGet, type HealthProfile } from "@/lib/api";
 
 const nav = [
   { to: "/app", label: "Дашборд", icon: LayoutDashboard, end: true },
+  { to: "/app/documents", label: "Документы", icon: FileText },
   { to: "/app/oura", label: "Oura", icon: Activity },
   { to: "/app/genetics", label: "Генетика", icon: Dna },
   { to: "/app/plan", label: "План", icon: ListChecks },
@@ -146,7 +148,7 @@ export default function AppLayout() {
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 backdrop-blur md:hidden">
-        <ul className="mx-auto grid max-w-lg grid-cols-6">
+        <ul className="mx-auto grid max-w-lg grid-cols-7">
           {nav.map((item) => (
             <li key={item.to}>
               <NavLink

@@ -11,6 +11,7 @@ from app.api.routes.clinical_dictionary import router as clinical_dictionary_rou
 from app.api.routes.clinical_erasure import router as clinical_erasure_router
 from app.api.routes.clinical_review import router as clinical_review_router
 from app.api.routes.contextual_intake import router as contextual_intake_router
+from app.api.routes.documents import router as documents_router
 from app.api.routes.duplicate_resolution import router as duplicate_resolution_router
 from app.api.routes.email_auth import router as email_auth_router
 from app.api.routes.health import router as health_router
@@ -32,6 +33,7 @@ api_router.include_router(health_profile_router)
 api_router.include_router(profile_completion_router)
 api_router.include_router(clinical_dictionary_router)
 api_router.include_router(contextual_intake_router)
+api_router.include_router(documents_router)
 # Summary/review-state and section create routes are owned by
 # clinical_review_router; clinical_context_router owns list/update/void and
 # safety flags; clinical_erasure_router owns DELETE routes. The routers never
