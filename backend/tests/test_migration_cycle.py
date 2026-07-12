@@ -1,15 +1,8 @@
-"""HC-015 Slice E: full migration cycle in an isolated database (CR-13).
+"""HC-015+ full migration cycle in an isolated database.
 
 Runs ``upgrade head → downgrade base → upgrade head`` against a dedicated
 throwaway database (never the shared test DB, never production) and asserts
-the security-critical invariants after the second upgrade:
-
-- exactly one Alembic head, and the DB revision matches it;
-- downgrade base leaves nothing behind except ``alembic_version``;
-- expected SECURITY DEFINER functions exist and are owned by the definer role;
-- no PUBLIC EXECUTE on sensitive definer functions;
-- tenant tables keep ENABLE + FORCE ROW LEVEL SECURITY;
-- the runtime role has no direct UPDATE grant on derived canonical columns.
+security-critical invariants after the second upgrade.
 """
 
 from __future__ import annotations
@@ -30,10 +23,12 @@ CYCLE_DB = "health_compass_cycle_test"
 
 DEFINER_FUNCTIONS = (
     "app_duplicate_user_activity(uuid)",
+    "app_duplicate_user_activity_pre_documents(uuid)",
     "app_assess_duplicate_user_pair(uuid, uuid)",
     "app_apply_duplicate_absorption(uuid)",
     "app_can_edit_profile(uuid)",
     "app_can_view_profile(uuid)",
+    "app_can_view_document(uuid)",
     "app_lookup_identity_user_id(text, text)",
     "app_consume_email_login_token(text)",
 )
@@ -55,6 +50,8 @@ FORCE_RLS_TABLES = (
     "profile_clinical_safety_flags",
     "profile_clinical_reviews",
     "profile_intake_decisions",
+    "profile_documents",
+    "document_processing_jobs",
 )
 
 CANONICAL_TABLES = (
@@ -62,6 +59,11 @@ CANONICAL_TABLES = (
     "profile_allergies",
     "profile_medications",
     "profile_supplements",
+)
+
+DOCUMENT_TABLES = (
+    "profile_documents",
+    "document_processing_jobs",
 )
 
 
@@ -201,6 +203,19 @@ def test_full_migration_cycle_restores_all_security_invariants() -> None:
                     ).scalar_one()
                     assert direct_update == 0, table
 
+                document_mutation_grants = conn.execute(
+                    text(
+                        "SELECT table_name, privilege_type "
+                        "FROM information_schema.role_table_grants "
+                        "WHERE grantee = 'health_compass_app' "
+                        "AND table_schema = 'health_compass' "
+                        "AND table_name = ANY(:tables) "
+                        "AND privilege_type IN ('UPDATE', 'DELETE')"
+                    ),
+                    {"tables": list(DOCUMENT_TABLES)},
+                ).all()
+                assert document_mutation_grants == []
+
                 users_update_columns = {
                     row[0]
                     for row in conn.execute(
@@ -219,11 +234,13 @@ def test_full_migration_cycle_restores_all_security_invariants() -> None:
                         "SELECT count(*) FROM information_schema.role_table_grants "
                         "WHERE grantee = 'health_compass_rls_definer' "
                         "AND table_schema = 'health_compass' "
-                        "AND table_name IN ('profile_clinical_reviews', 'profile_intake_decisions') "
+                        "AND table_name IN ("
+                        "'profile_clinical_reviews', 'profile_intake_decisions', "
+                        "'profile_documents') "
                         "AND privilege_type = 'SELECT'"
                     )
                 ).scalar_one()
-                assert definer_grants == 2
+                assert definer_grants == 3
         finally:
             engine.dispose()
     finally:
