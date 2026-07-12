@@ -172,7 +172,13 @@ class UpdateLabDraftRequest(BaseModel):
     fields: LabDraftFields
 
 
-class SetLabDraftSourcesRequest(BaseModel):
+class LabDraftContextVersions(BaseModel):
+    expected_document_updated_at: datetime.datetime
+    expected_review_finalized_at: datetime.datetime
+    expected_patient_decision_updated_at: datetime.datetime
+
+
+class SetLabDraftSourcesRequest(LabDraftContextVersions):
     expected_updated_at: datetime.datetime
     sources: list[LabDraftSourceVersion] = Field(min_length=1, max_length=100)
 
@@ -184,6 +190,6 @@ class SetLabDraftSourcesRequest(BaseModel):
         return self
 
 
-class SetLabDraftStatusRequest(BaseModel):
+class SetLabDraftStatusRequest(LabDraftContextVersions):
     status: Literal["ready", "rejected"]
     expected_updated_at: datetime.datetime
