@@ -1,12 +1,12 @@
 # Health Compass — канонический план проекта
 
-Версия: 2.1  
+Версия: 2.2  
 Дата: 2026-07-12  
 Основная ветка: `main`
 
 ## 1. Product goal
 
-Create a secure multi-user personal-health portal that combines profile data, clinical context, documents, laboratory results, wearable sources and an evidence-grounded AI assistant.
+Create a secure multi-user personal-health portal combining profile data, clinical context, documents, laboratory results, wearable sources and an evidence-grounded AI assistant.
 
 ## 2. Source priority
 
@@ -29,8 +29,8 @@ Create a secure multi-user personal-health portal that combines profile data, cl
 - Human and Pet contours remain separated.
 - Production rollout is backup-first and exact-SHA.
 - Destructive actions use least privilege and optimistic concurrency.
-- Documents are untrusted until quarantine, malware scanning and safe rendering succeed.
-- Raw documents, OCR drafts and confirmed facts have different access boundaries.
+- Documents remain untrusted until quarantine, scanning and safe rendering succeed.
+- Raw documents, OCR drafts, reviewed transcription and confirmed facts have distinct access boundaries.
 - `DEFINED`, `IMPLEMENTED`, `MERGED`, `CI VERIFIED` and `DEPLOYED` are separate states.
 
 ## 4. Repository and production state
@@ -38,8 +38,8 @@ Create a secure multi-user personal-health portal that combines profile data, cl
 Repository:
 
 ```text
-main: ac9e21f3315c4624a845e633c2a90881d348ca30
-Alembic head: 0053
+main: a33c3d515b885c6ea0e8f51291a1d25bed77cd7d
+Alembic head: 0054
 ```
 
 Production:
@@ -54,9 +54,9 @@ DOCUMENT_UPLOAD_ENABLED=false
 Current verdict:
 
 ```text
-C1+C2 COMBINED REVIEW COMPLETE
-SLICE D ARCHITECTURE DEFINED
-SLICE D NOT IMPLEMENTED
+D1 IMPLEMENTED / MERGED / CI VERIFIED
+D1 NOT DEPLOYED
+D2 NEXT
 PRODUCTION UNCHANGED
 ```
 
@@ -147,14 +147,7 @@ CI: #414
 migration: 0051
 ```
 
-Implemented:
-
-- authenticated encrypted source objects;
-- hardened key/path boundary;
-- local ClamAV scanner;
-- restricted scanner role and lease functions;
-- retry/idempotency controls;
-- infected-document deletion lifecycle.
+Provides authenticated encryption, encrypted quarantine storage, local ClamAV and a restricted scanner worker.
 
 ### Slice C2 — Quotas, Reconciliation and Safe Rendering
 
@@ -167,21 +160,7 @@ CI: #433
 migrations: 0052–0053
 ```
 
-Implemented:
-
-- race-safe profile/global quotas;
-- canonical current source reference;
-- encrypted safe-page artifacts;
-- separate renderer and reconciler roles;
-- no direct worker table grants;
-- full GCM verification before parser access;
-- sealed memory-file input/output;
-- bounded fixed-command rendering;
-- strict PNG validation;
-- encrypted accepted source and derivatives;
-- atomic/idempotent accepted promotion;
-- orphan/missing-object reconciliation;
-- idempotent storage-missing audit.
+Provides quotas, encrypted safe-page artifacts, restricted renderer/reconciler roles, full GCM-before-parser verification, bounded rendering and storage reconciliation.
 
 Canonical evidence:
 
@@ -207,7 +186,7 @@ docs/reviews/HC-017-C1-C2-COMBINED-SECURITY-REVIEW-2026-07-12.md
 
 ### Slice D — OCR Candidates and Human Review
 
-Status: `ARCHITECTURE DEFINED / NEXT IMPLEMENTATION STAGE`.
+Status: `D1 MERGED / CI VERIFIED / NOT DEPLOYED; D2 NEXT`.
 
 Canonical contract:
 
@@ -215,60 +194,63 @@ Canonical contract:
 docs/implementation/HC-017-SLICE-D-OCR-CANDIDATES-AND-HUMAN-REVIEW.md
 ```
 
-Selected MVP architecture:
+#### D1 — Local OCR Candidate Extraction
 
-- local Tesseract 5.x;
-- LSTM engine `--oem 1`;
-- initial language set `rus+eng`;
-- TSV output with confidence and word coordinates;
-- OCR consumes only current C2 `safe_page` artifacts;
-- complete GCM verification before OCR;
-- sealed read-only input memfd;
-- bounded output memfd;
-- fixed command and language/model configuration;
-- separate OCR worker OS and PostgreSQL identities;
-- no direct OCR-worker table grants;
-- encrypted TSV provenance objects;
-- strict TSV parser;
-- text-block candidates start `needs_review`;
-- owner/edit-only candidate text;
-- separate explicit patient-match decision;
-- no automatic Clinical Context, measurement or Labs creation.
-
-#### D1 — OCR extraction foundation
-
-Status: `NEXT / NOT IMPLEMENTED`.
-
-Candidate migration:
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED` through PR `#56`.
 
 ```text
-0054
+verified head: dc28e9e220dd51264e6dab1244ce8d8696f501b2
+merge: a33c3d515b885c6ea0e8f51291a1d25bed77cd7d
+CI: #442
+migration: 0054
 ```
 
-Implementation order:
+Implemented:
 
-1. recheck current main, open PRs and Alembic heads;
-2. create separate D1 branch;
-3. define OCR run/artifact/candidate tables and FORCE RLS;
-4. provision OCR-worker role prerequisite and restricted functions;
-5. implement bounded Tesseract wrapper;
-6. implement strict TSV parser and candidate aggregation;
-7. encrypt TSV provenance before storage;
-8. add owner/edit-only candidate read API;
-9. add exact-head unit/PostgreSQL tests;
-10. perform independent D1 review before merge.
+- OCR run, encrypted provenance and candidate tables;
+- FORCE RLS and owner/edit-only candidate text;
+- dedicated OCR-worker role with no direct table grants;
+- renderer-only queue function and restricted worker functions;
+- bounded local Tesseract over authenticated safe-page PNG;
+- exact engine/language/traineddata provenance;
+- encrypted TSV artifacts;
+- strict parser and deterministic `needs_review` candidates;
+- OCR status and candidate-read API;
+- no automatic Clinical Context, measurement or Labs facts.
 
-#### D2 — Human review and patient matching
+Canonical evidence:
 
-Status: `PLANNED AFTER D1 REVIEW`.
+```text
+docs/implementation/HC-017-SLICE-D1-OCR-CANDIDATES-EVIDENCE-2026-07-12.md
+```
+
+#### D2 — Human Review and Patient Matching
+
+Status: `NEXT / NOT IMPLEMENTED / NOT DEPLOYED`.
+
+Required scope:
 
 - candidate accept/edit/reject/defer;
-- optimistic concurrency;
+- owner/edit authorization and current health-data consent;
+- optimistic concurrency with `expected_updated_at`;
 - explicit patient match/mismatch/not-present decision;
-- review finalization with candidate-manifest checks;
+- review finalization bound to an unchanged candidate manifest;
 - content-free audit;
-- accessible page-region review UI;
-- no Labs creation.
+- accessible page/candidate review UI;
+- no Clinical Context, measurement or Labs creation.
+
+D2 implementation order:
+
+1. recheck `main`, open PRs and Alembic heads;
+2. assign the next free migration;
+3. define restricted review and patient-decision functions first;
+4. implement service/API mutations without direct UPDATE grants;
+5. add candidate-manifest computation and finalization function;
+6. add accessible review UI;
+7. add stale-update, permission, consent and manifest-conflict tests;
+8. prove zero clinical/Labs creation;
+9. complete independent security review;
+10. keep production unchanged.
 
 #### Slice D stop conditions
 
@@ -276,14 +258,14 @@ Do not merge when:
 
 - OCR receives raw PDF or unauthenticated bytes;
 - arbitrary OCR command options are accepted;
-- output, memory, CPU or timeout is unbounded;
-- OCR text appears in logs;
+- OCR output, memory, CPU or timeout is unbounded;
+- OCR/review text appears in ordinary logs;
 - view/analyze can read candidate text;
 - OCR worker has direct table privileges;
 - candidates begin accepted;
+- review mutations lack optimistic concurrency;
 - patient matching is inferred automatically;
-- OCR creates clinical/Labs facts;
-- optimistic concurrency is absent;
+- D1/D2 creates clinical or Labs facts;
 - exact-head negative PostgreSQL tests are absent.
 
 ### Slice E — Confirmed Labs
@@ -324,7 +306,7 @@ Required readiness:
 - measured quotas and disk reserve;
 - exact-SHA CI;
 - backup-first migrations;
-- clean/EICAR/malformed/password/timeout probes;
+- hostile-file and timeout probes;
 - no-sensitive-log verification;
 - disposable-document owner smoke;
 - canonical production evidence.
@@ -380,16 +362,16 @@ Required readiness:
 
 ## 8. Immediate plan
 
-1. Merge Slice D design documentation.
+1. Merge D1 evidence documentation.
 2. Recheck current `main`, open PRs and Alembic heads.
-3. Create a dedicated D1 implementation branch.
-4. Implement the database and worker privilege boundary first.
-5. Implement bounded Tesseract and strict TSV parsing.
-6. Add encrypted provenance and candidate RLS.
-7. Run exact-head backend/frontend/migration/PostgreSQL gates.
-8. Perform independent D1 review.
-9. Keep production document upload disabled.
-10. Do not create a VPS deployment task.
+3. Assign the next free migration to D2.
+4. Implement restricted candidate-review mutations.
+5. Enforce owner/edit, consent and optimistic concurrency.
+6. Implement explicit patient-match decisions.
+7. Add manifest-bound atomic review finalization.
+8. Add content-free audit and accessible review UI.
+9. Prove that D2 creates no clinical or Labs facts.
+10. Keep production document upload disabled and do not create a VPS deployment task.
 
 ## 9. Global rollout stop conditions
 
