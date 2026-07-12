@@ -106,6 +106,25 @@
 | `docs/implementation/HC-016-PRODUCTION-ACCEPTANCE-2026-07-12.md` | owner manual production acceptance and explicit evidence boundary |
 | owner manual confirmation, 2026-07-12 | production UI and HC-016 flows work as intended |
 
+## HC-017 architecture sources and decisions
+
+| Источник | Назначение |
+|---|---|
+| `docs/PRODUCT-UX-BASELINE.md` | Documents/OCR screens, user states, review components and first vertical slice |
+| `docs/AI-PRODUCT-SAFETY.md` | untrusted-document, `needs_review`, prompt-injection, evidence and consent invariants |
+| `docs/SECURITY-INVARIANTS.md` | mandatory upload, storage, worker, RLS, confirmation, logging and deletion rules |
+| `docs/implementation/HC-017-DOCUMENTS-OCR-LABS-FOUNDATION.md` | canonical architecture, proposed schema, access matrix, APIs, slices and stop conditions |
+| architecture baseline `d32569f3eabbeeee5f803dde11d9b56ccf291cbe` | actual repository state before HC-017 docs branch |
+
+Status of HC-017 evidence:
+
+- architecture only;
+- no product code;
+- no migration;
+- no storage backend or scanner deployed;
+- no OCR or Labs implementation;
+- no production change.
+
 ## Фактические источники
 
 - Git commits и Pull Requests;
@@ -114,7 +133,8 @@
 - production SQL checks;
 - Apache/systemd/Certbot state;
 - deployment and incident reports;
-- explicit owner manual acceptance.
+- explicit owner manual acceptance;
+- approved architecture and security contracts.
 
 ## Правила
 
@@ -127,3 +147,4 @@
 7. Исходные артефакты Fable должны храниться в GitHub reference archive; чат/проект не является единственным долговременным хранилищем.
 8. Независимое ревью хранится отдельно от консолидированного решения; accepted findings получают implementation task и status.
 9. Manual acceptance подтверждает пользовательский результат, но не заменяет отсутствующие operational metrics; такие metrics нельзя восстанавливать предположениями.
+10. Architecture status не означает implementation, migration, deployment или production verification.
