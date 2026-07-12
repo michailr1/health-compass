@@ -17,14 +17,14 @@ from app.models.document_ocr import (
     DocumentOCRRun,
 )
 from app.schemas.document_ocr import (
-    DocumentOCRCandidateReviewRequest,
+    OCRCandidateVersion,
     DocumentOCRCandidateResponse,
+    DocumentOCRCandidateReviewRequest,
     DocumentOCRFinalizeRequest,
     DocumentOCRPatientDecisionRequest,
     DocumentOCRPatientDecisionResponse,
     DocumentOCRReviewResponse,
     DocumentOCRStatusResponse,
-    OCRCandidateVersion,
 )
 from app.services.documents import get_document
 from app.services.health_profile import require_profile_edit_access
