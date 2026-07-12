@@ -33,7 +33,7 @@ from app.services.health_profile import require_profile_edit_access
 _SQLSTATE_RESPONSE = {
     "HC404": (status.HTTP_404_NOT_FOUND, "Lab draft resource not found"),
     "HC409": (status.HTTP_409_CONFLICT, "Lab draft source changed or is incomplete"),
-    "HC422": (status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid Lab draft request"),
+    "HC422": (status.HTTP_422_UNPROCESSABLE_CONTENT, "Invalid Lab draft request"),
     "HC428": (status.HTTP_428_PRECONDITION_REQUIRED, "Lab draft precondition is required"),
 }
 
@@ -312,14 +312,22 @@ async def set_lab_draft_sources(
         text(
             """
             SELECT health_compass.app_set_lab_draft_sources(
-              :draft_id, :expected_updated_at, CAST(:sources AS jsonb),
-              :audit_event_id, :request_id
+              :draft_id, :expected_updated_at,
+              :expected_document_updated_at,
+              :expected_review_finalized_at,
+              :expected_patient_decision_updated_at,
+              CAST(:sources AS jsonb), :audit_event_id, :request_id
             )
             """
         ),
         {
             "draft_id": draft_id,
             "expected_updated_at": payload.expected_updated_at,
+            "expected_document_updated_at": payload.expected_document_updated_at,
+            "expected_review_finalized_at": payload.expected_review_finalized_at,
+            "expected_patient_decision_updated_at": (
+                payload.expected_patient_decision_updated_at
+            ),
             "sources": json.dumps(manifest),
             "audit_event_id": uuid.uuid4(),
             "request_id": request_id,
@@ -343,6 +351,9 @@ async def set_lab_draft_status(
             """
             SELECT health_compass.app_set_lab_observation_draft_status(
               :draft_id, :status, :expected_updated_at,
+              :expected_document_updated_at,
+              :expected_review_finalized_at,
+              :expected_patient_decision_updated_at,
               :audit_event_id, :request_id
             )
             """
@@ -351,6 +362,11 @@ async def set_lab_draft_status(
             "draft_id": draft_id,
             "status": payload.status,
             "expected_updated_at": payload.expected_updated_at,
+            "expected_document_updated_at": payload.expected_document_updated_at,
+            "expected_review_finalized_at": payload.expected_review_finalized_at,
+            "expected_patient_decision_updated_at": (
+                payload.expected_patient_decision_updated_at
+            ),
             "audit_event_id": uuid.uuid4(),
             "request_id": request_id,
         },
