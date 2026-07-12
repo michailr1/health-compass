@@ -55,6 +55,32 @@
 - User-entered free text не переписывается молча каноническим понятием.
 - Free-text fallback остаётся доступным при отсутствии dictionary match.
 
+## Documents, OCR and Labs
+
+- Загруженный документ считается недоверенным вводом до завершения structural validation и malware scan.
+- Upload всегда проходит через quarantine; scanner failure действует fail closed.
+- Ограничения размера, количества страниц, формата и ресурсов применяются на backend/worker, а не только во frontend.
+- Filename, declared MIME и extension не считаются доказательством типа; проверяются magic bytes и структура.
+- Raw document не хранится в PostgreSQL и не размещается в public web root.
+- Storage key создаётся сервером и не содержит filename, email, profile name или medical values.
+- Любой download/preview сначала проходит database authorization по `profile_id`.
+- Роль `analyze` не получает raw document и OCR drafts; ей доступны только confirmed structured observations.
+- Background worker использует отдельные credentials и не работает как migrator или `health_compass_app`.
+- Worker не имеет права подтверждать clinical facts и не получает широкий доступ к profile tables.
+- OCR output всегда имеет статус `needs_review` до explicit user confirmation.
+- Low-confidence fields нельзя подтверждать автоматически или скрытым bulk action.
+- Candidate edit/confirmation используют optimistic concurrency; stale confirmation не создаёт частичных facts.
+- Reprocessing идемпотентен и не перезаписывает подтверждённые observations.
+- Source text, units and reference ranges сохраняются; normalization не переписывает их молча.
+- Несовместимые units не объединяются в один metric series без отдельного validated conversion contract.
+- Patient mismatch не исправляется автоматическим поиском или silent profile reassignment.
+- Document permanent erasure доступен только owner и охватывает raw, derived, OCR candidates и sole-provenance confirmed observations.
+- После перехода в `deletion_pending` пользовательский доступ прекращается немедленно, а storage cleanup повторяется идемпотентно.
+- Original filename, OCR text, patient identifiers, analytes, values, units, ranges и signed URLs запрещены в ordinary logs и metrics labels.
+- External OCR/LLM получает документы только после отдельного provider review и explicit revocable consent.
+
+Канонический contract: `docs/implementation/HC-017-DOCUMENTS-OCR-LABS-FOUNDATION.md`.
+
 ## Privacy и medical safety
 
 - Демонстрационные данные должны быть явно помечены и не выдаваться за реальные данные пользователя.
@@ -91,3 +117,4 @@
 - Автоматический downgrade запрещён после частично применённой или нетранзакционной миграции.
 - Cross-user leak важнее доступности: при подтверждении сервис переводится в maintenance до исправления.
 - Scanner GET, wrong-domain canonical mapping, duplicate-resolution 500 или token leakage являются stop conditions.
+- Для document pipeline дополнительными stop conditions являются scanner bypass, public raw-object access, cross-profile storage access, unconfirmed OCR facts и medical data in logs.
