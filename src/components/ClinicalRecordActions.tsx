@@ -113,7 +113,7 @@ export function ClinicalRecordActions({
       <div className="mt-3 rounded-xl border border-destructive/40 bg-destructive/5 p-3">
         <p className="text-sm font-medium text-destructive">Удалить запись навсегда?</p>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          Запись и содержащие её медицинские значения в журнале изменений будут удалены. Отменить это действие нельзя. В резервных копиях данные могут сохраняться до окончания установленного срока хранения.
+          Запись и содержащие её медицинские значения в журнале изменений будут удалены. Отменить это действие нельзя.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button
