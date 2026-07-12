@@ -191,6 +191,9 @@ def upgrade() -> None:
           void_reason varchar(500) NULL,
           deletion_requested_at timestamptz NULL,
           erased_at timestamptz NULL,
+          CONSTRAINT uq_profile_documents_id_profile UNIQUE (id, profile_id),
+          CONSTRAINT uq_profile_documents_quarantine_storage_key
+            UNIQUE (quarantine_storage_key),
           CONSTRAINT ck_profile_documents_status CHECK (
             status IN (
               'uploading', 'quarantined', 'scanning', 'accepted',
@@ -215,6 +218,7 @@ def upgrade() -> None:
           CONSTRAINT ck_profile_documents_storage CHECK (
             btrim(storage_backend) <> ''
             AND btrim(quarantine_storage_key) <> ''
+            AND (accepted_storage_key IS NULL OR btrim(accepted_storage_key) <> '')
           ),
           CONSTRAINT ck_profile_documents_page_count CHECK (
             page_count IS NULL OR page_count BETWEEN 1 AND 50
@@ -244,7 +248,7 @@ def upgrade() -> None:
         f"""
         CREATE TABLE {S}.document_processing_jobs (
           id uuid PRIMARY KEY,
-          document_id uuid NOT NULL REFERENCES {S}.profile_documents(id) ON DELETE CASCADE,
+          document_id uuid NOT NULL,
           profile_id uuid NOT NULL REFERENCES {S}.health_profiles(id),
           job_type varchar(32) NOT NULL,
           status varchar(32) NOT NULL,
@@ -260,6 +264,10 @@ def upgrade() -> None:
           error_code varchar(64) NULL,
           created_at timestamptz NOT NULL DEFAULT now(),
           updated_at timestamptz NOT NULL DEFAULT now(),
+          CONSTRAINT fk_document_processing_jobs_document_profile
+            FOREIGN KEY (document_id, profile_id)
+            REFERENCES {S}.profile_documents(id, profile_id)
+            ON DELETE CASCADE,
           CONSTRAINT uq_document_processing_jobs_idempotency UNIQUE (idempotency_key),
           CONSTRAINT ck_document_processing_jobs_type CHECK (
             job_type IN ('inspect', 'scan', 'render', 'ocr')
