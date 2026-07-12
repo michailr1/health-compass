@@ -1,0 +1,238 @@
+import { useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertTriangle,
+  FileText,
+  LockKeyhole,
+  ShieldCheck,
+  Upload,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import { ApiError, apiGet, type HealthProfile } from "@/lib/api";
+import {
+  DOCUMENT_ACCEPT,
+  documentStatusLabel,
+  formatDocumentSize,
+  getDocumentIntakeCapabilities,
+  listDocuments,
+  type DocumentStatus,
+  uploadProfileDocument,
+} from "@/lib/documentApi";
+
+const statusTone: Record<DocumentStatus, string> = {
+  uploading: "border-border bg-muted/40 text-muted-foreground",
+  quarantined: "border-warning/30 bg-warning/10 text-warning",
+  scanning: "border-warning/30 bg-warning/10 text-warning",
+  accepted: "border-success/30 bg-success/10 text-success",
+  ocr_queued: "border-border bg-muted/40 text-muted-foreground",
+  processing: "border-primary/30 bg-primary/10 text-primary",
+  review_required: "border-warning/30 bg-warning/10 text-warning",
+  confirmed: "border-success/30 bg-success/10 text-success",
+  rejected: "border-destructive/30 bg-destructive/10 text-destructive",
+  failed: "border-destructive/30 bg-destructive/10 text-destructive",
+  voided: "border-border bg-muted/40 text-muted-foreground",
+  deletion_pending: "border-destructive/30 bg-destructive/10 text-destructive",
+  erased: "border-border bg-muted/40 text-muted-foreground",
+};
+
+function uploadErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 409) {
+      return "Для загрузки медицинских документов нужно согласие на обработку данных.";
+    }
+    if (error.status === 413) {
+      return "Файл превышает безопасный лимит размера или разрешения.";
+    }
+    return error.message;
+  }
+  return "Не удалось загрузить документ.";
+}
+
+export default function Documents() {
+  const queryClient = useQueryClient();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const { data: profiles, isLoading: profilesLoading } = useQuery({
+    queryKey: ["health-profiles", "documents"],
+    queryFn: () => apiGet<HealthProfile[]>("/profiles"),
+  });
+  const profile = profiles?.[0] ?? null;
+
+  const { data: capabilities } = useQuery({
+    queryKey: ["document-intake-capabilities"],
+    queryFn: getDocumentIntakeCapabilities,
+  });
+
+  const { data: documents, isLoading: documentsLoading } = useQuery({
+    queryKey: ["profile-documents", profile?.id],
+    queryFn: () => listDocuments(profile!.id),
+    enabled: Boolean(profile),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => uploadProfileDocument(profile!.id, file),
+    onSuccess: async () => {
+      setSelectedFile(null);
+      if (inputRef.current) inputRef.current.value = "";
+      await queryClient.invalidateQueries({
+        queryKey: ["profile-documents", profile?.id],
+      });
+      toast.success("Документ помещён в защищённый карантин");
+    },
+    onError: (error) => toast.error(uploadErrorMessage(error)),
+  });
+
+  function submitUpload() {
+    if (!profile || !selectedFile || !capabilities?.upload_enabled) return;
+    if (selectedFile.size > capabilities.max_bytes) {
+      toast.error(`Максимальный размер — ${formatDocumentSize(capabilities.max_bytes)}.`);
+      return;
+    }
+    if (
+      selectedFile.type &&
+      !capabilities.accepted_media_types.includes(selectedFile.type)
+    ) {
+      toast.error("Поддерживаются только PDF, JPEG и PNG.");
+      return;
+    }
+    uploadMutation.mutate(selectedFile);
+  }
+
+  return (
+    <div className="space-y-6">
+      <header>
+        <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
+          Медицинские документы
+        </h1>
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          Безопасная загрузка анализов начинается с карантина. Документ не становится
+          медицинским фактом, пока распознанные значения не проверены и не подтверждены
+          человеком.
+        </p>
+      </header>
+
+      <section className="hm-card p-5 md:p-6">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-primary/20 bg-primary/10">
+            <ShieldCheck className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="font-display text-lg font-semibold">Защищённый приём документов</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              PDF, JPEG или PNG до {formatDocumentSize(capabilities?.max_bytes ?? 20 * 1024 * 1024)}.
+              Имя файла не используется как путь хранения, а исходник недоступен для
+              просмотра, пока находится в карантине.
+            </p>
+
+            {!capabilities?.upload_enabled && (
+              <div className="mt-4 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  Загрузка пока отключена: текущий срез проверяет только безопасный intake
+                  foundation. OCR и production-хранилище подключаются отдельно.
+                </span>
+              </div>
+            )}
+
+            <div className="mt-5 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium">Выберите файл</span>
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept={DOCUMENT_ACCEPT}
+                  disabled={!capabilities?.upload_enabled || uploadMutation.isPending}
+                  onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                  className="block w-full rounded-xl border border-border bg-background px-3 py-2 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={submitUpload}
+                disabled={
+                  !profile ||
+                  !selectedFile ||
+                  !capabilities?.upload_enabled ||
+                  uploadMutation.isPending
+                }
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Upload className="h-4 w-4" />
+                {uploadMutation.isPending ? "Загрузка…" : "Загрузить в карантин"}
+              </button>
+            </div>
+
+            {selectedFile && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Выбран: {selectedFile.name} · {formatDocumentSize(selectedFile.size)}
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg font-semibold">Загруженные документы</h2>
+            <p className="text-sm text-muted-foreground">
+              На этом этапе доступны только metadata и статус карантина — без preview и OCR.
+            </p>
+          </div>
+          <LockKeyhole className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+        </div>
+
+        {(profilesLoading || documentsLoading) && (
+          <div className="hm-card p-5 text-sm text-muted-foreground">Загрузка списка…</div>
+        )}
+
+        {!profilesLoading && !profile && (
+          <div className="hm-card p-5 text-sm text-muted-foreground">
+            Профиль здоровья не найден.
+          </div>
+        )}
+
+        {!documentsLoading && profile && documents?.length === 0 && (
+          <div className="hm-card p-6 text-center">
+            <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
+            <p className="mt-3 font-medium">Документов пока нет</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              После включения тестового intake загруженный файл появится здесь со статусом
+              «В карантине».
+            </p>
+          </div>
+        )}
+
+        <div className="grid gap-3">
+          {documents?.map((document) => (
+            <article key={document.id} className="hm-card p-4 md:p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-surface-2">
+                    <FileText className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="truncate font-medium">{document.original_filename}</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatDocumentSize(document.byte_size)} · {document.detected_media_type}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Загружен {new Date(document.created_at).toLocaleString("ru-RU")}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${statusTone[document.status]}`}
+                >
+                  {documentStatusLabel(document.status)}
+                </span>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
