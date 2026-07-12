@@ -27,25 +27,23 @@ jobs:
           path = Path("backend/tests/test_document_ocr_review_rls.py")
           text = path.read_text(encoding="utf-8")
 
-          cleanup_marker = '''    with psycopg.connect(_sync_url(ADMIN_ENV), autocommit=True) as connection:
-              connection.execute(
-                  "DELETE FROM health_compass.document_ocr_patient_decisions WHERE profile_id = %s",
-                  (ids["profile"],),
-              )'''
-          cleanup_replacement = '''    with psycopg.connect(_sync_url(ADMIN_ENV), autocommit=True) as connection:
-              connection.execute(
-                  "UPDATE health_compass.document_ocr_runs "
-                  "SET review_patient_decision_id = NULL "
-                  "WHERE profile_id = %s",
-                  (ids["profile"],),
-              )
-              connection.execute(
-                  "DELETE FROM health_compass.document_ocr_patient_decisions WHERE profile_id = %s",
-                  (ids["profile"],),
-              )'''
-          if text.count(cleanup_marker) != 1:
-              raise SystemExit("unexpected cleanup marker")
-          text = text.replace(cleanup_marker, cleanup_replacement)
+          old_cleanup = '''        connection.execute(
+              "DELETE FROM health_compass.document_ocr_patient_decisions WHERE profile_id = %s",
+              (ids["profile"],),
+          )'''
+          new_cleanup = '''        connection.execute(
+              "UPDATE health_compass.document_ocr_runs "
+              "SET review_patient_decision_id = NULL "
+              "WHERE profile_id = %s",
+              (ids["profile"],),
+          )
+          connection.execute(
+              "DELETE FROM health_compass.document_ocr_patient_decisions WHERE profile_id = %s",
+              (ids["profile"],),
+          )'''
+          if text.count(old_cleanup) != 1:
+              raise SystemExit("unexpected cleanup block")
+          text = text.replace(old_cleanup, new_cleanup)
 
           if text.count("ORDER BY created_at, id") != 1:
               raise SystemExit("unexpected audit ordering marker")
