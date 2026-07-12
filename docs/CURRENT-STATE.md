@@ -1,13 +1,18 @@
 # Health Compass — текущее состояние
 
-Дата: 2026-07-11  
+Дата: 2026-07-12  
 Основная ветка: `main`  
-Main HEAD на момент независимого ревью: `1a61f0307130e19fedeabd95218293d9a5075fe1`  
-Production code: `f3d7e8fedcdad5448abce5c74c1bdb698e5e82e6`  
-Production Alembic: `0045 (head)`  
+Main HEAD: `b8e868825f378195975e2729f3f36c21a1afa2d0`  
 Production URL: `https://health.funti.cc`  
-Текущий engineering verdict: `FIX BEFORE ROLLOUT`  
-HC-015 remediation: `IMPLEMENTED / NOT MERGED` в branch `claude/hc-015-code-review-remediation-noaeve` (Alembic head branch: `0048`; production не изменялся)
+Последний approved rollout target: `b8e868825f378195975e2729f3f36c21a1afa2d0`  
+Production Alembic target: `0049`  
+Текущий engineering verdict: `READY FOR NEXT PRODUCT PHASE / FOLLOW-UPS REMAIN`
+
+## Evidence boundary
+
+Владелец подтвердил 2026-07-12, что production-интерфейс и HC-016 работают.
+
+В текущем репозитории есть полный automated rollout evidence для HC-015 и Git/CI evidence для HC-016. Детальный финальный VPS-отчёт HC-016 с backup path, release symlink, service output и disposable PostgreSQL checks в каноническую документацию не скопирован. Поэтому эти конкретные operational values здесь не выдумываются.
 
 ## Что работает в production
 
@@ -26,13 +31,12 @@ HC-015 remediation: `IMPLEMENTED / NOT MERGED` в branch `claude/hc-015-code-rev
 - contextual intake decisions;
 - mobile-oriented questionnaire flow;
 - Clinical Dictionaries v2 с Russian-first search и free-text fallback;
-- dashboard context coverage и переходы к заполнению профиля.
+- dashboard context coverage и переходы к заполнению профиля;
+- отдельные действия **Убрать из профиля** и **Удалить навсегда** для клинических записей.
 
-## Production data state — Clinical Dictionaries v2
+## HC-014 — Clinical Dictionaries v2
 
-На 2026-07-10 успешно применён reviewed seed set.
-
-Подтверждено:
+Reviewed seed set развёрнут и подтверждён:
 
 - 69 concepts total;
 - 107 aliases;
@@ -41,14 +45,7 @@ HC-015 remediation: `IMPLEMENTED / NOT MERGED` в branch `claude/hc-015-code-rev
 - 0 orphan aliases;
 - все 66 reviewed business keys представлены;
 - повторный apply идемпотентен;
-- существовавшие UUID сохранены;
-- Alembic остался `0045`.
-
-Backup перед повторным import:
-
-```text
-/opt/health-compass/backups/clinical_dictionary_before_seed_retry_20260710T224649Z.sql.gz
-```
+- существовавшие UUID сохранены.
 
 Известные content gaps первого seed set:
 
@@ -59,110 +56,105 @@ Backup перед повторным import:
 
 Free-text entry остаётся доступным; gaps не являются importer defect.
 
-## Подтверждённые security properties
+## HC-015 — Code Review Remediation
 
-Два независимых code review не обнаружили подтверждённого:
+Статус: `DEPLOYED / AUTOMATED VERIFIED / OWNER SMOKE CONFIRMED`.
 
-- cross-user data leak;
-- обхода `FORCE RLS` runtime role;
-- self-grant owner чужого profile;
-- self-add в чужой workspace;
-- удаления последней identity;
-- silent account merge только по verified email.
+Production rollout evidence зафиксирован в:
 
-Подтверждены:
+```text
+docs/implementation/HC-015-PRODUCTION-EVIDENCE-2026-07-11.md
+```
 
-- runtime role `NOBYPASSRLS`;
-- отдельный `health_compass_rls_definer NOLOGIN BYPASSRLS`;
-- ограниченные `SECURITY DEFINER` functions;
-- `search_path=''`, `row_security=off` и отзыв `PUBLIC EXECUTE`;
-- PKCE, state, nonce, issuer/audience/azp и verified-email checks;
-- consent, provenance, void и audit для clinical data;
-- одна DB transaction на request для transaction-local RLS context.
+HC-015 закрыл блокирующие findings независимых review:
 
-## Code review 2026-07-11
+- duplicate Clinical Context routes;
+- duplicate-resolution schema drift;
+- scanner-unsafe Magic Link GET consume;
+- wrong-domain и stale clinical dictionary mappings;
+- неполный frontend lint/typecheck gate;
+- void/review concurrency defects;
+- unsafe logging и query-token exposure для новых логов;
+- слишком широкие privileges на `users`;
+- неполный migration-cycle gate.
 
-Проведены два независимых статических review актуального repository HEAD:
+HC-015 application commit: `c87723d7b4d0e4d2db9f1e0df4e936fbfd543346`.  
+Alembic после HC-015: `0048`.
 
-- ChatGPT architecture/code review;
-- Fable 5 independent code review.
+## Safari Magic Link regression
+
+После HC-015 scanner-safe interstitial был выявлен Safari-specific origin regression. Он исправлен отдельным hotfix.
+
+Hotfix commit:
+
+```text
+8c09c02fa007cd5e5945c5a93b4913ce63868e68
+```
+
+Владелец подтвердил работу Email Magic Link на iPhone Safari.
+
+## HC-016 — Owner-controlled Clinical Record Erasure
+
+Статус: `MERGED / PRODUCTION MANUALLY ACCEPTED`.
+
+Source PRs:
+
+- PR `#44` — owner-controlled permanent clinical record erasure;
+- PR `#45` — удаление лишней фразы о backup retention из пользовательского предупреждения.
+
+Merged target:
+
+```text
+b8e868825f378195975e2729f3f36c21a1afa2d0
+```
+
+Alembic head:
+
+```text
+0049
+```
+
+Продукт различает:
+
+1. **Убрать из профиля** — void/soft removal с сохранением защищённой истории.
+2. **Удалить навсегда** — owner-only erasure записи и value-bearing audit events.
+
+Security contract:
+
+- у `health_compass_app` нет прямого DELETE на clinical tables;
+- runtime erasure выполняется только через `health_compass.app_erase_clinical_record(...)`;
+- функция принадлежит `health_compass_rls_definer`;
+- PUBLIC EXECUTE отозван;
+- editor/viewer/outsider не могут выполнить permanent erasure;
+- stale `expected_updated_at` не удаляет данные;
+- удаление доступно после отзыва medical consent;
+- сохраняется только content-free tombstone `clinical_record.erased`.
+
+Текущий UI-текст:
+
+```text
+Запись и содержащие её медицинские значения в журнале изменений будут удалены. Отменить это действие нельзя.
+```
 
 Канонические документы:
 
 ```text
-docs/reviews/CODE-REVIEW-CONSOLIDATED-2026-07-11.md
-docs/reviews/FABLE-5-INDEPENDENT-CODE-REVIEW-2026-07-11.md
+docs/implementation/HC-016-CLINICAL-RECORD-ERASURE.md
+docs/implementation/HC-016-PRODUCTION-ACCEPTANCE-2026-07-12.md
 ```
 
-Итог обоих review:
+## Подтверждённые security properties
 
-```text
-FIX BEFORE ROLLOUT
-```
-
-Critical findings и подтверждённый tenant-isolation breach не обнаружены. Rollout gate установлен из-за дефектов корректности, schema drift и data integrity.
-
-## Блокирующие findings
-
-1. Duplicate Clinical Context summary/review routes с несовместимыми response contracts; текущее поведение зависит от порядка router registration.
-2. Duplicate assessment/absorption не учитывает `profile_clinical_reviews` и `profile_intake_decisions`.
-3. Email Magic Link выполняет meaningful consume через GET и может быть поглощён scanner/prefetch.
-4. `canonical_concept_id` не полностью защищён от wrong-domain и stale mappings.
-5. Frontend CI не запускает full-source lint и обязательный TypeScript typecheck.
-
-Дополнительно приняты к исправлению:
-
-- alias upsert по database business key;
-- optimistic concurrency для void;
-- race при `confirmed_none`;
-- единый error envelope и сохранение `request_id`;
-- safe structured logging и query/token redaction;
-- fail-safe production account-linking configuration;
-- POST logout;
-- полный migration cycle;
-- column-level narrowing для `users` UPDATE.
-
-## Текущий обязательный этап
-
-Следующая задача:
-
-```text
-HC-015 — Code Review Remediation
-```
-
-Канонический план:
-
-```text
-docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md
-```
-
-Статус реализации на 2026-07-11: все slices A–F реализованы в branch
-`claude/hc-015-code-review-remediation-noaeve` (миграции `0046`–`0048`,
-линейный head). Backend unit, PostgreSQL integration/RLS, migration-cycle,
-frontend lint/typecheck/tests/build зелёные локально в CI-эквивалентном
-окружении. Постатусная таблица findings — в HC-015 документе. Остаются:
-independent diff review, merge с зелёным CI на exact PR SHA и controlled
-backup-first rollout. Deployment status: `NOT DEPLOYED`.
-
-До завершения HC-015 (merge + rollout):
-
-- не добавлять новые product features;
-- не выполнять следующий production code rollout;
-- не создавать параллельные Alembic heads;
-- разрешены документация, tests и remediation branch;
-- alias content expansion HC-014 не должна обходить remediation gate, если требует code rollout.
-
-## Порядок HC-015
-
-1. Clinical Context route cleanup.
-2. Duplicate resolution schema synchronization.
-3. Magic Link/logout/account-linking/logging hardening.
-4. Canonical dictionary integrity migration.
-5. Full lint/typecheck и migration-cycle CI.
-6. Clinical concurrency и frontend API contract fixes.
-7. Independent diff review.
-8. Controlled backup-first rollout.
-9. Production smoke и фиксация evidence.
+- runtime role `NOBYPASSRLS`;
+- отдельный `health_compass_rls_definer NOLOGIN BYPASSRLS`;
+- ограниченные `SECURITY DEFINER` functions;
+- фиксированные `search_path` и `row_security` settings;
+- PUBLIC EXECUTE отозван у чувствительных definer functions;
+- PKCE, state, nonce, issuer/audience/azp и verified-email checks;
+- consent, provenance, void и audit для clinical data;
+- одна DB transaction на request для transaction-local RLS context;
+- прямой runtime DELETE клинических записей запрещён;
+- optimistic concurrency применяется к destructive clinical actions.
 
 ## Известные ограничения продукта
 
@@ -176,15 +168,41 @@ backup-first rollout. Deployment status: `NOT DEPLOYED`.
 - система не диагностирует заболевания и не рассчитывает дозы;
 - словарь остаётся assistive и не заменяет free text.
 
-## Следующий product этап после HC-015
+## Технические follow-ups
 
-После успешного remediation и rollout:
+Не блокируют переход к следующему product phase:
 
-1. снять verdict `FIX BEFORE ROLLOUT` на основании evidence;
-2. выполнить небольшой reviewed alias-expansion package HC-014;
-3. вернуться к PHASE-03/04 document upload and OCR review foundation;
-4. реализовать Labs core;
-5. затем PHASE-05.5 Nutrition Photo MVP согласно отдельной спецификации.
+- revoke unnecessary PUBLIC EXECUTE у двух обычных trigger functions отдельной forward migration;
+- переход с deprecated `authlib.jose` на `joserfc`;
+- dictionary search indexes/trigram optimisation;
+- cleanup неиспользуемой CORS configuration;
+- OIDC discovery/JWKS caching;
+- ограниченное хранение и штатная ротация исторических Apache logs, созданных до query-safe logging fix;
+- добавить в репозиторий детальный HC-016 VPS rollout report, если исходный отчёт будет доступен.
+
+## Следующий product этап
+
+Текущий блокирующий remediation gate снят.
+
+Следующий основной этап:
+
+```text
+PHASE-03 — Human Documents, OCR Review and Labs foundation
+```
+
+Рекомендуемый первый vertical slice:
+
+```text
+Upload
+→ Processing
+→ OCR Review
+→ User Confirmation
+→ Lab Results
+→ Metric Dynamics
+→ Contextual Intake
+```
+
+До импорта реальных медицинских данных необходимо сначала зафиксировать upload/storage threat model, provenance contract, document access matrix и deletion lifecycle.
 
 ## Роли
 
@@ -204,9 +222,9 @@ backup-first rollout. Deployment status: `NOT DEPLOYED`.
 - создаёт backup;
 - получает конкретный approved commit;
 - выполняет build, migrations, systemd/release switch;
-- запускает smoke tests и rollback при необходимости;
+- запускает smoke tests;
 - не принимает архитектурных решений;
-- не использует production DB для automated tests;
+- не использует production DB для destructive automated tests;
 - не выводит secrets.
 
 ## Stop conditions
@@ -218,10 +236,6 @@ backup-first rollout. Deployment status: `NOT DEPLOYED`.
 - неуспешном backup;
 - нескольких Alembic heads;
 - неуспешной migration;
-- duplicate route collision;
-- wrong-domain canonical mapping;
-- scanner GET, поглощающем Magic Link;
-- duplicate resolution с 500/FK violation;
 - признаках cross-user leak;
 - `5xx`, `54001`, `42501`, `permission denied` или Traceback;
 - CI, запущенном не на exact deployed SHA;

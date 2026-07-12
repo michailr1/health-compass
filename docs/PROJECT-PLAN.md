@@ -1,7 +1,7 @@
 # Health Compass — канонический план проекта
 
-Версия: 1.4  
-Дата: 2026-07-11  
+Версия: 1.5  
+Дата: 2026-07-12  
 Основная ветка: `main`
 
 Этот документ — живой основной план проекта. Он обновляется после завершённых этапов, архитектурных решений, внешних ревью и production-проверок.
@@ -24,11 +24,14 @@
 - двух независимых code review от 2026-07-11;
 - фактического кода, миграций, tests и production evidence.
 
-Канонические результаты review 2026-07-11:
+Канонические review и implementation documents:
 
 - `docs/reviews/CODE-REVIEW-CONSOLIDATED-2026-07-11.md`;
 - `docs/reviews/FABLE-5-INDEPENDENT-CODE-REVIEW-2026-07-11.md`;
-- `docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md`.
+- `docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md`;
+- `docs/implementation/HC-015-PRODUCTION-EVIDENCE-2026-07-11.md`;
+- `docs/implementation/HC-016-CLINICAL-RECORD-ERASURE.md`;
+- `docs/implementation/HC-016-PRODUCTION-ACCEPTANCE-2026-07-12.md`.
 
 При расхождении приоритет источников:
 
@@ -55,6 +58,7 @@
 - Human и Pet contours разделены.
 - Coding role меняет code; VPS-agent только разворачивает approved commit.
 - Каждый rollout выполняется backup-first и фиксируется точным SHA.
+- Destructive medical-data operations используют least privilege, explicit confirmation и optimistic concurrency.
 
 ## 4. Текущее production state
 
@@ -64,13 +68,18 @@ Production URL:
 https://health.funti.cc
 ```
 
-На 2026-07-11:
+На 2026-07-12:
 
-- production code: `f3d7e8fedcdad5448abce5c74c1bdb698e5e82e6`;
-- production Alembic: `0045 (head)`;
-- main review baseline: `1a61f0307130e19fedeabd95218293d9a5075fe1`;
+- main HEAD: `b8e868825f378195975e2729f3f36c21a1afa2d0`;
+- последний approved rollout target: `b8e868825f378195975e2729f3f36c21a1afa2d0`;
+- production Alembic target: `0049`;
 - Clinical Dictionaries: 69 concepts, 107 aliases;
-- engineering verdict: `FIX BEFORE ROLLOUT`.
+- HC-015: deployed, automated verified, owner smoke confirmed;
+- Safari Magic Link regression: fixed and manually confirmed on iPhone Safari;
+- HC-016: merged and manually accepted in production;
+- engineering verdict: `READY FOR NEXT PRODUCT PHASE / FOLLOW-UPS REMAIN`.
+
+Детальный VPS-отчёт HC-016 не скопирован в репозиторий. Поэтому отсутствующие operational values не восстанавливаются предположениями.
 
 Подробное состояние: `docs/CURRENT-STATE.md`.
 
@@ -91,12 +100,14 @@ https://health.funti.cc
 
 ### PHASE-02 — Identity, sessions и tenant isolation
 
-Статус: `COMPLETED / HARDENING CONTINUES IN HC-015`
+Статус: `COMPLETED / FOLLOW-UP HARDENING NON-BLOCKING`
 
 Реализовано:
 
 - Google OIDC с PKCE, state и nonce;
 - Email Magic Links через Brevo;
+- scanner-safe GET interstitial и explicit POST consume;
+- POST logout с Origin protection;
 - PostgreSQL sessions;
 - workspace/profile bootstrap;
 - FORCE RLS;
@@ -104,19 +115,20 @@ https://health.funti.cc
 - устранение RLS recursion;
 - закрытие self-grant owner и self-add workspace;
 - cross-user negative checks;
-- friendly invalid/replayed link states.
+- friendly invalid/replayed link states;
+- safe structured logging и query redaction;
+- fail-safe production account-linking configuration;
+- Safari-compatible Magic Link Origin handling.
 
-Оставшееся hardening:
+Non-blocking follow-ups:
 
-- scanner-safe Magic Link confirmation;
-- POST logout;
-- fail-safe production account-linking invariant;
-- structured log redaction;
-- full automated tenant/auth regression gate.
+- OIDC discovery/JWKS caching;
+- переход с deprecated `authlib.jose` на `joserfc`;
+- cleanup неиспользуемой CORS configuration.
 
 ### PHASE-02.5 — Progressive Health Intake
 
-Статус: `CORE SLICES DEPLOYED / REMEDIATION REQUIRED`
+Статус: `CORE SLICES DEPLOYED`
 
 Принятый path:
 
@@ -135,7 +147,7 @@ Login
 Статус: `DEPLOYED`
 
 - name, date of birth, sex;
-- height, timezone;
+- height, automatically detected timezone;
 - weight history;
 - consent;
 - provenance и audit;
@@ -145,7 +157,7 @@ Login
 
 #### Slice 2 — Clinical Context
 
-Статус: `DEPLOYED / HC-015 FIXES REQUIRED`
+Статус: `DEPLOYED / REMEDIATED / OWNER-CONTROLLED ERASURE ADDED`
 
 - conditions and symptoms;
 - allergies and intolerances;
@@ -156,15 +168,9 @@ Login
 - dose, frequency and dates;
 - consent, provenance, audit и void;
 - typeahead and free-text fallback;
-- Clinical Dictionaries v2.
-
-Review findings требуют:
-
-- одного владельца summary/review routes;
-- atomic review-state transitions;
-- optimistic concurrency для void;
-- canonical concept domain integrity;
-- frontend contract fixes.
+- Clinical Dictionaries v2;
+- optimistic concurrency for destructive changes;
+- separate **Убрать из профиля** and **Удалить навсегда** actions.
 
 #### Slice 3 — Contextual Intake
 
@@ -176,11 +182,9 @@ Review findings требуют:
 - объяснить purpose;
 - append-only intake decisions.
 
-Duplicate resolution должен учитывать intake decision rows в HC-015.
-
 #### Slice 4 — Documents/OCR transition
 
-Статус: `PLANNED AFTER HC-015`
+Статус: `CURRENT NEXT PRODUCT SLICE`
 
 ```text
 Upload
@@ -196,7 +200,7 @@ Upload
 
 ### PHASE-02.6 — Account linking и duplicate resolution
 
-Статус: `DEPLOYED / SCHEMA-SYNC FIX IN HC-015`
+Статус: `DEPLOYED / REMEDIATED`
 
 Реализованы:
 
@@ -204,40 +208,63 @@ Upload
 - HC-026 controlled duplicate resolution;
 - HC-027 prevention of silent duplicate creation;
 - step-up identity removal;
-- запрет удаления последней identity.
-
-HC-015 должен синхронизировать meaningful-activity assessment с `profile_clinical_reviews` и `profile_intake_decisions`.
+- запрет удаления последней identity;
+- meaningful-activity assessment с учётом `profile_clinical_reviews` и `profile_intake_decisions`.
 
 ### PHASE-02.7 — HC-015 Code Review Remediation
 
-Статус: `IMPLEMENTED / NOT MERGED — awaiting review, merge and rollout`
+Статус: `COMPLETED / DEPLOYED / AUTOMATED VERIFIED`
 
-Goal: закрыть findings двух независимых reviews до новых feature migrations и production rollout.
+Закрыты блокирующие findings двух независимых reviews:
 
-Обязательные slices:
+1. Clinical Context route cleanup.
+2. Duplicate resolution schema synchronization — migration `0046`.
+3. Magic Link/logout/account-linking/logging hardening.
+4. Clinical dictionary integrity — migration `0047`.
+5. Narrow users grants — migration `0048`.
+6. Full lint/typecheck and migration-cycle CI.
+7. Concurrency and frontend API contract fixes.
+8. Controlled backup-first production rollout.
 
-1. Clinical Context route cleanup — `IMPLEMENTED / NOT MERGED`.
-2. Duplicate resolution schema synchronization — `IMPLEMENTED / NOT MERGED` (migration `0046`).
-3. Magic Link/logout/account-linking/logging hardening — `IMPLEMENTED / NOT MERGED`.
-4. Clinical dictionary integrity migration — `IMPLEMENTED / NOT MERGED` (migration `0047`; `0048` для users grants).
-5. Full lint/typecheck and migration-cycle CI — `IMPLEMENTED / NOT MERGED`.
-6. Concurrency and frontend API contract fixes — `IMPLEMENTED / NOT MERGED`.
-7. Independent diff review — `PENDING`.
-8. Controlled production rollout — `PENDING / NOT DEPLOYED`.
-
-Implementation branch: `claude/hc-015-code-review-remediation-noaeve`.
-
-Канонический документ:
+Production application commit HC-015:
 
 ```text
-docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md
+c87723d7b4d0e4d2db9f1e0df4e936fbfd543346
 ```
 
-Новые product features до завершения PHASE-02.7 не начинаются.
+Canonical evidence:
+
+```text
+docs/implementation/HC-015-PRODUCTION-EVIDENCE-2026-07-11.md
+```
+
+### PHASE-02.8 — HC-016 Clinical Record Erasure
+
+Статус: `COMPLETED / MERGED / PRODUCTION MANUALLY ACCEPTED`
+
+Реализовано:
+
+- owner-only permanent erasure;
+- explicit irreversible confirmation;
+- `expected_updated_at` concurrency guard;
+- erasure after consent withdrawal;
+- no direct runtime DELETE on clinical tables;
+- restricted `SECURITY DEFINER` function;
+- atomic removal of value-bearing audit events;
+- content-free `clinical_record.erased` tombstone;
+- migration `0049`;
+- corrected user warning without backup-retention sentence.
+
+Canonical documents:
+
+```text
+docs/implementation/HC-016-CLINICAL-RECORD-ERASURE.md
+docs/implementation/HC-016-PRODUCTION-ACCEPTANCE-2026-07-12.md
+```
 
 ### PHASE-03 — Human Documents, OCR и Labs
 
-Статус: `PLANNED / BLOCKED BY HC-015`
+Статус: `CURRENT PLANNING / NOT IMPLEMENTED`
 
 Первый vertical slice:
 
@@ -248,16 +275,16 @@ Login
 → Upload Analysis
 → Processing
 → OCR Review
+→ User Confirmation
 → Lab Results
 → Metric Dynamics
 → Contextual Intake
-→ AI Explanation with Evidence
-→ Doctor Report
 ```
 
-Состав:
+Состав foundation:
 
 - PDF/image upload;
+- secure object storage boundary;
 - processing queue;
 - OCR confidence и human confirmation;
 - patient matching;
@@ -265,9 +292,21 @@ Login
 - lab results;
 - reference ranges;
 - metric dynamics;
+- document and extracted-data deletion lifecycle;
 - doctor report data foundation.
 
 До реального импорта разрешены только явно помеченные demo data.
+
+Перед implementation необходимо утвердить:
+
+- file upload threat model;
+- content-type and size limits;
+- malware/scanner strategy;
+- storage encryption and access model;
+- RLS/object-storage mapping;
+- provenance contract;
+- OCR human-review contract;
+- raw/normalized/derived deletion lifecycle.
 
 ### PHASE-04 — Источники данных и integrations
 
@@ -325,13 +364,22 @@ Invariants:
 
 ### PHASE-07 — Privacy и data lifecycle
 
-Статус: `PLANNED`
+Статус: `FOUNDATION STARTED / BROADER SCOPE PLANNED`
+
+Уже реализовано:
+
+- consent foundation;
+- clinical provenance and audit;
+- soft removal/void;
+- owner-controlled permanent erasure отдельных Clinical Context records.
+
+Остаётся:
 
 - consent center;
 - active sessions;
 - export;
 - delete profile/user;
-- retention;
+- retention policy;
 - access audit;
 - deletion raw/normalized/derived/embeddings;
 - external LLM consent.
@@ -365,32 +413,38 @@ Implementation must comply with `docs/AI-PRODUCT-SAFETY.md`.
 
 ## 6. Ближайший план
 
-1. ~~Принять docs PR с review evidence и HC-015 specification~~ — выполнено (PR #38 merged).
-2. ~~Создать implementation branch от актуального `main`~~ — выполнено: `claude/hc-015-code-review-remediation-noaeve`.
-3. ~~Выполнить HC-015 Slices A–F в зафиксированном порядке~~ — выполнено, `IMPLEMENTED / NOT MERGED`.
-4. ~~Не создавать parallel Alembic head~~ — выполнено: линейные `0046 → 0047 → 0048`, один head.
-5. Запустить полный backend/frontend/PostgreSQL CI на exact PR SHA.
-6. Провести independent diff review.
-7. Merge только при отсутствии unresolved High findings.
-8. Выполнить controlled backup-first production rollout.
-9. Зафиксировать production HEAD/Alembic, smoke results и logs.
-10. Изменить verdict на `ACCEPT WITH FOLLOW-UP` или `READY` только с evidence.
-11. После HC-015 выполнить небольшой HC-014 alias expansion.
-12. Затем вернуться к PHASE-03 Upload → OCR Review → Labs.
+1. Зафиксировать HC-016 production acceptance в canonical docs — текущий docs PR.
+2. Подготовить PHASE-03 architecture slice без product code.
+3. Утвердить upload/storage threat model и data lifecycle.
+4. Спроектировать минимальную schema для documents, processing jobs, extracted observations и provenance.
+5. Зафиксировать access matrix и RLS before migration numbering.
+6. Подготовить UI states: Upload, Processing, Failed, OCR Review, Confirmed.
+7. Реализовать первый узкий vertical slice на demo/test documents.
+8. Только после security review разрешить controlled production rollout.
 
-## 7. Rollout gate HC-015
+Non-blocking technical follow-ups допускаются отдельными маленькими PR:
+
+- revoke unnecessary PUBLIC EXECUTE у обычных trigger functions;
+- `joserfc` migration;
+- dictionary search indexes;
+- OIDC discovery/JWKS caching;
+- CORS config cleanup.
+
+## 7. Rollout gates для PHASE-03
 
 Rollout запрещён, если:
 
-- overlapping routes остаются;
-- duplicate resolution может вернуть 500/FK violation;
-- GET consumes Magic Link;
-- wrong-domain/stale canonical mapping сохраняется;
-- full-source lint или TypeScript check отсутствуют;
-- migration cycle не подтверждён;
+- upload допускает неограниченный размер или неподдерживаемые content types;
+- object storage key не связан с tenant/profile boundary;
+- raw document доступен без owner/profile authorization;
+- OCR values становятся clinical facts без explicit confirmation;
+- provenance теряется между document, extracted candidate и confirmed observation;
+- deletion lifecycle не покрывает raw, extracted и normalized data;
 - CI выполнен не на exact deployed SHA;
-- в logs появляются tokens, secrets или medical values;
-- обнаружен cross-user leak.
+- миграции имеют несколько heads;
+- backup не подтверждён;
+- в logs появляются tokens, document contents или medical values;
+- обнаружен cross-user access.
 
 ## 8. Правило обновления
 
@@ -398,8 +452,8 @@ Rollout запрещён, если:
 
 - `docs/CURRENT-STATE.md`;
 - `docs/PROJECT-PLAN.md`;
-- `docs/DEVELOPMENT-HISTORY.md`;
-- `docs/reviews/FABLE-RECOMMENDATIONS.md`;
+- `docs/DEVELOPMENT-HISTORY.md` или отдельный dated evidence document;
+- `docs/reviews/FABLE-RECOMMENDATIONS.md`, если меняется статус рекомендаций;
 - `docs/source-index/SOURCE-REGISTER.md`;
 - implementation document соответствующей HC-задачи;
 - `docs/SECURITY-INVARIANTS.md`, если меняются security rules;
@@ -407,4 +461,4 @@ Rollout запрещён, если:
 - README, если меняются public URL, architecture или local run;
 - ADR, если принято новое архитектурное решение.
 
-Статус `VERIFIED` допускается только после test, merge и/или production evidence, соответствующего формулировке статуса.
+Статус `VERIFIED` допускается только после test, merge и/или production evidence, соответствующего формулировке статуса. Manual acceptance не заменяет отсутствующие operational metrics.
