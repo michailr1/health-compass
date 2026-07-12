@@ -1,6 +1,6 @@
 # Health Compass — канонический план проекта
 
-Версия: 2.6  
+Версия: 2.7  
 Дата: 2026-07-13  
 Основная ветка: `main`
 
@@ -57,6 +57,7 @@ Current verdict:
 ```text
 HC-017 B+C1+C2+D1+D2+E1+E2 MERGED / CI VERIFIED / NOT DEPLOYED
 HC-017 E3 NEXT / NOT IMPLEMENTED
+HC-018 MEDICATION REMINDERS PLANNED / NOT IMPLEMENTED
 PRODUCTION UNCHANGED
 ```
 
@@ -279,7 +280,54 @@ Status: `BLOCKED`.
 
 No rollout is allowed until repository implementation, security review, host provisioning, backup/restore and hostile-file gates pass.
 
-## 7. Remaining production blockers
+## 7. HC-018 — Medication Reminders and Telegram Notifications
+
+Status: `PLANNED / NOT IMPLEMENTED / NOT DEPLOYED`.
+
+Planned placement: after HC-017 E3 security review. HC-018 may be implemented before or in parallel with HC-017 F only after an explicit scheduling decision. It is a separate product and security contour and must not be mixed into the HC-017 E3 database contract.
+
+Initial scope:
+
+- verified Telegram account linking;
+- medication reminder plans and timezone-safe schedules;
+- Telegram actions `Принял`, `Отложить`, `Пропустить`;
+- reminder and response history in Health Compass;
+- neutral and detailed notification modes;
+- neutral mode as the mandatory default;
+- explicit opt-in, warning and preview before detailed mode;
+- profile-level default plus per-reminder override;
+- `no_response` kept distinct from a confirmed skipped dose;
+- Telegram used only as a delivery/interaction channel, never as the medical system of record.
+
+Privacy setting:
+
+```text
+telegram_message_detail_level = neutral | detailed
+default = neutral
+per-reminder override = inherit | neutral | detailed
+```
+
+Detailed messages may show only user-confirmed reminder fields such as medication name, dosage text, quantity/form, route/timing instruction and a user-authored note. They must not show diagnosis, unrelated clinical history, AI interpretation or inferred adherence conclusions.
+
+No reminder or detailed mode may be created automatically from OCR, documents, AI output, import or a medication list. Health Compass must not prescribe, change dosage or interpret an absent response as a medical fact.
+
+Implementation slices:
+
+```text
+R1 — Safe Telegram linking
+R2 — Reminder plans and scheduler
+R3 — Taken / Snooze / Skip responses
+R4 — Privacy modes and adherence view
+R5 — Optional repeat, course and stock reminders
+```
+
+Canonical contract:
+
+```text
+docs/implementation/HC-018-MEDICATION-REMINDERS-AND-TELEGRAM.md
+```
+
+## 8. Remaining production blockers
 
 Before any Documents/OCR/Labs rollout:
 
@@ -297,7 +345,7 @@ Before any Documents/OCR/Labs rollout:
 - disposable document/OCR/Labs owner smoke;
 - explicit controlled rollout approval.
 
-## 8. Deferred platform work
+## 9. Deferred platform work
 
 The following remains outside the current E3 target and must be rebased/reimplemented from current main when scheduled:
 
@@ -310,10 +358,11 @@ The following remains outside the current E3 target and must be rebased/reimplem
 - Pet Health MVP;
 - monetization and entitlements.
 
-## 9. Current next action
+## 10. Current next action
 
 ```text
 START HC-017 E3 FROM MAIN 1d613311...
 DATABASE CONTRACT AND NEGATIVE TESTS FIRST
+HC-018 REMAINS PLANNED ONLY
 NO PRODUCTION CHANGE
 ```
