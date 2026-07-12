@@ -2,11 +2,13 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  ClipboardCheck,
   FileText,
   LockKeyhole,
   ShieldCheck,
   Upload,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { ApiError, apiGet, type HealthProfile } from "@/lib/api";
@@ -64,6 +66,7 @@ const ocrTone: Record<OCRStatus, string> = {
   queued: "border-warning/30 bg-warning/10 text-warning",
   processing: "border-primary/30 bg-primary/10 text-primary",
   review_required: "border-warning/30 bg-warning/10 text-warning",
+  reviewed: "border-success/30 bg-success/10 text-success",
   error: "border-destructive/30 bg-destructive/10 text-destructive",
 };
 
@@ -297,6 +300,9 @@ export default function Documents() {
         <div className="grid gap-3">
           {documents?.map((document) => {
             const currentStatus = displayStatus(document);
+            const reviewAvailable = ["review_required", "reviewed"].includes(
+              document.ocr_status,
+            );
             return (
               <article key={document.id} className="hm-card p-4 md:p-5">
                 <div className="flex items-start justify-between gap-4">
@@ -320,6 +326,17 @@ export default function Documents() {
                     {currentStatus.label}
                   </span>
                 </div>
+                {reviewAvailable && (
+                  <Link
+                    to={`/app/documents/${document.id}/review`}
+                    className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/15"
+                  >
+                    <ClipboardCheck className="h-4 w-4" />
+                    {document.ocr_status === "reviewed"
+                      ? "Открыть результат проверки"
+                      : "Проверить распознанный текст"}
+                  </Link>
+                )}
               </article>
             );
           })}
