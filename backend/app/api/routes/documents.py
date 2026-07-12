@@ -26,13 +26,15 @@ def _request_id(request: Request) -> str | None:
 
 
 @router.get(
-    "/document-intake/capabilities",
+    "/profiles/{profile_id}/document-intake/capabilities",
     response_model=DocumentIntakeCapabilities,
 )
 async def get_document_intake_capabilities(
+    profile_id: uuid.UUID,
     _: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ) -> DocumentIntakeCapabilities:
-    return document_capabilities()
+    return await document_capabilities(session, profile_id)
 
 
 @router.post(
