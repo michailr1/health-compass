@@ -14,6 +14,7 @@ describe("Lab draft helpers", () => {
     }
     expect(labDraftStatusLabel("draft")).toBe("Черновик");
     expect(labDraftStatusLabel("ready")).toContain("отдельному подтверждению");
+    expect(labDraftStatusLabel("rejected")).toBe("Исключено");
   });
 
   it("keeps value kinds explicit and separate", () => {
