@@ -11,6 +11,7 @@ import AccountLink from "./pages/AccountLink";
 import Dashboard from "./pages/Dashboard";
 import ProfileQuestionnairePage from "./pages/ProfileQuestionnaire";
 import SignInMethodsPage from "./pages/SignInMethods";
+import Documents from "./pages/Documents";
 import Oura from "./pages/Oura";
 import Genetics from "./pages/Genetics";
 import ActionPlan from "./pages/ActionPlan";
@@ -45,6 +46,7 @@ const App = () => (
               <Route index element={<Dashboard />} />
               <Route path="profile" element={<ProfileQuestionnairePage />} />
               <Route path="sign-in-methods" element={<SignInMethodsPage />} />
+              <Route path="documents" element={<Documents />} />
               <Route path="oura" element={<Oura />} />
               <Route path="genetics" element={<Genetics />} />
               <Route path="plan" element={<ActionPlan />} />
