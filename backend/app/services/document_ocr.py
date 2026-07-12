@@ -17,7 +17,6 @@ from app.models.document_ocr import (
     DocumentOCRRun,
 )
 from app.schemas.document_ocr import (
-    OCRCandidateVersion,
     DocumentOCRCandidateResponse,
     DocumentOCRCandidateReviewRequest,
     DocumentOCRFinalizeRequest,
@@ -25,6 +24,7 @@ from app.schemas.document_ocr import (
     DocumentOCRPatientDecisionResponse,
     DocumentOCRReviewResponse,
     DocumentOCRStatusResponse,
+    OCRCandidateVersion,
 )
 from app.services.documents import get_document
 from app.services.health_profile import require_profile_edit_access
