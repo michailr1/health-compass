@@ -1,0 +1,71 @@
+name: Patch D1 migration
+
+on:
+  push:
+    branches: [feat/hc-017-ocr-candidates]
+    paths:
+      - .github/workflows/patch-d1-migration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/hc-017-ocr-candidates
+          fetch-depth: 0
+      - name: Apply exact migration fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/alembic/versions/0054_add_document_ocr_candidates.py")
+          text = path.read_text(encoding="utf-8")
+
+          replacements = (
+              (r"(\+[a-z]{{3}})", "([+][a-z]{{3}})", 2),
+              (r"\.tsv\.hcenc", "[.]tsv[.]hcenc", 2),
+              (r"+\.hcenc", "+[.]hcenc", 1),
+          )
+          for old, new, expected in replacements:
+              actual = text.count(old)
+              if actual != expected:
+                  raise SystemExit(
+                      f"unexpected replacement count for {old!r}: {actual} != {expected}"
+                  )
+              text = text.replace(old, new)
+
+          marker = "def downgrade() -> None:\n    for signature, role in (\n"
+          replacement = (
+              "def downgrade() -> None:\n"
+              "    op.execute(\n"
+              "        f\"DROP POLICY IF EXISTS document_ocr_candidates_select \"\n"
+              "        f\"ON {S}.document_ocr_candidates\"\n"
+              "    )\n"
+              "    op.execute(\n"
+              "        f\"DROP POLICY IF EXISTS document_ocr_runs_select \"\n"
+              "        f\"ON {S}.document_ocr_runs\"\n"
+              "    )\n"
+              "    for signature, role in (\n"
+          )
+          if text.count(marker) != 1:
+              raise SystemExit("unexpected downgrade marker count")
+          text = text.replace(marker, replacement)
+
+          path.write_text(text, encoding="utf-8")
+          PY
+          git diff --check
+          git diff -- backend/alembic/versions/0054_add_document_ocr_candidates.py
+      - name: Commit branch fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/alembic/versions/0054_add_document_ocr_candidates.py
+          git commit -m "fix: harden OCR migration downgrade and regexes"
+          git push origin HEAD:feat/hc-017-ocr-candidates
