@@ -1,6 +1,6 @@
 # Health Compass — канонический план проекта
 
-Версия: 2.0  
+Версия: 2.1  
 Дата: 2026-07-12  
 Основная ветка: `main`
 
@@ -33,19 +33,19 @@ Create a secure multi-user personal-health portal that combines profile data, cl
 - Raw documents, OCR drafts and confirmed facts have different access boundaries.
 - `DEFINED`, `IMPLEMENTED`, `MERGED`, `CI VERIFIED` and `DEPLOYED` are separate states.
 
-## 4. Current repository and production state
+## 4. Repository and production state
 
 Repository:
 
 ```text
-main: 06e4f0a228b4867d9bf7983284bc04f3cb53cd05
+main: ac9e21f3315c4624a845e633c2a90881d348ca30
 Alembic head: 0053
 ```
 
 Production:
 
 ```text
-URL: https://health.funti.cc
+https://health.funti.cc
 application: b8e868825f378195975e2729f3f36c21a1afa2d0
 Alembic: 0049
 DOCUMENT_UPLOAD_ENABLED=false
@@ -54,9 +54,9 @@ DOCUMENT_UPLOAD_ENABLED=false
 Current verdict:
 
 ```text
-HC-017 C2 MERGED
-HC-017 C2 CI VERIFIED
-HC-017 NOT DEPLOYED
+C1+C2 COMBINED REVIEW COMPLETE
+SLICE D ARCHITECTURE DEFINED
+SLICE D NOT IMPLEMENTED
 PRODUCTION UNCHANGED
 ```
 
@@ -82,7 +82,7 @@ Status: `COMPLETED / NON-BLOCKING HARDENING REMAINS`.
 - workspace/profile bootstrap;
 - FORCE RLS;
 - account linking and duplicate resolution;
-- structured logging and token/query redaction.
+- structured logging and query/token redaction.
 
 ### PHASE-02.5 — Progressive Health Intake
 
@@ -107,8 +107,6 @@ Status: `DEPLOYED / MANUALLY ACCEPTED`.
 ## 6. PHASE-03 — Documents, OCR and Labs
 
 Status: `IN PROGRESS`.
-
-Target flow:
 
 ```text
 Upload
@@ -138,15 +136,6 @@ CI: #402
 migration: 0050
 ```
 
-Implemented:
-
-- document metadata and intake jobs;
-- FORCE RLS and document-specific read boundary;
-- bounded upload validation;
-- pre-parser request limit;
-- rollback cleanup;
-- metadata/status API and UI.
-
 ### Slice C1 — Encrypted Scanner Worker Foundation
 
 Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED` through PR `#51`.
@@ -160,21 +149,12 @@ migration: 0051
 
 Implemented:
 
-- streaming AES-256-GCM `HCENC1` objects;
-- credential-file hardening;
-- encrypted quarantine storage;
-- local ClamAV Unix-socket client;
-- scanner signature freshness gate;
-- restricted scanner worker role/functions;
-- retry, lease and idempotency controls;
-- infected-document deletion lifecycle;
-- safe scanner UI states.
-
-Canonical evidence:
-
-```text
-docs/implementation/HC-017-SLICE-C1-IMPLEMENTATION-2026-07-12.md
-```
+- authenticated encrypted source objects;
+- hardened key/path boundary;
+- local ClamAV scanner;
+- restricted scanner role and lease functions;
+- retry/idempotency controls;
+- infected-document deletion lifecycle.
 
 ### Slice C2 — Quotas, Reconciliation and Safe Rendering
 
@@ -189,42 +169,19 @@ migrations: 0052–0053
 
 Implemented:
 
-#### Quotas and accounting
-
-- profile/global byte quotas;
-- active-document and queued-job limits;
-- transaction advisory locks;
-- reserved free-space configuration;
-- canonical `current_storage_key`.
-
-#### Restricted renderer
-
-```text
-health_compass_renderer LOGIN NOBYPASSRLS
-```
-
-- renderer-only claim/heartbeat/complete/fail functions;
-- no direct table grants;
-- complete GCM authentication before parser access;
-- sealed read-only Linux memfd source and output;
-- fixed executable paths and arguments;
-- CPU, memory, output, page, pixel and timeout limits;
+- race-safe profile/global quotas;
+- canonical current source reference;
+- encrypted safe-page artifacts;
+- separate renderer and reconciler roles;
+- no direct worker table grants;
+- full GCM verification before parser access;
+- sealed memory-file input/output;
+- bounded fixed-command rendering;
 - strict PNG validation;
-- encrypted accepted source and safe-page artifacts;
+- encrypted accepted source and derivatives;
 - atomic/idempotent accepted promotion;
-- no raw PDF browser route.
-
-#### Restricted reconciler
-
-```text
-health_compass_reconciler LOGIN NOBYPASSRLS
-```
-
-- opaque source/artifact reference inventory;
-- orphan isolation and deletion;
-- missing referenced-object handling;
-- idempotent repeated reconciliation;
-- no direct table grants.
+- orphan/missing-object reconciliation;
+- idempotent storage-missing audit.
 
 Canonical evidence:
 
@@ -232,60 +189,113 @@ Canonical evidence:
 docs/implementation/HC-017-SLICE-C2-SAFE-RENDERING-EVIDENCE-2026-07-12.md
 ```
 
+### Combined C1+C2 security review
+
+Status: `COMPLETE`.
+
+```text
+ACCEPT FOR REPOSITORY FOUNDATION
+NO UNRESOLVED CRITICAL OR HIGH FINDING
+NOT APPROVED FOR PRODUCTION DEPLOYMENT
+```
+
+Canonical review:
+
+```text
+docs/reviews/HC-017-C1-C2-COMBINED-SECURITY-REVIEW-2026-07-12.md
+```
+
 ### Slice D — OCR Candidates and Human Review
+
+Status: `ARCHITECTURE DEFINED / NEXT IMPLEMENTATION STAGE`.
+
+Canonical contract:
+
+```text
+docs/implementation/HC-017-SLICE-D-OCR-CANDIDATES-AND-HUMAN-REVIEW.md
+```
+
+Selected MVP architecture:
+
+- local Tesseract 5.x;
+- LSTM engine `--oem 1`;
+- initial language set `rus+eng`;
+- TSV output with confidence and word coordinates;
+- OCR consumes only current C2 `safe_page` artifacts;
+- complete GCM verification before OCR;
+- sealed read-only input memfd;
+- bounded output memfd;
+- fixed command and language/model configuration;
+- separate OCR worker OS and PostgreSQL identities;
+- no direct OCR-worker table grants;
+- encrypted TSV provenance objects;
+- strict TSV parser;
+- text-block candidates start `needs_review`;
+- owner/edit-only candidate text;
+- separate explicit patient-match decision;
+- no automatic Clinical Context, measurement or Labs creation.
+
+#### D1 — OCR extraction foundation
 
 Status: `NEXT / NOT IMPLEMENTED`.
 
-#### D1 — Local OCR candidate extraction
+Candidate migration:
 
-Planned:
+```text
+0054
+```
 
-- local OCR over C2 safe-page PNG artifacts only;
-- separate `health_compass_ocr_worker LOGIN NOBYPASSRLS` role;
-- bounded Tesseract subprocess;
-- encrypted OCR provenance artifacts;
-- strict TSV parser;
-- candidate text, confidence and page bounding boxes;
-- candidates always start `needs_review`;
-- owner/edit-only candidate access;
-- no automatic Clinical Context or Labs record.
+Implementation order:
+
+1. recheck current main, open PRs and Alembic heads;
+2. create separate D1 branch;
+3. define OCR run/artifact/candidate tables and FORCE RLS;
+4. provision OCR-worker role prerequisite and restricted functions;
+5. implement bounded Tesseract wrapper;
+6. implement strict TSV parser and candidate aggregation;
+7. encrypt TSV provenance before storage;
+8. add owner/edit-only candidate read API;
+9. add exact-head unit/PostgreSQL tests;
+10. perform independent D1 review before merge.
 
 #### D2 — Human review and patient matching
 
-Planned:
+Status: `PLANNED AFTER D1 REVIEW`.
 
-- accept, edit, reject and defer candidate actions;
-- explicit patient-match state: unknown/match/mismatch;
-- optimistic concurrency with expected timestamps;
-- atomic review transitions;
-- no confirmation when patient match is unknown or mismatch;
+- candidate accept/edit/reject/defer;
+- optimistic concurrency;
+- explicit patient match/mismatch/not-present decision;
+- review finalization with candidate-manifest checks;
 - content-free audit;
-- accessible review UI linked to safe-page provenance.
+- accessible page-region review UI;
+- no Labs creation.
 
 #### Slice D stop conditions
 
 Do not merge when:
 
-- OCR receives raw or unauthenticated documents;
-- OCR output is stored as a clinical fact;
-- view/analyze can read OCR text;
-- patient mismatch can be bypassed;
-- candidate edits lack optimistic concurrency;
-- OCR text or patient identifiers enter ordinary logs;
-- worker has direct table grants;
-- subprocess limits are absent;
-- exact-head PostgreSQL negative tests are absent.
+- OCR receives raw PDF or unauthenticated bytes;
+- arbitrary OCR command options are accepted;
+- output, memory, CPU or timeout is unbounded;
+- OCR text appears in logs;
+- view/analyze can read candidate text;
+- OCR worker has direct table privileges;
+- candidates begin accepted;
+- patient matching is inferred automatically;
+- OCR creates clinical/Labs facts;
+- optimistic concurrency is absent;
+- exact-head negative PostgreSQL tests are absent.
 
 ### Slice E — Confirmed Labs
 
 Status: `PLANNED AFTER SLICE D`.
 
 - explicit atomic confirmation;
-- source-preserving analyte/value/unit/range;
 - patient-match prerequisite;
-- provenance-linked lab observations;
+- source-preserving analyte/value/unit/range;
+- provenance-linked observations;
 - document-linked deletion lifecycle;
-- no automatic medical interpretation.
+- no automatic interpretation.
 
 ### Slice F — Metric dynamics
 
@@ -293,22 +303,22 @@ Status: `PLANNED`.
 
 - compatible numeric series;
 - no silent unit conversion;
-- chart plus accessible table;
+- chart and accessible table;
 - source-specific ranges;
 - provenance links;
-- no diagnosis or treatment advice.
+- no diagnosis/treatment advice.
 
 ### Slice G — Controlled production rollout
 
-Status: `PLANNED AFTER IMPLEMENTATION AND SECURITY REVIEW`.
+Status: `PLANNED AFTER IMPLEMENTATION AND REVIEW`.
 
 Required readiness:
 
 - production encrypted storage and key recovery;
-- scanner/renderer/reconciler OS and DB identities;
+- scanner/renderer/reconciler/OCR OS and DB identities;
 - hardened systemd units;
-- verified Poppler/ImageMagick/Tesseract versions;
-- ClamAV/FreshClam and fresh signatures;
+- verified Poppler/ImageMagick/Tesseract and language models;
+- ClamAV/FreshClam and healthy signatures;
 - reverse-proxy body limit;
 - isolated bounded multipart spool;
 - measured quotas and disk reserve;
@@ -342,19 +352,19 @@ Required readiness:
 - revoke and audit;
 - RLS matrix.
 
-### PHASE-07 — Privacy and data lifecycle
+### PHASE-07 — Privacy and lifecycle
 
 - consent center;
 - export;
 - profile/user deletion;
-- document raw/derived/OCR/confirmed deletion;
+- document source/derived/OCR/confirmed deletion;
 - retention;
 - external-processing consent.
 
 ### PHASE-08 — AI Health Assistant
 
 - retrieval-grounded answers;
-- evidence and citations;
+- evidence/citations;
 - red-flag routing;
 - prompt-injection tests;
 - no diagnosis or dose calculation.
@@ -370,28 +380,29 @@ Required readiness:
 
 ## 8. Immediate plan
 
-1. Merge C2 evidence documentation.
-2. Perform independent combined C1+C2 security review.
-3. Recheck current `main`, open PRs and Alembic heads.
-4. Define Slice D data and authorization contracts.
-5. Implement D1 in a dedicated branch and PR.
-6. Keep production document upload disabled.
-7. Run full exact-head backend/frontend/migration/PostgreSQL gates.
-8. Implement D2 only after D1 review.
-9. Do not create a production deployment task until Slice G readiness gates pass.
+1. Merge Slice D design documentation.
+2. Recheck current `main`, open PRs and Alembic heads.
+3. Create a dedicated D1 implementation branch.
+4. Implement the database and worker privilege boundary first.
+5. Implement bounded Tesseract and strict TSV parsing.
+6. Add encrypted provenance and candidate RLS.
+7. Run exact-head backend/frontend/migration/PostgreSQL gates.
+8. Perform independent D1 review.
+9. Keep production document upload disabled.
+10. Do not create a VPS deployment task.
 
 ## 9. Global rollout stop conditions
 
 Stop rollout when:
 
-- repository and target SHA are not exact;
+- target SHA and CI SHA differ;
 - backup/restore evidence is absent;
 - storage or credentials are publicly accessible;
 - worker roles have broad privileges;
 - scanner/parser/OCR can fail open;
-- plaintext files escape bounded private temporary storage;
-- quotas and reconciliation are not operational;
+- plaintext escapes private bounded memory/spool;
+- quotas/reconciliation are not operational;
 - logs expose filenames, paths, OCR text or medical values;
 - Alembic has multiple heads;
-- independent security review is incomplete;
-- manual disposable-document smoke is not approved.
+- security review is incomplete;
+- disposable-document smoke is not approved.
