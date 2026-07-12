@@ -177,6 +177,40 @@ NOT DEPLOYED
 NO AUTOMATIC CLINICAL OR LABS FACTS
 ```
 
+## HC-017 Slice D2 implementation evidence
+
+| Source | Purpose |
+|---|---|
+| PR `#58` | human OCR review and patient matching implementation |
+| verified head `4ecae1fb0816803b2d858db1f5016bce589544d5` | exact reviewed D2 code |
+| merge `f67a1128e29a1c62e8a3b27dd20c973df82947ad` | D2 merged into `main` |
+| migration `0055` | patient decisions, review provenance and restricted review functions |
+| CI `#454` | backend/frontend/full migration/D2-RLS verification |
+| `docs/implementation/HC-017-SLICE-D2-HUMAN-REVIEW-EVIDENCE-2026-07-12.md` | canonical D2 evidence |
+
+Key D2 sources:
+
+- `backend/alembic/versions/0055_add_document_ocr_human_review.py`;
+- `backend/app/models/document_ocr.py`;
+- `backend/app/schemas/document_ocr.py`;
+- `backend/app/services/document_ocr.py`;
+- `backend/app/api/routes/document_ocr.py`;
+- `backend/tests/test_document_ocr_review_rls.py`;
+- `backend/tests/test_document_ocr_review_schemas.py`;
+- `src/lib/documentOcrReviewApi.ts`;
+- `src/pages/DocumentOCRReview.tsx`;
+- `src/pages/Documents.tsx`.
+
+D2 status:
+
+```text
+IMPLEMENTED
+MERGED
+CI VERIFIED
+NOT DEPLOYED
+NO AUTOMATIC CLINICAL OR LABS FACTS
+```
+
 ## Current factual sources
 
 - Git commits and pull requests;
@@ -198,4 +232,4 @@ NO AUTOMATIC CLINICAL OR LABS FACTS
 7. Manual acceptance does not invent absent operational metrics.
 8. Every rollout record names an exact SHA.
 9. HC-017 is not production-ready before host provisioning, security review and controlled rollout gates pass.
-10. OCR output can never be treated as a clinical fact without explicit human review and later confirmation.
+10. OCR output and reviewed transcription are not clinical facts without a separate explicit confirmation transaction.
