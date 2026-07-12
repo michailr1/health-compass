@@ -8,17 +8,22 @@ import uuid
 import psycopg
 import pytest
 
-from test_lab_observation_drafts_rls import (
+from tests.test_lab_observation_drafts_rls import (
     ADMIN_ENV,
     APP_ENV,
     _context_versions,
     _draft_payload,
     _set_user,
     _sync_url,
+    lab_fixture as shared_lab_fixture,
 )
 
-pytest_plugins = ("test_lab_observation_drafts_rls",)
 pytestmark = pytest.mark.integration
+
+
+@pytest.fixture
+def lab_fixture(shared_lab_fixture: dict[str, object]) -> dict[str, object]:
+    return shared_lab_fixture
 
 
 def test_revoked_consent_blocks_sources_and_status_after_creation(
