@@ -4,7 +4,9 @@ import {
   DOCUMENT_ACCEPT,
   documentStatusLabel,
   formatDocumentSize,
+  scannerStatusLabel,
   type DocumentStatus,
+  type ScannerStatus,
 } from "./documentApi";
 
 describe("document intake helpers", () => {
@@ -37,7 +39,23 @@ describe("document intake helpers", () => {
     expect(documentStatusLabel("quarantined")).toBe("В карантине");
   });
 
-  it("advertises only the Slice B file formats", () => {
+  it("has a safe user-facing label for every scanner state", () => {
+    const statuses: ScannerStatus[] = [
+      "not_scanned",
+      "scanning",
+      "clean",
+      "infected",
+      "error",
+      "stale",
+    ];
+    for (const status of statuses) {
+      expect(scannerStatusLabel(status)).not.toBe("");
+    }
+    expect(scannerStatusLabel("infected")).toBe("Отклонён как небезопасный");
+    expect(scannerStatusLabel("error")).not.toContain("ClamAV");
+  });
+
+  it("advertises only the supported file formats", () => {
     expect(DOCUMENT_ACCEPT).toContain("application/pdf");
     expect(DOCUMENT_ACCEPT).toContain("image/jpeg");
     expect(DOCUMENT_ACCEPT).toContain("image/png");
