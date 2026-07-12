@@ -9,6 +9,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.db.session import discard_rollback_cleanup, register_rollback_cleanup
 from app.models.document import DocumentProcessingJob, ProfileDocument
 from app.models.profile_audit_event import ProfileAuditEvent
 from app.models.user import User
@@ -109,12 +110,17 @@ async def create_document(
     document_id = uuid.uuid4()
     storage = _storage()
     stored = None
+    cleanup_token: str | None = None
     try:
         stored = await storage.write_quarantine(
             document_id,
             upload,
             max_bytes=settings.document_max_bytes,
             max_image_pixels=settings.document_max_image_pixels,
+        )
+        cleanup_token = register_rollback_cleanup(
+            session,
+            lambda key=stored.storage_key: storage.delete(key),
         )
 
         document = ProfileDocument(
@@ -173,6 +179,8 @@ async def create_document(
             },
         ) from exc
     except Exception:
+        if cleanup_token is not None:
+            discard_rollback_cleanup(session, cleanup_token)
         if stored is not None:
             await storage.delete(stored.storage_key)
         raise
