@@ -448,10 +448,18 @@ def test_lab_draft_source_preserving_flow(lab_fixture: dict[str, object]) -> Non
         assert connection.execute(
             """
             SELECT health_compass.app_set_lab_draft_sources(
-              %s,%s,%s::jsonb,%s,'lab-draft-test'
+              %s,%s,%s,%s,%s,%s::jsonb,%s,'lab-draft-test'
             )
             """,
-            (draft_id, initial_updated_at, json.dumps(manifest), uuid.uuid4()),
+            (
+                draft_id,
+                initial_updated_at,
+                document_updated_at,
+                finalized_at,
+                decision_updated_at,
+                json.dumps(manifest),
+                uuid.uuid4(),
+            ),
         ).fetchone() == (True,)
         after_sources = connection.execute(
             "SELECT updated_at FROM health_compass.lab_observation_drafts WHERE id = %s",
@@ -484,13 +492,23 @@ def test_lab_draft_source_preserving_flow(lab_fixture: dict[str, object]) -> Non
 
     with psycopg.connect(_sync_url(APP_ENV)) as connection:
         _set_user(connection, ids["editor"])
+        document_updated_at, finalized_at, decision_updated_at = _context_versions(
+            connection, ids
+        )
         assert connection.execute(
             """
             SELECT health_compass.app_set_lab_observation_draft_status(
-              %s,'ready',%s,%s,'lab-draft-test'
+              %s,'ready',%s,%s,%s,%s,%s,'lab-draft-test'
             )
             """,
-            (draft_id, after_sources, uuid.uuid4()),
+            (
+                draft_id,
+                after_sources,
+                document_updated_at,
+                finalized_at,
+                decision_updated_at,
+                uuid.uuid4(),
+            ),
         ).fetchone() == (True,)
 
     for role, expected in (
@@ -561,8 +579,12 @@ def test_lab_draft_security_catalog_and_consent(
         "app_update_lab_observation_draft(uuid,timestamp with time zone,"
         "timestamp with time zone,timestamp with time zone,"
         "timestamp with time zone,jsonb,uuid,text)",
-        "app_set_lab_draft_sources(uuid,timestamp with time zone,jsonb,uuid,text)",
-        "app_set_lab_observation_draft_status(uuid,text,timestamp with time zone,uuid,text)",
+        "app_set_lab_draft_sources(uuid,timestamp with time zone,"
+        "timestamp with time zone,timestamp with time zone,"
+        "timestamp with time zone,jsonb,uuid,text)",
+        "app_set_lab_observation_draft_status(uuid,text,timestamp with time zone,"
+        "timestamp with time zone,timestamp with time zone,"
+        "timestamp with time zone,uuid,text)",
     )
     with psycopg.connect(_sync_url(ADMIN_ENV)) as connection:
         rls = connection.execute(

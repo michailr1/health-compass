@@ -391,7 +391,48 @@ def upgrade() -> None:
 def downgrade() -> None:
     _drop_app_function(SET_SOURCES_SIG)
     _drop_app_function(SET_STATUS_SIG)
-    raise RuntimeError(
-        "Downgrade from 0057 is intentionally blocked because restoring the shorter "
-        "mutation signatures would reintroduce stale-context and consent bypasses"
+    op.execute(f"GRANT CREATE ON SCHEMA {S} TO {DEFINER}")
+    op.execute(
+        f"""
+        CREATE FUNCTION {S}.app_set_lab_draft_sources(
+          p_draft_id uuid,
+          p_expected_updated_at timestamptz,
+          p_sources jsonb,
+          p_audit_event_id uuid,
+          p_request_id text
+        ) RETURNS boolean
+        LANGUAGE plpgsql SECURITY DEFINER
+        SET search_path = '' SET row_security = off
+        AS $$
+        BEGIN
+          RAISE EXCEPTION 'Lab source mutation disabled after secure downgrade'
+            USING ERRCODE = 'HC409';
+        END;
+        $$
+        """
     )
+    op.execute(
+        f"""
+        CREATE FUNCTION {S}.app_set_lab_observation_draft_status(
+          p_draft_id uuid,
+          p_status text,
+          p_expected_updated_at timestamptz,
+          p_audit_event_id uuid,
+          p_request_id text
+        ) RETURNS boolean
+        LANGUAGE plpgsql SECURITY DEFINER
+        SET search_path = '' SET row_security = off
+        AS $$
+        BEGIN
+          RAISE EXCEPTION 'Lab status mutation disabled after secure downgrade'
+            USING ERRCODE = 'HC409';
+        END;
+        $$
+        """
+    )
+    for signature in (OLD_SET_SOURCES_SIG, OLD_SET_STATUS_SIG):
+        op.execute(f"ALTER FUNCTION {signature} OWNER TO {DEFINER}")
+        op.execute(f"ALTER FUNCTION {signature} SET row_security = off")
+        op.execute(f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC")
+        op.execute(f"GRANT EXECUTE ON FUNCTION {signature} TO {APP}")
+    op.execute(f"REVOKE CREATE ON SCHEMA {S} FROM {DEFINER}")

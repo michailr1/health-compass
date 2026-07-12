@@ -98,7 +98,7 @@ export default function LabDrafts() {
       if (!analyteCandidate || !valueCandidate) {
         throw new Error("Source candidates are required");
       }
-      return setLabDraftSources(profile.id, documentId, draft, [
+      return setLabDraftSources(profile.id, documentId, context, draft, [
         {
           candidate_id: analyteCandidate.id,
           source_role: "analyte",
@@ -126,7 +126,7 @@ export default function LabDrafts() {
 
   const readyMutation = useMutation({
     mutationFn: (draft: LabDraft) =>
-      setLabDraftStatus(profile!.id, documentId!, draft, "ready"),
+      setLabDraftStatus(profile!.id, documentId!, context!, draft, "ready"),
     onSuccess: (next) => {
       queryClient.setQueryData<LabDraft[]>(draftsKey, (current = []) =>
         current.map((draft) => (draft.id === next.id ? next : draft)),
