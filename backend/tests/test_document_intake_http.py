@@ -1,4 +1,4 @@
-"""HTTP-level acceptance tests for HC-017 Slice B."""
+"""HTTP-level acceptance tests for HC-017 secure document intake."""
 
 from __future__ import annotations
 
@@ -175,10 +175,25 @@ async def test_quarantine_upload_and_document_access_matrix(tmp_path: Path) -> N
     with psycopg.connect(_admin_url(), autocommit=True) as connection:
         workspace, profile, actors = _seed_profile(connection)
 
-    old_enabled = settings.document_upload_enabled
-    old_root = settings.document_storage_root
+    credentials = tmp_path / "credentials"
+    credentials.mkdir(mode=0o700)
+    key_path = credentials / "test-key"
+    key_path.write_bytes(b"k" * 32)
+    os.chmod(key_path, 0o400)
+    storage_root = tmp_path / "objects"
+
+    old_values = {
+        "document_upload_enabled": settings.document_upload_enabled,
+        "document_storage_root": settings.document_storage_root,
+        "document_credentials_directory": settings.document_credentials_directory,
+        "document_encryption_active_key_id": settings.document_encryption_active_key_id,
+        "document_min_free_bytes": settings.document_min_free_bytes,
+    }
     settings.document_upload_enabled = True
-    settings.document_storage_root = str(tmp_path)
+    settings.document_storage_root = str(storage_root)
+    settings.document_credentials_directory = str(credentials)
+    settings.document_encryption_active_key_id = "test-key"
+    settings.document_min_free_bytes = 0
 
     try:
         for role, expected_upload in (
@@ -210,10 +225,14 @@ async def test_quarantine_upload_and_document_access_matrix(tmp_path: Path) -> N
         payload = uploaded.json()
         document_id = uuid.UUID(payload["id"])
         assert payload["status"] == "quarantined"
+        assert payload["scanner_status"] == "not_scanned"
         assert payload["original_filename"] == "analysis.pdf"
         assert "sha256" not in payload
         assert "quarantine_storage_key" not in payload
-        assert (tmp_path / f"quarantine/{document_id}/original").exists()
+
+        encrypted_path = storage_root / f"quarantine/{document_id}/original.hcenc"
+        assert encrypted_path.exists()
+        assert b"%PDF" not in encrypted_path.read_bytes()
 
         for role in ("owner", "edit", "view"):
             async with _client(actors[role]) as client:
@@ -252,6 +271,22 @@ async def test_quarantine_upload_and_document_access_matrix(tmp_path: Path) -> N
                 (profile, document_id),
             ).fetchone()
             assert audit == ("document.uploaded", {})
+            document = connection.execute(
+                """
+                SELECT storage_backend, encryption_format, encryption_key_id,
+                       encrypted_size > byte_size, scanner_status
+                FROM health_compass.profile_documents
+                WHERE id = %s
+                """,
+                (document_id,),
+            ).fetchone()
+            assert document == (
+                "local_encrypted",
+                "hcenc1",
+                "test-key",
+                True,
+                "not_scanned",
+            )
             job = connection.execute(
                 """
                 SELECT job_type, status, attempt
@@ -260,10 +295,10 @@ async def test_quarantine_upload_and_document_access_matrix(tmp_path: Path) -> N
                 """,
                 (document_id,),
             ).fetchone()
-            assert job == ("inspect", "queued", 0)
+            assert job == ("scan", "queued", 0)
     finally:
-        settings.document_upload_enabled = old_enabled
-        settings.document_storage_root = old_root
+        for name, value in old_values.items():
+            setattr(settings, name, value)
         await _dispose_engine()
         _cleanup(workspace, profile, actors)
 

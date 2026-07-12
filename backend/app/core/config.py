@@ -51,14 +51,24 @@ class Settings(BaseSettings):
     account_link_intent_ttl_seconds: int = 10 * 60
     account_link_cookie_name: str = "hc_account_link"
 
-    # HC-017 Slice B is intentionally disabled by default and cannot be enabled
-    # outside development until the scanner and production object-storage slice
-    # is implemented and separately reviewed.
+    # HC-017 stays disabled outside development until encrypted storage,
+    # scanner, worker and deployment controls are independently approved.
     document_upload_enabled: bool = False
-    document_storage_backend: str = "local"
+    document_storage_backend: str = "local_encrypted"
     document_storage_root: str = "/tmp/health-compass-documents"
     document_max_bytes: int = 20 * 1024 * 1024
     document_max_image_pixels: int = 25_000_000
+    document_min_free_bytes: int = 512 * 1024 * 1024
+    document_encryption_active_key_id: str = "dev-document-key"
+    document_credentials_directory: str = "/tmp/health-compass-document-credentials"
+
+    # Used only by a separately started restricted worker process.
+    document_worker_database_url: str = ""
+    document_scanner_socket: str = "/run/clamav/clamd.ctl"
+    document_scanner_timeout_seconds: int = 60
+    document_scanner_max_signature_age_hours: int = 48
+    document_worker_lease_seconds: int = 300
+    document_worker_max_attempts: int = 5
 
     allow_dev_auth: bool = False
     cors_origins: list[str] = ["https://health.funti.cc"]
@@ -80,8 +90,10 @@ class Settings(BaseSettings):
             raise ValueError("ALLOW_DEV_AUTH must be false outside development")
         if self.account_link_intent_ttl_seconds < 60 or self.account_link_intent_ttl_seconds > 1800:
             raise ValueError("ACCOUNT_LINK_INTENT_TTL_SECONDS must be between 60 and 1800")
-        if self.document_storage_backend.strip().lower() != "local":
-            raise ValueError("DOCUMENT_STORAGE_BACKEND must be 'local' in HC-017 Slice B")
+        if self.document_storage_backend.strip().lower() != "local_encrypted":
+            raise ValueError(
+                "DOCUMENT_STORAGE_BACKEND must be 'local_encrypted' in HC-017 Slice C1"
+            )
         if not self.document_storage_root.strip():
             raise ValueError("DOCUMENT_STORAGE_ROOT must not be empty")
         if self.document_max_bytes < 1 or self.document_max_bytes > 20 * 1024 * 1024:
@@ -93,12 +105,30 @@ class Settings(BaseSettings):
             raise ValueError(
                 "DOCUMENT_MAX_IMAGE_PIXELS must be between 1 and 25000000"
             )
+        if self.document_min_free_bytes < 0:
+            raise ValueError("DOCUMENT_MIN_FREE_BYTES must not be negative")
+        if not self.document_encryption_active_key_id.strip():
+            raise ValueError("DOCUMENT_ENCRYPTION_ACTIVE_KEY_ID must not be empty")
+        if not self.document_credentials_directory.strip():
+            raise ValueError("DOCUMENT_CREDENTIALS_DIRECTORY must not be empty")
+        if not self.document_scanner_socket.strip().startswith("/"):
+            raise ValueError("DOCUMENT_SCANNER_SOCKET must be an absolute Unix socket path")
+        if not 1 <= self.document_scanner_timeout_seconds <= 300:
+            raise ValueError("DOCUMENT_SCANNER_TIMEOUT_SECONDS must be between 1 and 300")
+        if not 1 <= self.document_scanner_max_signature_age_hours <= 168:
+            raise ValueError(
+                "DOCUMENT_SCANNER_MAX_SIGNATURE_AGE_HOURS must be between 1 and 168"
+            )
+        if not 30 <= self.document_worker_lease_seconds <= 1800:
+            raise ValueError("DOCUMENT_WORKER_LEASE_SECONDS must be between 30 and 1800")
+        if not 1 <= self.document_worker_max_attempts <= 10:
+            raise ValueError("DOCUMENT_WORKER_MAX_ATTEMPTS must be between 1 and 10")
         if not self.is_production:
             return
         if self.document_upload_enabled:
             raise ValueError(
                 "DOCUMENT_UPLOAD_ENABLED must remain false outside development "
-                "until scanner and private object-storage readiness are reviewed"
+                "until scanner, worker and encrypted-storage rollout are approved"
             )
         if not self.database_url:
             raise ValueError("DATABASE_URL is required outside development")
@@ -113,9 +143,6 @@ class Settings(BaseSettings):
         if not self.oidc_redirect_uri:
             raise ValueError("OIDC_REDIRECT_URI is required outside development")
         if not self.account_linking_enabled:
-            # Fail safe: without the linking flow a second sign-in method
-            # silently creates a duplicate account (CR-08). Disabling the
-            # protection is a development-only override.
             raise ValueError(
                 "ACCOUNT_LINKING_ENABLED must be true outside development; "
                 "disabling duplicate-account protection is a development-only override"

@@ -1,4 +1,4 @@
-"""Secure document intake metadata models for HC-017 Slice B."""
+"""Secure document intake metadata models for HC-017."""
 
 from __future__ import annotations
 
@@ -48,10 +48,27 @@ class ProfileDocument(Base):
     declared_media_type: Mapped[str] = mapped_column(String(128), nullable=False)
     detected_media_type: Mapped[str] = mapped_column(String(128), nullable=False)
     byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    encrypted_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     storage_backend: Mapped[str] = mapped_column(String(32), nullable=False)
     quarantine_storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
     accepted_storage_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    encryption_format: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    encryption_key_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    scanner_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="not_scanned"
+    )
+    scanner_engine: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    scanner_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    scanner_signature_version: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
+    scanner_signature_timestamp: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    scanner_completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     failure_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -106,6 +123,9 @@ class DocumentProcessingJob(Base):
     engine_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     lease_owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
     lease_expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    next_attempt_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     started_at: Mapped[datetime.datetime | None] = mapped_column(

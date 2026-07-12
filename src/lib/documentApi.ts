@@ -15,10 +15,19 @@ export type DocumentStatus =
   | "deletion_pending"
   | "erased";
 
+export type ScannerStatus =
+  | "not_scanned"
+  | "scanning"
+  | "clean"
+  | "infected"
+  | "error"
+  | "stale";
+
 export interface ProfileDocument {
   id: string;
   profile_id: string;
   status: DocumentStatus;
+  scanner_status: ScannerStatus;
   original_filename: string;
   declared_media_type: string;
   detected_media_type: string;
@@ -104,6 +113,18 @@ export function documentStatusLabel(status: DocumentStatus): string {
     voided: "Убран из профиля",
     deletion_pending: "Удаляется",
     erased: "Удалён",
+  };
+  return labels[status];
+}
+
+export function scannerStatusLabel(status: ScannerStatus): string {
+  const labels: Record<ScannerStatus, string> = {
+    not_scanned: "Ожидает проверки",
+    scanning: "Проверяется",
+    clean: "Проверка пройдена",
+    infected: "Отклонён как небезопасный",
+    error: "Проверка временно не завершена",
+    stale: "Ожидает обновления проверки",
   };
   return labels[status];
 }

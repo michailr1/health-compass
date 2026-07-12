@@ -31,6 +31,29 @@ DEFINER_FUNCTIONS = (
     "app_can_view_document(uuid)",
     "app_lookup_identity_user_id(text, text)",
     "app_consume_email_login_token(text)",
+    "app_claim_document_job(text, integer, integer)",
+    "app_heartbeat_document_job(uuid, text, timestamp with time zone, integer)",
+    (
+        "app_complete_document_scan(uuid, text, timestamp with time zone, text, text, "
+        "text, timestamp with time zone, text, uuid, text, uuid)"
+    ),
+    (
+        "app_fail_document_job(uuid, text, timestamp with time zone, text, boolean, "
+        "integer, integer)"
+    ),
+)
+
+WORKER_FUNCTIONS = (
+    "app_claim_document_job(text, integer, integer)",
+    "app_heartbeat_document_job(uuid, text, timestamp with time zone, integer)",
+    (
+        "app_complete_document_scan(uuid, text, timestamp with time zone, text, text, "
+        "text, timestamp with time zone, text, uuid, text, uuid)"
+    ),
+    (
+        "app_fail_document_job(uuid, text, timestamp with time zone, text, boolean, "
+        "integer, integer)"
+    ),
 )
 
 FORCE_RLS_TABLES = (
@@ -90,6 +113,7 @@ def _provision_cycle_database(admin_url: str) -> None:
         conn.execute(f"DROP DATABASE IF EXISTS {CYCLE_DB} WITH (FORCE)")
         conn.execute(f"CREATE DATABASE {CYCLE_DB} OWNER health_compass_migrator")
         conn.execute(f"GRANT CONNECT ON DATABASE {CYCLE_DB} TO health_compass_app")
+        conn.execute(f"GRANT CONNECT ON DATABASE {CYCLE_DB} TO health_compass_worker")
     with psycopg.connect(_admin_dsn(_cycle_url(admin_url)), autocommit=True) as conn:
         conn.execute("CREATE SCHEMA health_compass AUTHORIZATION health_compass_migrator")
         conn.execute("GRANT USAGE ON SCHEMA health_compass TO health_compass_app")
@@ -127,7 +151,6 @@ def test_full_migration_cycle_restores_all_security_invariants() -> None:
         upgrade(config, "head")
         downgrade(config, "base")
 
-        # An honest base state: nothing left but the version table.
         with psycopg.connect(_admin_dsn(_cycle_url(admin_url))) as conn:
             tables = {
                 row[0]
@@ -177,6 +200,24 @@ def test_full_migration_cycle_restores_all_security_invariants() -> None:
                     ).scalar_one()
                     assert public_execute is False, signature
 
+                for signature in WORKER_FUNCTIONS:
+                    app_execute = conn.execute(
+                        text(
+                            "SELECT has_function_privilege('health_compass_app', "
+                            ":sig ::regprocedure, 'EXECUTE')"
+                        ),
+                        {"sig": f"health_compass.{signature}"},
+                    ).scalar_one()
+                    worker_execute = conn.execute(
+                        text(
+                            "SELECT has_function_privilege('health_compass_worker', "
+                            ":sig ::regprocedure, 'EXECUTE')"
+                        ),
+                        {"sig": f"health_compass.{signature}"},
+                    ).scalar_one()
+                    assert app_execute is False, signature
+                    assert worker_execute is True, signature
+
                 rls_rows = conn.execute(
                     text(
                         "SELECT relname, relrowsecurity, relforcerowsecurity "
@@ -215,6 +256,18 @@ def test_full_migration_cycle_restores_all_security_invariants() -> None:
                     {"tables": list(DOCUMENT_TABLES)},
                 ).all()
                 assert document_mutation_grants == []
+
+                worker_table_grants = conn.execute(
+                    text(
+                        "SELECT table_name, privilege_type "
+                        "FROM information_schema.role_table_grants "
+                        "WHERE grantee = 'health_compass_worker' "
+                        "AND table_schema = 'health_compass' "
+                        "AND table_name = ANY(:tables)"
+                    ),
+                    {"tables": list(DOCUMENT_TABLES)},
+                ).all()
+                assert worker_table_grants == []
 
                 users_update_columns = {
                     row[0]

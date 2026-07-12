@@ -16,7 +16,9 @@ import {
   formatDocumentSize,
   getDocumentIntakeCapabilities,
   listDocuments,
+  scannerStatusLabel,
   type DocumentStatus,
+  type ScannerStatus,
   uploadProfileDocument,
 } from "@/lib/documentApi";
 
@@ -36,6 +38,15 @@ const statusTone: Record<DocumentStatus, string> = {
   erased: "border-border bg-muted/40 text-muted-foreground",
 };
 
+const scannerTone: Record<ScannerStatus, string> = {
+  not_scanned: "border-warning/30 bg-warning/10 text-warning",
+  scanning: "border-primary/30 bg-primary/10 text-primary",
+  clean: "border-success/30 bg-success/10 text-success",
+  infected: "border-destructive/30 bg-destructive/10 text-destructive",
+  error: "border-warning/30 bg-warning/10 text-warning",
+  stale: "border-warning/30 bg-warning/10 text-warning",
+};
+
 function uploadErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 409) {
@@ -43,6 +54,9 @@ function uploadErrorMessage(error: unknown): string {
     }
     if (error.status === 413) {
       return "Файл превышает безопасный лимит размера или разрешения.";
+    }
+    if (error.status === 507) {
+      return "Для безопасной загрузки документа временно недостаточно места.";
     }
     if (error.status === 503) {
       return "Загрузка документов пока отключена.";
@@ -59,6 +73,22 @@ function mediaTypeLabel(mediaType: string): string {
     "image/png": "PNG",
   };
   return labels[mediaType] ?? "Файл";
+}
+
+function displayStatus(document: {
+  status: DocumentStatus;
+  scanner_status: ScannerStatus;
+}): { label: string; tone: string } {
+  if (document.status === "quarantined" || document.status === "scanning") {
+    return {
+      label: scannerStatusLabel(document.scanner_status),
+      tone: scannerTone[document.scanner_status],
+    };
+  }
+  return {
+    label: documentStatusLabel(document.status),
+    tone: statusTone[document.status],
+  };
 }
 
 export default function Documents() {
@@ -143,9 +173,8 @@ export default function Documents() {
               <div className="mt-4 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
-                  Загрузка для этого профиля сейчас недоступна. На текущем этапе готова
-                  только основа безопасного приёма файлов; распознавание и производственное
-                  хранилище подключаются отдельно.
+                  Загрузка для этого профиля сейчас недоступна. Зашифрованное хранилище и
+                  проверка файлов проходят отдельную подготовку к производственному запуску.
                 </span>
               </div>
             )}
@@ -192,8 +221,8 @@ export default function Documents() {
           <div>
             <h2 className="font-display text-lg font-semibold">Загруженные документы</h2>
             <p className="text-sm text-muted-foreground">
-              На этом этапе доступны только метаданные и статус карантина — без просмотра
-              исходника и распознавания.
+              Отображаются только безопасные метаданные и результат проверки — без доступа
+              к исходнику, внутренним путям и техническим ответам сканера.
             </p>
           </div>
           <LockKeyhole className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
@@ -214,38 +243,40 @@ export default function Documents() {
             <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
             <p className="mt-3 font-medium">Документов пока нет</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              После включения тестовой загрузки файл появится здесь со статусом
-              «В карантине».
+              После включения тестовой загрузки файл появится здесь со статусом проверки.
             </p>
           </div>
         )}
 
         <div className="grid gap-3">
-          {documents?.map((document) => (
-            <article key={document.id} className="hm-card p-4 md:p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex min-w-0 items-start gap-3">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-surface-2">
-                    <FileText className="h-5 w-5 text-primary" />
+          {documents?.map((document) => {
+            const currentStatus = displayStatus(document);
+            return (
+              <article key={document.id} className="hm-card p-4 md:p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-surface-2">
+                      <FileText className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="truncate font-medium">{document.original_filename}</h3>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {formatDocumentSize(document.byte_size)} · {mediaTypeLabel(document.detected_media_type)}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Загружен {new Date(document.created_at).toLocaleString("ru-RU")}
+                      </p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <h3 className="truncate font-medium">{document.original_filename}</h3>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatDocumentSize(document.byte_size)} · {mediaTypeLabel(document.detected_media_type)}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Загружен {new Date(document.created_at).toLocaleString("ru-RU")}
-                    </p>
-                  </div>
+                  <span
+                    className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${currentStatus.tone}`}
+                  >
+                    {currentStatus.label}
+                  </span>
                 </div>
-                <span
-                  className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${statusTone[document.status]}`}
-                >
-                  {documentStatusLabel(document.status)}
-                </span>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       </section>
     </div>

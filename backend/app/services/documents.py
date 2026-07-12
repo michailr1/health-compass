@@ -1,4 +1,4 @@
-"""Service layer for HC-017 Slice B secure document intake."""
+"""Service layer for HC-017 secure document intake."""
 
 from __future__ import annotations
 
@@ -23,8 +23,9 @@ from app.services.health_profile import (
 from app.storage.documents import (
     SUPPORTED_MEDIA_TYPES,
     DocumentValidationError,
-    LocalDocumentStorage,
+    EncryptedLocalDocumentStorage,
 )
+from app.storage.encrypted_objects import DocumentKeyring
 
 
 async def document_capabilities(
@@ -45,10 +46,17 @@ async def document_capabilities(
     )
 
 
-def _storage() -> LocalDocumentStorage:
-    if settings.document_storage_backend.strip().lower() != "local":
+def _storage() -> EncryptedLocalDocumentStorage:
+    if settings.document_storage_backend.strip().lower() != "local_encrypted":
         raise RuntimeError("Unsupported document storage backend")
-    return LocalDocumentStorage(settings.document_storage_root)
+    return EncryptedLocalDocumentStorage(
+        settings.document_storage_root,
+        keyring=DocumentKeyring(
+            settings.document_credentials_directory,
+            settings.document_encryption_active_key_id,
+        ),
+        min_free_bytes=settings.document_min_free_bytes,
+    )
 
 
 async def list_documents(
@@ -132,15 +140,16 @@ async def create_document(
             declared_media_type=stored.declared_media_type,
             detected_media_type=stored.detected_media_type,
             byte_size=stored.byte_size,
+            encrypted_size=stored.encrypted_size,
             sha256=stored.sha256,
             storage_backend=storage.backend_name,
             quarantine_storage_key=stored.storage_key,
+            encryption_format=stored.encryption_format,
+            encryption_key_id=stored.encryption_key_id,
+            scanner_status="not_scanned",
             page_count=stored.page_count,
         )
         session.add(document)
-        # The job has a composite FK to (document_id, profile_id). Flush the
-        # parent explicitly so SQLAlchemy cannot emit the dependent job first.
-        # Both statements remain in the same request transaction.
         await session.flush([document])
 
         session.add(
@@ -148,11 +157,11 @@ async def create_document(
                 id=uuid.uuid4(),
                 document_id=document_id,
                 profile_id=profile_id,
-                job_type="inspect",
+                job_type="scan",
                 status="queued",
                 attempt=0,
                 idempotency_key=(
-                    f"inspect:{document_id}:{stored.sha256}:intake-v1"
+                    f"scan:{document_id}:{stored.sha256}:clamav-v1"
                 ),
                 input_sha256=stored.sha256,
             )
@@ -165,8 +174,6 @@ async def create_document(
                 entity_type="document",
                 entity_id=document_id,
                 action="document.uploaded",
-                # Filename, media content and medical values are intentionally
-                # absent from ordinary audit payloads.
                 changed_fields={},
                 request_id=request_id,
             )
