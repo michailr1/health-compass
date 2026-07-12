@@ -68,22 +68,43 @@
 |---|---|
 | `docs/reviews/CODE-REVIEW-CONSOLIDATED-2026-07-11.md` | единый verdict и полный реестр findings |
 | `docs/reviews/FABLE-5-INDEPENDENT-CODE-REVIEW-2026-07-11.md` | сохранённый независимый источник Fable 5 |
-| `docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md` | блокирующий план исправлений и критерии приёмки |
+| `docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md` | план исправлений и implementation contract |
+| `docs/implementation/HC-015-PRODUCTION-ROLLOUT.md` | backup-first rollout runbook |
+| `docs/implementation/HC-015-PRODUCTION-EVIDENCE-2026-07-11.md` | подтверждённое automated production evidence |
 | `docs/reviews/FABLE-RECOMMENDATIONS.md` | статусы принятых рекомендаций |
 
-## HC-015 implementation evidence (2026-07-11)
+## HC-015 implementation and rollout evidence
 
 | Источник | Назначение |
 |---|---|
-| branch `fix/hc-015-code-review-remediation` (= `claude/hc-015-code-review-remediation-noaeve`) | реализация slices A–F, статус `IMPLEMENTED / NOT MERGED` |
+| PR `#39`, application commit `c87723d7b4d0e4d2db9f1e0df4e936fbfd543346` | реализация и merge HC-015 slices A–F |
 | Alembic migrations `0046`–`0048` | duplicate-activity sync, dictionary domain integrity, users column grants |
-| `backend/tests/test_route_table.py`, `test_clinical_context_http.py` | Slice A route ownership и HTTP contract |
-| `backend/tests/test_duplicate_activity_schema_sync_postgres.py` | Slice B regression |
-| `backend/tests/test_magic_link_scanner_safety_http.py`, `test_logout_http.py`, `test_logging_redaction.py`, `test_config.py` | Slice C regression |
-| `backend/tests/test_clinical_dictionary_integrity_postgres.py`, `test_clinical_dictionary_seed_upsert_postgres.py` | Slice D regression |
-| `backend/tests/test_migration_cycle.py`, `.github/workflows/ci.yml` | Slice E gates |
-| `backend/tests/test_users_update_privileges_postgres.py` | CR-19 hardening |
-| `src/lib/api.test.ts`, `src/lib/utils.test.ts`, `src/components/*.test.ts` | Slice F frontend contracts |
+| `docs/implementation/HC-015-PRODUCTION-EVIDENCE-2026-07-11.md` | backup, migration, build, health, log и automated verification evidence |
+| `backend/tests/test_route_table.py`, `test_clinical_context_http.py` | route ownership и HTTP contract |
+| `backend/tests/test_duplicate_activity_schema_sync_postgres.py` | duplicate-resolution regression |
+| `backend/tests/test_magic_link_scanner_safety_http.py`, `test_logout_http.py`, `test_logging_redaction.py`, `test_config.py` | auth and logging regression |
+| `backend/tests/test_clinical_dictionary_integrity_postgres.py`, `test_clinical_dictionary_seed_upsert_postgres.py` | clinical dictionary integrity |
+| `backend/tests/test_migration_cycle.py`, `.github/workflows/ci.yml` | migration and CI gates |
+| `backend/tests/test_users_update_privileges_postgres.py` | users privilege hardening |
+| `src/lib/api.test.ts`, `src/lib/utils.test.ts`, `src/components/*.test.ts` | frontend contracts |
+
+## Safari Magic Link regression evidence
+
+| Источник | Назначение |
+|---|---|
+| commit `8c09c02fa007cd5e5945c5a93b4913ce63868e68` | production hotfix для Safari-safe Origin handling |
+| owner manual confirmation | iPhone Safari Magic Link flow работает после hotfix |
+
+## HC-016 implementation and acceptance evidence
+
+| Источник | Назначение |
+|---|---|
+| PR `#44`, merge commit `69b56f12c25457321b49c7412479f5aa4f238b86` | owner-controlled permanent clinical record erasure |
+| migration `0049` | restricted definer-based erasure, audit scrubbing and tombstone contract |
+| PR `#45`, merge commit `b8e868825f378195975e2729f3f36c21a1afa2d0` | approved removal of backup-retention sentence from UI warning |
+| `docs/implementation/HC-016-CLINICAL-RECORD-ERASURE.md` | product, privacy, API, DB and verification contract |
+| `docs/implementation/HC-016-PRODUCTION-ACCEPTANCE-2026-07-12.md` | owner manual production acceptance and explicit evidence boundary |
+| owner manual confirmation, 2026-07-12 | production UI and HC-016 flows work as intended |
 
 ## Фактические источники
 
@@ -92,7 +113,8 @@
 - automated tests;
 - production SQL checks;
 - Apache/systemd/Certbot state;
-- deployment and incident reports.
+- deployment and incident reports;
+- explicit owner manual acceptance.
 
 ## Правила
 
@@ -104,3 +126,4 @@
 6. Секреты, персональные медицинские данные и токены не сохраняются в этом реестре.
 7. Исходные артефакты Fable должны храниться в GitHub reference archive; чат/проект не является единственным долговременным хранилищем.
 8. Независимое ревью хранится отдельно от консолидированного решения; accepted findings получают implementation task и status.
+9. Manual acceptance подтверждает пользовательский результат, но не заменяет отсутствующие operational metrics; такие metrics нельзя восстанавливать предположениями.
