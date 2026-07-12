@@ -5,7 +5,16 @@ from __future__ import annotations
 import datetime
 import uuid
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,7 +25,14 @@ SCHEMA = "health_compass"
 
 class ProfileDocument(Base):
     __tablename__ = "profile_documents"
-    __table_args__ = {"schema": SCHEMA}
+    __table_args__ = (
+        UniqueConstraint("id", "profile_id", name="uq_profile_documents_id_profile"),
+        UniqueConstraint(
+            "quarantine_storage_key",
+            name="uq_profile_documents_quarantine_storage_key",
+        ),
+        {"schema": SCHEMA},
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -61,16 +77,23 @@ class ProfileDocument(Base):
 
 class DocumentProcessingJob(Base):
     __tablename__ = "document_processing_jobs"
-    __table_args__ = {"schema": SCHEMA}
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["document_id", "profile_id"],
+            [
+                f"{SCHEMA}.profile_documents.id",
+                f"{SCHEMA}.profile_documents.profile_id",
+            ],
+            name="fk_document_processing_jobs_document_profile",
+            ondelete="CASCADE",
+        ),
+        {"schema": SCHEMA},
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey(f"{SCHEMA}.profile_documents.id", ondelete="CASCADE"),
-        nullable=False,
-    )
+    document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     profile_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey(f"{SCHEMA}.health_profiles.id"), nullable=False
     )
