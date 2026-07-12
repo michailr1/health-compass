@@ -1,0 +1,331 @@
+name: Patch D1 status documentation
+
+on:
+  push:
+    branches: [docs/hc-017-d1-status]
+    paths:
+      - .github/workflows/patch-d1-status-docs.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/hc-017-d1-status
+          fetch-depth: 0
+      - name: Apply canonical status updates
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, found {count}")
+              return text.replace(old, new, 1)
+
+          def replace_between(text: str, start: str, end: str, replacement: str, label: str) -> str:
+              start_index = text.find(start)
+              if start_index < 0:
+                  raise SystemExit(f"{label}: start marker missing")
+              end_index = text.find(end, start_index)
+              if end_index < 0:
+                  raise SystemExit(f"{label}: end marker missing")
+              return text[:start_index] + replacement.rstrip() + "\n\n" + text[end_index:]
+
+          current_path = Path("docs/CURRENT-STATE.md")
+          current = current_path.read_text(encoding="utf-8")
+          current = replace_once(
+              current,
+              "Repository application baseline: `ac9e21f3315c4624a845e633c2a90881d348ca30`  \nRepository Alembic head: `0053`",
+              "Repository application baseline: `a33c3d515b885c6ea0e8f51291a1d25bed77cd7d`  \nRepository Alembic head: `0054`",
+              "current header",
+          )
+          current = replace_once(
+              current,
+              "Текущий verdict: `C1+C2 REVIEW COMPLETE / SLICE D ARCHITECTURE DEFINED / NOT DEPLOYED`",
+              "Текущий verdict: `D1 MERGED / CI VERIFIED / NOT DEPLOYED / D2 NEXT`",
+              "current verdict",
+          )
+          current = replace_once(
+              current,
+              "repository: ac9e21f3... / Alembic 0053",
+              "repository: a33c3d51... / Alembic 0054",
+              "current repository block",
+          )
+          current = replace_once(
+              current,
+              "Migrations `0050–0053`, encrypted document storage, scanner worker, quota controls, reconciliation and safe rendering have not been deployed.",
+              "Migrations `0050–0054`, encrypted document storage, scanner, rendering and OCR workers, quota controls, reconciliation, safe rendering and OCR candidates have not been deployed.",
+              "current production sentence",
+          )
+          current = replace_once(
+              current,
+              "Status: `ARCHITECTURE DEFINED / NOT IMPLEMENTED / NOT DEPLOYED`.",
+              "Status: `D1 IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED; D2 NEXT`.",
+              "current slice D status",
+          )
+          current = replace_between(
+              current,
+              "### D1 planned scope",
+              "### D2 planned scope",
+              """### D1 — Local OCR Candidate Extraction
+
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
+
+```text
+PR: #56
+verified head: dc28e9e220dd51264e6dab1244ce8d8696f501b2
+merge: a33c3d515b885c6ea0e8f51291a1d25bed77cd7d
+CI: #442
+migration: 0054
+```
+
+Implemented:
+
+- OCR runs, encrypted provenance artifacts and review candidates;
+- FORCE RLS on all OCR tables;
+- separate OCR worker `LOGIN NOBYPASSRLS`;
+- no direct OCR-worker table grants;
+- renderer-only queueing and OCR-worker-only job functions;
+- full GCM verification and PNG validation before Tesseract;
+- sealed input and bounded output memory files;
+- fixed local Tesseract command and exact traineddata provenance;
+- strict TSV parsing and deterministic candidate aggregation;
+- owner/edit-only candidate text;
+- every candidate starts as `needs_review`;
+- OCR status and candidate-read APIs;
+- zero automatic Clinical Context, measurement or Labs creation.
+
+Canonical evidence:
+
+```text
+docs/implementation/HC-017-SLICE-D1-OCR-CANDIDATES-EVIDENCE-2026-07-12.md
+```""",
+              "current D1 section",
+          )
+          current = replace_once(
+              current,
+              "### D2 planned scope",
+              "### D2 — Human Review and Patient Matching\n\nStatus: `NEXT / NOT IMPLEMENTED / NOT DEPLOYED`.",
+              "current D2 heading",
+          )
+          current = replace_between(
+              current,
+              "## Next allowed work",
+              "## Stop conditions",
+              """## Next allowed work
+
+```text
+HC-017 D2 — Human Review and Patient Matching
+```
+
+Required scope:
+
+1. add accept/edit/reject/defer candidate actions;
+2. enforce owner/edit authorization and health-data consent;
+3. require `expected_updated_at` optimistic concurrency;
+4. add explicit patient match, mismatch and not-present decisions;
+5. finalize review only against an unchanged candidate manifest;
+6. keep audit content-free;
+7. add an accessible review UI;
+8. create no Clinical Context, measurement or Labs facts;
+9. run exact-head and negative PostgreSQL tests;
+10. keep production upload disabled and issue no VPS rollout task.""",
+              "current next work",
+          )
+          current_path.write_text(current, encoding="utf-8")
+
+          plan_path = Path("docs/PROJECT-PLAN.md")
+          plan = plan_path.read_text(encoding="utf-8")
+          plan = replace_once(plan, "Версия: 2.1", "Версия: 2.2", "plan version")
+          plan = replace_once(
+              plan,
+              "main: ac9e21f3315c4624a845e633c2a90881d348ca30\nAlembic head: 0053",
+              "main: a33c3d515b885c6ea0e8f51291a1d25bed77cd7d\nAlembic head: 0054",
+              "plan repository state",
+          )
+          plan = replace_once(
+              plan,
+              "C1+C2 COMBINED REVIEW COMPLETE\nSLICE D ARCHITECTURE DEFINED\nSLICE D NOT IMPLEMENTED\nPRODUCTION UNCHANGED",
+              "D1 IMPLEMENTED / MERGED / CI VERIFIED\nD1 NOT DEPLOYED\nD2 NEXT\nPRODUCTION UNCHANGED",
+              "plan verdict",
+          )
+          plan = replace_once(
+              plan,
+              "Status: `ARCHITECTURE DEFINED / NEXT IMPLEMENTATION STAGE`.",
+              "Status: `D1 MERGED / CI VERIFIED / NOT DEPLOYED; D2 NEXT`.",
+              "plan slice D status",
+          )
+          plan = replace_between(
+              plan,
+              "#### D1 — OCR extraction foundation",
+              "#### D2 — Human review and patient matching",
+              """#### D1 — Local OCR Candidate Extraction
+
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED` through PR `#56`.
+
+```text
+verified head: dc28e9e220dd51264e6dab1244ce8d8696f501b2
+merge: a33c3d515b885c6ea0e8f51291a1d25bed77cd7d
+CI: #442
+migration: 0054
+```
+
+Implemented:
+
+- OCR run, encrypted provenance and candidate tables;
+- FORCE RLS and owner/edit-only candidate text;
+- dedicated OCR-worker role with no direct table grants;
+- renderer-only queue function and restricted worker functions;
+- bounded local Tesseract over authenticated safe-page PNG;
+- exact engine/language/traineddata provenance;
+- encrypted TSV artifacts;
+- strict parser and deterministic `needs_review` candidates;
+- OCR status and candidate-read API;
+- no automatic clinical or Labs facts.
+
+Canonical evidence:
+
+```text
+docs/implementation/HC-017-SLICE-D1-OCR-CANDIDATES-EVIDENCE-2026-07-12.md
+```""",
+              "plan D1 section",
+          )
+          plan = replace_once(
+              plan,
+              "Status: `PLANNED AFTER D1 REVIEW`.",
+              "Status: `NEXT / NOT IMPLEMENTED / NOT DEPLOYED`.",
+              "plan D2 status",
+          )
+          plan = replace_between(
+              plan,
+              "## 8. Immediate plan",
+              "## 9. Global rollout stop conditions",
+              """## 8. Immediate plan
+
+1. Merge D1 evidence documentation.
+2. Recheck current `main`, open PRs and Alembic heads.
+3. Assign the next free migration to D2.
+4. Implement candidate review mutations through restricted functions.
+5. Enforce owner/edit, consent and optimistic concurrency.
+6. Implement explicit patient-match decisions.
+7. Add manifest-bound atomic review finalization.
+8. Add content-free audit and accessible review UI.
+9. Prove that D2 creates no clinical or Labs facts.
+10. Keep production document upload disabled and do not create a VPS deployment task.""",
+              "plan immediate",
+          )
+          plan_path.write_text(plan, encoding="utf-8")
+
+          register_path = Path("docs/source-index/SOURCE-REGISTER.md")
+          register = register_path.read_text(encoding="utf-8")
+          register = replace_once(
+              register,
+              "Slice D status:\n\n```text\nARCHITECTURE DEFINED\nNOT IMPLEMENTED\nNOT DEPLOYED\nPRODUCTION UNCHANGED\n```",
+              "Slice D status:\n\n```text\nD1 IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED\nD2 NOT IMPLEMENTED\nPRODUCTION UNCHANGED\n```",
+              "register slice D status",
+          )
+          register = replace_once(
+              register,
+              "## Current factual sources",
+              """## HC-017 Slice D1 implementation evidence
+
+| Source | Purpose |
+|---|---|
+| PR `#56` | local OCR candidate extraction implementation |
+| verified head `dc28e9e220dd51264e6dab1244ce8d8696f501b2` | exact reviewed D1 code |
+| merge `a33c3d515b885c6ea0e8f51291a1d25bed77cd7d` | D1 merged into `main` |
+| migration `0054` | OCR tables, FORCE RLS, queue/worker/reconciliation functions |
+| CI `#442` | backend/frontend/full migration/OCR-RLS verification |
+| `docs/implementation/HC-017-SLICE-D1-OCR-CANDIDATES-EVIDENCE-2026-07-12.md` | canonical D1 evidence |
+
+Key D1 sources:
+
+- `backend/alembic/versions/0054_add_document_ocr_candidates.py`;
+- `backend/app/ocr/tesseract.py`;
+- `backend/app/storage/ocr_documents.py`;
+- `backend/app/workers/document_ocr.py`;
+- `backend/app/api/routes/document_ocr.py`;
+- `backend/app/services/document_ocr.py`;
+- `backend/tests/test_document_ocr_rls.py`;
+- `backend/tests/test_tesseract_ocr.py`;
+- `backend/tests/test_ocr_storage.py`.
+
+D1 status:
+
+```text
+IMPLEMENTED
+MERGED
+CI VERIFIED
+NOT DEPLOYED
+NO AUTOMATIC CLINICAL OR LABS FACTS
+```
+
+## Current factual sources""",
+              "register D1 evidence",
+          )
+          register_path.write_text(register, encoding="utf-8")
+
+          contract_path = Path("docs/implementation/HC-017-SLICE-D-OCR-CANDIDATES-AND-HUMAN-REVIEW.md")
+          contract = contract_path.read_text(encoding="utf-8")
+          contract = replace_once(
+              contract,
+              "Status: `ARCHITECTURE DEFINED / NOT IMPLEMENTED / NOT DEPLOYED`  \nCreated: 2026-07-12  \nBase main: `ac9e21f3315c4624a845e633c2a90881d348ca30`  \nRepository Alembic head: `0053`",
+              "Status: `D1 IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED; D2 NEXT`  \nCreated: 2026-07-12  \nUpdated: 2026-07-12  \nRepository main: `a33c3d515b885c6ea0e8f51291a1d25bed77cd7d`  \nRepository Alembic head: `0054`",
+              "contract header",
+          )
+          contract = replace_once(
+              contract,
+              "### D1 — OCR extraction foundation\n\n- OCR run and candidate schema;",
+              """### D1 — OCR extraction foundation
+
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
+
+```text
+PR: #56
+verified head: dc28e9e220dd51264e6dab1244ce8d8696f501b2
+merge: a33c3d515b885c6ea0e8f51291a1d25bed77cd7d
+CI: #442
+migration: 0054
+```
+
+- OCR run and candidate schema;""",
+              "contract D1 status",
+          )
+          contract = replace_once(
+              contract,
+              "### D2 — Human review and patient matching\n\n- candidate accept/edit/reject/defer;",
+              """### D2 — Human review and patient matching
+
+Status: `NEXT / NOT IMPLEMENTED / NOT DEPLOYED`.
+
+- candidate accept/edit/reject/defer;""",
+              "contract D2 status",
+          )
+          contract = replace_once(
+              contract,
+              "Candidate migration after current head:\n\n```text\n0054\n```\n\nThe number must be rechecked against `main` and open migration PRs before implementation.",
+              "Implemented migration:\n\n```text\n0054\n```\n\nMigration `0054` is merged through PR `#56` and verified by CI `#442`.",
+              "contract migration",
+          )
+          contract_path.write_text(contract, encoding="utf-8")
+          PY
+          git diff --check
+          git diff --stat
+      - name: Commit canonical documentation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/CURRENT-STATE.md docs/PROJECT-PLAN.md \
+            docs/source-index/SOURCE-REGISTER.md \
+            docs/implementation/HC-017-SLICE-D-OCR-CANDIDATES-AND-HUMAN-REVIEW.md
+          git commit -m "docs: record HC-017 D1 merge and D2 next stage"
+          git push origin HEAD:docs/hc-017-d1-status
