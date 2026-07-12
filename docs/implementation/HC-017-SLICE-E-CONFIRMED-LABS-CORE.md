@@ -1,9 +1,10 @@
 # HC-017 Slice E — Confirmed Labs Core
 
-Status: `E1 IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED; E2 NOT IMPLEMENTED`  
+Status: `E1+E2 IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED; E3 NEXT`  
 Created: 2026-07-12  
-Current main: `2ad0ca47d994472201c218b3e6af37145cbacdec`  
-Repository Alembic head: `0057`  
+Updated: 2026-07-13  
+Current repository main: `1d61331194edf0f78b94a304d27ccf31dfa2a755`  
+Repository Alembic head: `0058`  
 Production application: `b8e868825f378195975e2729f3f36c21a1afa2d0`  
 Production Alembic: `0049`
 
@@ -20,13 +21,15 @@ finalized OCR transcription
 → later metric dynamics
 ```
 
-Slice E is not an OCR parser and not a medical interpretation engine. It structures reviewed source text and creates a confirmed observation only after a separate explicit confirmation transaction.
+Slice E is not an OCR parser or medical interpretation engine. Reviewed source text is structured in E1 and becomes a clinical observation only through the separate E2 confirmation transaction.
 
-## 2. Core invariant
+## 2. Core invariants
 
 ```text
-FINALIZED OCR TRANSCRIPTION IS ELIGIBLE INPUT, NOT A LAB FACT
-READY LAB DRAFT IS ELIGIBLE INPUT, NOT A CONFIRMED OBSERVATION
+FINALIZED OCR TRANSCRIPTION IS SOURCE, NOT A LAB FACT
+READY LAB DRAFT IS SOURCE-PRESERVING INPUT, NOT A CONFIRMED OBSERVATION
+ONLY EXPLICIT OWNER/EDITOR E2 CONFIRMATION CREATES AN OBSERVATION
+CONFIRMED SOURCE/VALUE FIELDS ARE IMMUTABLE
 ```
 
 No background worker, parser, dictionary or AI model may create a confirmed observation.
@@ -47,15 +50,15 @@ migrations: 0056–0057
 
 Implemented:
 
-- owner/editor creates a draft from the current finalized D2 transcription;
-- reviewed OCR candidates are assigned exact source roles;
-- source wording is preserved separately from parsed values;
-- numeric, text and qualitative value kinds are explicit;
-- unit, range and date absence/unknown states are explicit;
-- document, OCR review, patient decision and consent are checked on every mutation;
-- optimistic concurrency protects draft and source versions;
-- FORCE RLS keeps drafts owner/edit-only;
-- no confirmed observation exists in E1.
+- owner/editor draft creation from current finalized D2 transcription;
+- exact OCR candidate source roles and versions;
+- source wording preserved separately from parsed values;
+- numeric, text and qualitative value kinds;
+- explicit unit, range and date absence/unknown states;
+- document, OCR review, patient decision and consent checks on every mutation;
+- optimistic concurrency;
+- FORCE RLS and owner/edit-only draft visibility;
+- no automatic confirmed observation.
 
 Canonical evidence:
 
@@ -65,119 +68,89 @@ docs/implementation/HC-017-SLICE-E1-LAB-DRAFTS-EVIDENCE-2026-07-12.md
 
 ### E2 — Explicit Confirmation and Confirmed Observations
 
-Status: `NEXT / NOT IMPLEMENTED / NOT DEPLOYED`.
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
 
-Required scope:
+```text
+PR: #65
+verified head: 55f10d311d1f39262d557fa7b60cc07060ac5590
+merge: 1d61331194edf0f78b94a304d27ccf31dfa2a755
+CI: #491
+migration: 0058
+```
 
-- a separate explicit confirmation request;
-- immutable confirmed observation and source snapshot tables;
-- current document, finalized D2 review, patient decision, ready draft and exact source manifest;
-- explicit user acknowledgements;
-- additional profile-assignment acknowledgement when patient decision is `not_present`;
-- idempotent atomic confirmation;
-- owner/edit confirmation;
+Implemented:
+
+- separate confirmation preview and action;
+- immutable observation and source-snapshot tables;
+- atomic validation of current document, D2 review, patient decision, draft and source manifest;
+- owner/edit-only confirmation;
 - owner/edit/view/analyze confirmed-only reads;
-- no interpretation, diagnosis or automatic normalization.
+- mandatory acknowledgements;
+- extra profile-assignment acknowledgement for `not_present`;
+- profile-scoped idempotency and concurrent replay handling;
+- candidate row locking before immutable source copying;
+- active consent recheck;
+- one observation per source draft;
+- content-free audit;
+- no automatic interpretation, canonical mapping or unit conversion.
+
+Canonical contract and evidence:
+
+```text
+docs/implementation/HC-017-SLICE-E2-CONFIRMED-OBSERVATIONS.md
+docs/implementation/HC-017-SLICE-E2-CONFIRMED-OBSERVATIONS-EVIDENCE-2026-07-13.md
+```
 
 ### E3 — Correction, Void and Erasure
 
-Status: `PLANNED AFTER E2 REVIEW`.
+Status: `NEXT / NOT IMPLEMENTED / NOT DEPLOYED`.
+
+Required:
 
 - confirmed source/value fields are never updated in place;
-- correction creates a new observation that supersedes the prior one;
-- void preserves provenance and explicit reason;
-- owner-only permanent erasure follows the document lifecycle;
-- source-document erasure removes sole-provenance confirmed observations.
+- correction creates a replacement observation and supersession chain;
+- void preserves provenance and an explicit reason;
+- owner-only permanent erasure removes observation and immutable sources atomically;
+- source-document erasure cannot leave an unsupported sole-provenance observation;
+- negative PostgreSQL tests precede API/UI.
 
-## 4. E1 source-preserving data principles
+## 4. Source-preserving data principles
 
-The following source fields are stored separately from structured representations:
+The following source fields remain separate from structured representations:
 
 - `source_analyte_text`;
 - `source_value_text`;
-- `source_unit_text` or `unit_not_present=true`;
-- `source_reference_range_text` or `reference_range_not_present=true`;
-- `source_observed_at_text` or `observed_time_unknown=true`;
-- optional `source_specimen_text`;
-- optional `source_flag_text`;
-- optional source comment.
+- `source_unit_text` or explicit absence;
+- `source_reference_range_text` or explicit absence;
+- `source_observed_at_text` or explicit unknown;
+- optional specimen, flag and comment.
 
 Rules:
 
-1. Source text is never overwritten by a parsed decimal, date, canonical concept or normalized unit.
+1. Source text is never overwritten by a decimal, date, canonical concept or normalized unit.
 2. Missing source fields use explicit absence/unknown decisions.
-3. Unit conversion is outside E1 and E2 unless a separate validated conversion contract is approved.
+3. Unit conversion requires a separate validated conversion contract.
 4. Reference-range interpretation is outside E1 and E2.
-5. Source flags such as `H`, `L`, `+`, `positive` or `negative` remain source text.
-6. Original OCR text remains available through provenance even when a user edits the structured draft.
-7. Source text and medical values are forbidden in ordinary logs and audit payloads.
+5. Source flags remain source text.
+6. Medical text and values are forbidden in ordinary logs and audit payloads.
 
-## 5. Value model
+## 5. Value and time model
 
-Each draft uses exactly one value kind:
+Each draft and confirmed observation has exactly one value kind:
 
 ```text
-numeric
-text
-qualitative
+numeric | text | qualitative
 ```
 
-### Numeric
-
-- required source value text;
-- optional comparator: `<`, `<=`, `=`, `>=`, `>`;
-- arbitrary-precision decimal representation;
-- explicit source-unit decision;
-- optional source reference range.
-
-The source text remains authoritative provenance.
-
-### Text
-
-- required source value text;
-- explicit reviewed text representation;
-- no comparator;
-- no automatic numeric conversion.
-
-### Qualitative
-
-- required source value text;
-- explicit qualitative text representation;
-- no universal automatic coding;
-- no comparator.
-
-## 6. Date and time model
-
-E1 stores:
-
-- source date/time wording or explicit unknown;
-- optional parsed date;
-- optional parsed timestamp with timezone;
-- precision: `unknown`, `date` or `datetime`.
-
-Rules:
-
-- parsing never removes source wording;
+- numeric values preserve source value and optional comparator;
+- text and qualitative values are not silently converted to numbers;
+- source unit and reference range remain explicit;
+- source date/time wording is preserved;
 - timezone is not invented;
-- a date-only source remains date precision;
-- report/upload time is not substituted silently;
-- metric dynamics may use only later confirmed compatible time fields.
+- date-only sources remain date precision;
+- upload/report time is not substituted silently.
 
-## 7. Reference range and analyte identity
-
-Source range is preserved as text. Structured bounds, reference-range interpretation and normal/abnormal classification are outside E1.
-
-Required analyte field:
-
-```text
-source_analyte_text
-```
-
-Canonical analyte mapping is optional future work and may never overwrite source wording. Free text remains valid when no concept exists.
-
-## 8. E1 provenance model
-
-A draft may use multiple accepted/edited OCR candidates from the same current finalized OCR run.
+## 6. Provenance model
 
 Allowed source roles:
 
@@ -192,86 +165,80 @@ flag
 comment
 ```
 
-Each source row retains:
+E1 source rows retain profile, document, OCR run, candidate, page artifact, page number, role and candidate version.
 
-- profile ID;
-- document ID;
-- OCR run ID;
-- OCR candidate ID;
-- page artifact ID;
-- page number;
-- source role;
-- exact candidate version timestamp.
+E2 copies an immutable reviewed-text snapshot for every selected source row while holding deterministic candidate row locks. Analyte and value provenance are mandatory.
 
-A draft may become `ready` only when current analyte and value provenance exist.
+## 7. Database and access boundaries
 
-## 9. E1 database boundary
-
-Tables:
+### E1 tables
 
 ```text
 health_compass.lab_observation_drafts
 health_compass.lab_observation_draft_sources
 ```
 
-Both tables have:
+- ENABLE + FORCE RLS;
+- owner/edit-only reads;
+- no direct app mutation grants;
+- restricted definer functions only.
 
-- ENABLE RLS;
-- FORCE RLS;
-- owner/edit-only SELECT policies;
-- no direct app INSERT, UPDATE or DELETE grants.
-
-Mutation functions are `SECURITY DEFINER`, owned by the dedicated RLS definer role, use fixed empty `search_path`, set `row_security=off`, revoke PUBLIC EXECUTE and grant execution only to the runtime app.
-
-Worker roles have no E1 mutation access.
-
-## 10. E1 state model
+### E2 tables
 
 ```text
-draft
-→ ready
+health_compass.lab_observations
+health_compass.lab_observation_sources
 ```
 
-Alternative terminal state:
+- ENABLE + FORCE RLS;
+- owner/edit/view/analyze confirmed-only reads;
+- no direct app INSERT/UPDATE/DELETE;
+- no worker table or confirmation-function access;
+- restrictive provenance foreign keys until E3.
+
+Access matrix:
+
+| Action | owner | edit | view | analyze | outsider | workers |
+|---|---:|---:|---:|---:|---:|---:|
+| Read E1 drafts | yes | yes | no | no | no | no |
+| Create/update/reject/ready draft | yes | yes | no | no | no | no |
+| Confirm ready draft | yes | yes | no | no | no | no |
+| Read active confirmed observation | yes | yes | yes | yes | no | no |
+| Read confirmed source snapshots | yes | yes | yes | yes | no | no |
+| Update/delete confirmed value | no | no | no | no | no | no |
+
+## 8. State model
 
 ```text
-draft
-→ rejected
+draft → ready → confirmed
+   └────→ rejected
 ```
 
-`ready` means only “eligible for a later E2 confirmation”. It does not mean confirmed, interpreted or available to analytics.
+`ready` means only eligible for a later explicit E2 confirmation. A successful confirmation atomically stores the observation reference and confirmation metadata on the draft.
 
-## 11. E1 context gates
+## 9. Context and confirmation gates
 
-Every relevant mutation rechecks:
+E1 mutations recheck:
 
 - current accepted document;
-- current OCR run;
-- succeeded and finalized D2 review;
+- current finalized D2 OCR review;
 - patient decision `match` or `not_present`;
-- exact document timestamp;
-- exact review-finalization timestamp;
-- exact patient-decision timestamp;
-- exact candidate timestamps;
+- exact document/review/patient/candidate versions;
 - active health-data consent;
 - owner/edit authorization;
-- optimistic draft timestamp.
+- optimistic draft version.
 
-Consent revocation after draft creation blocks source replacement and status transitions.
+E2 additionally rechecks all of the above in one transaction, requires explicit acknowledgements and locks source candidate rows before validation and snapshot copying.
 
-## 12. Access matrix
+Patient decisions:
 
-| Action | owner | edit | view | analyze | outsider |
-|---|---:|---:|---:|---:|---:|
-| Read E1 drafts | yes | yes | no | no | no |
-| Create/update draft | yes | yes | no | no | no |
-| Replace provenance manifest | yes | yes | no | no | no |
-| Mark ready/rejected | yes | yes | no | no | no |
-| Confirm observation | not implemented | not implemented | no | no | no |
+- `match`: confirmation allowed with base acknowledgements;
+- `not_present`: additional profile-assignment acknowledgement required;
+- `unknown` or `mismatch`: confirmation blocked.
 
-## 13. E1 API and UI
+## 10. API and UI
 
-API:
+E1 API:
 
 ```text
 GET   /profiles/{profile_id}/documents/{document_id}/lab-drafts/context
@@ -283,17 +250,25 @@ PUT   /profiles/{profile_id}/documents/{document_id}/lab-drafts/{draft_id}/sourc
 POST  /profiles/{profile_id}/documents/{document_id}/lab-drafts/{draft_id}/status
 ```
 
+E2 API:
+
+```text
+GET  /profiles/{profile_id}/documents/{document_id}/lab-drafts/{draft_id}/confirmation
+POST /profiles/{profile_id}/documents/{document_id}/lab-drafts/{draft_id}/confirm
+GET  /profiles/{profile_id}/lab-observations
+GET  /profiles/{profile_id}/lab-observations/{observation_id}
+```
+
 Frontend:
 
 ```text
 /app/documents/{document_id}/labs
+/app/documents/{document_id}/labs/{draft_id}/confirm
 ```
 
-The UI supports draft creation, source-fragment selection and `ready` transition. It contains no observation-confirmation action.
+## 11. Audit and logging
 
-## 14. E1 audit and logging
-
-Audit actions:
+E1 actions:
 
 ```text
 lab.draft_created
@@ -302,57 +277,29 @@ lab.draft_sources_changed
 lab.draft_status_changed
 ```
 
-Audit payloads are content-free. Medical text, values, source fragments and parsed fields are not copied into ordinary audit or logs.
+E2 action:
 
-## 15. E1 verification
+```text
+lab.observation_confirmed
+```
 
-Exact head `419386e9...` passed CI `#477`:
+All audit payloads are content-free. Medical text, values and source fragments are not copied into ordinary audit or logs.
+
+## 12. Verification
+
+E1 exact head `419386e9...` passed CI `#477`.
+
+E2 exact head `55f10d31...` passed CI `#491`:
 
 - backend compile, Ruff and unit tests;
 - frontend lint, typecheck, tests and build;
 - migration boundary tests;
 - full `head → base → head` cycle;
-- PostgreSQL RLS, privilege and provenance tests;
-- stale document/review/patient/candidate protections;
-- post-creation consent-revocation tests;
-- proof that no confirmed observation table or rows exist.
+- PostgreSQL RLS, immutable provenance, stale-source, consent, idempotency and concurrency tests.
 
-## 16. E2 confirmation requirements
+Final E2 threat review found no unresolved Critical or High repository finding. It hardened replay matching and removed a source-snapshot TOCTOU interval before merge.
 
-E2 must never reuse an E1 mutation endpoint for confirmation.
-
-The confirmation transaction must atomically validate:
-
-- draft status is `ready`;
-- exact draft timestamp and source manifest;
-- current document and OCR review;
-- current patient decision;
-- active consent;
-- explicit profile acknowledgement;
-- explicit source/value/unit/range/date acknowledgement;
-- unique idempotency key;
-- no existing observation from the same draft.
-
-A successful transaction creates an immutable observation and immutable source snapshot, marks the draft consumed and writes content-free audit.
-
-## 17. E2 stop conditions
-
-Do not merge E2 when:
-
-- a worker can confirm observations;
-- `ready` automatically creates a fact;
-- unknown/mismatch patient decisions are accepted;
-- `not_present` lacks explicit profile assignment acknowledgement;
-- source wording is lost or overwritten;
-- silent unit conversion or canonical mapping occurs;
-- stale draft/document/OCR/patient/candidate versions can be consumed;
-- confirmation is not idempotent;
-- confirmed source/value fields can be updated in place;
-- drafts become visible to view/analyze;
-- medical values appear in audit/logs;
-- negative PostgreSQL tests are absent.
-
-## 18. Production boundary
+## 13. Production boundary
 
 Production remains:
 
@@ -362,15 +309,14 @@ Alembic: 0049
 DOCUMENT_UPLOAD_ENABLED=false
 ```
 
-E1 is repository-only. No production rollout or VPS task is authorized.
+E1 and E2 are repository-only. No production rollout or VPS task is authorized.
 
-## 19. Final current status
+## 14. Current status
 
 ```text
 SLICE_E_ARCHITECTURE_ACCEPTED
-SLICE_E1_IMPLEMENTED_MERGED_CI_VERIFIED
-SLICE_E1_NOT_DEPLOYED
-SLICE_E2_NOT_IMPLEMENTED
-NO_CONFIRMED_LAB_OBSERVATIONS
+SLICE_E1_IMPLEMENTED_MERGED_CI_VERIFIED_NOT_DEPLOYED
+SLICE_E2_IMPLEMENTED_MERGED_CI_VERIFIED_NOT_DEPLOYED
+SLICE_E3_NOT_IMPLEMENTED
 PRODUCTION_UNCHANGED
 ```
