@@ -35,7 +35,6 @@ class DocumentResponse(BaseModel):
     declared_media_type: str
     detected_media_type: str
     byte_size: int
-    sha256: str
     page_count: int | None
     failure_code: str | None
     created_at: datetime.datetime
