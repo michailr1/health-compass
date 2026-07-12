@@ -1,6 +1,6 @@
 # Health Compass — канонический план проекта
 
-Версия: 2.2  
+Версия: 2.3  
 Дата: 2026-07-12  
 Основная ветка: `main`
 
@@ -25,6 +25,7 @@ Create a secure multi-user personal-health portal combining profile data, clinic
 - Verified email does not silently merge accounts.
 - Free text is not silently rewritten.
 - OCR/AI output is not a fact before explicit human confirmation.
+- Reviewed OCR remains transcription until a separate clinical confirmation.
 - No automatic diagnosis, prescription or dose calculation.
 - Human and Pet contours remain separated.
 - Production rollout is backup-first and exact-SHA.
@@ -38,8 +39,8 @@ Create a secure multi-user personal-health portal combining profile data, clinic
 Repository:
 
 ```text
-main: a33c3d515b885c6ea0e8f51291a1d25bed77cd7d
-Alembic head: 0054
+main: f67a1128e29a1c62e8a3b27dd20c973df82947ad
+Alembic head: 0055
 ```
 
 Production:
@@ -54,9 +55,9 @@ DOCUMENT_UPLOAD_ENABLED=false
 Current verdict:
 
 ```text
-D1 IMPLEMENTED / MERGED / CI VERIFIED
-D1 NOT DEPLOYED
-D2 NEXT
+D1+D2 IMPLEMENTED / MERGED / CI VERIFIED
+SLICE D NOT DEPLOYED
+SLICE E ARCHITECTURE NEXT
 PRODUCTION UNCHANGED
 ```
 
@@ -115,8 +116,8 @@ Upload
 → safe rendering
 → OCR candidates
 → human review
-→ patient matching
-→ explicit confirmation
+→ explicit patient matching
+→ explicit clinical confirmation
 → Labs
 → metric dynamics
 ```
@@ -160,7 +161,7 @@ CI: #433
 migrations: 0052–0053
 ```
 
-Provides quotas, encrypted safe-page artifacts, restricted renderer/reconciler roles, full GCM-before-parser verification, bounded rendering and storage reconciliation.
+Provides quotas, encrypted safe-page artifacts, restricted renderer/reconciler roles, GCM-before-parser verification, bounded rendering and storage reconciliation.
 
 Canonical evidence:
 
@@ -186,7 +187,7 @@ docs/reviews/HC-017-C1-C2-COMBINED-SECURITY-REVIEW-2026-07-12.md
 
 ### Slice D — OCR Candidates and Human Review
 
-Status: `D1 MERGED / CI VERIFIED / NOT DEPLOYED; D2 NEXT`.
+Status: `D1+D2 IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
 
 Canonical contract:
 
@@ -207,7 +208,7 @@ migration: 0054
 
 Implemented:
 
-- OCR run, encrypted provenance and candidate tables;
+- OCR runs, encrypted provenance and candidate tables;
 - FORCE RLS and owner/edit-only candidate text;
 - dedicated OCR-worker role with no direct table grants;
 - renderer-only queue function and restricted worker functions;
@@ -226,69 +227,83 @@ docs/implementation/HC-017-SLICE-D1-OCR-CANDIDATES-EVIDENCE-2026-07-12.md
 
 #### D2 — Human Review and Patient Matching
 
-Status: `NEXT / NOT IMPLEMENTED / NOT DEPLOYED`.
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED` through PR `#58`.
 
-Required scope:
+```text
+verified head: 4ecae1fb0816803b2d858db1f5016bce589544d5
+merge: f67a1128e29a1c62e8a3b27dd20c973df82947ad
+CI: #454
+migration: 0055
+```
 
-- candidate accept/edit/reject/defer;
-- owner/edit authorization and current health-data consent;
-- optimistic concurrency with `expected_updated_at`;
-- explicit patient match/mismatch/not-present decision;
-- review finalization bound to an unchanged candidate manifest;
+Implemented:
+
+- candidate accept/edit/reject/defer actions;
+- owner/edit authorization and active owner consent;
+- candidate, document and patient-decision optimistic concurrency;
+- explicit `unknown`, `match`, `mismatch` and `not_present` decisions;
+- exact candidate ID/timestamp manifest;
+- mismatch, unresolved and deferred blocking;
+- idempotent repeated finalization;
 - content-free audit;
-- accessible page/candidate review UI;
+- revisable decisions before finalization;
+- accessible review UI;
 - no Clinical Context, measurement or Labs creation.
 
-D2 implementation order:
+Canonical evidence:
 
-1. recheck `main`, open PRs and Alembic heads;
-2. assign the next free migration;
-3. define restricted review and patient-decision functions first;
-4. implement service/API mutations without direct UPDATE grants;
-5. add candidate-manifest computation and finalization function;
-6. add accessible review UI;
-7. add stale-update, permission, consent and manifest-conflict tests;
-8. prove zero clinical/Labs creation;
-9. complete independent security review;
-10. keep production unchanged.
+```text
+docs/implementation/HC-017-SLICE-D2-HUMAN-REVIEW-EVIDENCE-2026-07-12.md
+```
 
 #### Slice D stop conditions
 
-Do not merge when:
+Do not merge or deploy when:
 
 - OCR receives raw PDF or unauthenticated bytes;
 - arbitrary OCR command options are accepted;
 - OCR output, memory, CPU or timeout is unbounded;
 - OCR/review text appears in ordinary logs;
 - view/analyze can read candidate text;
-- OCR worker has direct table privileges;
+- any worker has direct table privileges;
 - candidates begin accepted;
 - review mutations lack optimistic concurrency;
 - patient matching is inferred automatically;
 - D1/D2 creates clinical or Labs facts;
 - exact-head negative PostgreSQL tests are absent.
 
-### Slice E — Confirmed Labs
+### Slice E — Confirmed Labs Core
 
-Status: `PLANNED AFTER SLICE D`.
+Status: `NEXT / ARCHITECTURE NOT YET DEFINED / NOT IMPLEMENTED / NOT DEPLOYED`.
 
-- explicit atomic confirmation;
-- patient-match prerequisite;
-- source-preserving analyte/value/unit/range;
-- provenance-linked observations;
-- document-linked deletion lifecycle;
-- no automatic interpretation.
+Slice E must introduce a new explicit confirmation boundary. Finalized D2 transcription is eligible input, not an automatically confirmed fact.
+
+Required architecture contract:
+
+- separate confirmation transaction;
+- current finalized D2 review and allowed patient decision;
+- exact source document, OCR run, candidate/page and confirmer provenance;
+- original analyte wording, value, unit and reference range preserved;
+- no silent terminology normalization or unit conversion;
+- numeric and text values represented without loss;
+- explicit duplicate/idempotency policy;
+- correction/void/permanent-erasure lifecycle;
+- owner/edit/view/analyze access matrix;
+- deletion propagation from document source through derived/OCR/confirmed records;
+- no diagnosis, interpretation, recommendation or dose calculation.
+
+Architecture/security review must be merged before any Slice E code.
 
 ### Slice F — Metric dynamics
 
-Status: `PLANNED`.
+Status: `PLANNED AFTER CONFIRMED LABS`.
 
-- compatible numeric series;
+- compatible numeric series only;
 - no silent unit conversion;
 - chart and accessible table;
 - source-specific ranges;
 - provenance links;
-- no diagnosis/treatment advice.
+- no diagnosis or treatment advice.
 
 ### Slice G — Controlled production rollout
 
@@ -362,15 +377,15 @@ Required readiness:
 
 ## 8. Immediate plan
 
-1. Merge D1 evidence documentation.
-2. Recheck current `main`, open PRs and Alembic heads.
-3. Assign the next free migration to D2.
-4. Implement restricted candidate-review mutations.
-5. Enforce owner/edit, consent and optimistic concurrency.
-6. Implement explicit patient-match decisions.
-7. Add manifest-bound atomic review finalization.
-8. Add content-free audit and accessible review UI.
-9. Prove that D2 creates no clinical or Labs facts.
+1. Merge D2 evidence documentation.
+2. Define the Slice E data and confirmation contract.
+3. Define source-preserving analyte/value/unit/reference-range fields.
+4. Define provenance, idempotency and duplicate-import behavior.
+5. Define correction, void, permanent-erasure and document-deletion propagation.
+6. Define the Labs permission matrix and RLS boundary.
+7. Define explicit confirmation UI and optimistic concurrency.
+8. Complete an independent Slice E architecture/security review.
+9. Create no Slice E implementation branch before that review is merged.
 10. Keep production document upload disabled and do not create a VPS deployment task.
 
 ## 9. Global rollout stop conditions
