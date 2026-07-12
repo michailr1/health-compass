@@ -2,124 +2,51 @@
 
 Дата: 2026-07-12  
 Основная ветка: `main`  
-Main HEAD: `ccabab77cf929456a74b69c3478c71f92f167f78`  
+Application-code baseline: `ccabab77cf929456a74b69c3478c71f92f167f78`  
 Production URL: `https://health.funti.cc`  
-Production application target: `b8e868825f378195975e2729f3f36c21a1afa2d0`  
+Production application: `b8e868825f378195975e2729f3f36c21a1afa2d0`  
 Production Alembic: `0049`  
 Repository Alembic head: `0050`  
-Текущий engineering verdict: `HC-017 SLICE B MERGED / NOT DEPLOYED`
+Текущий verdict: `SLICE B REVIEWED / SLICE C ARCHITECTURE DEFINED / NOT DEPLOYED`
 
-## Evidence boundary
+## Production boundary
 
-Production и repository state теперь намеренно различаются:
-
-- `main` содержит HC-017 Slice B и migration `0050`;
-- production остаётся на application target `b8e868...` и Alembic `0049`;
-- document upload в production отсутствует;
-- `DOCUMENT_UPLOAD_ENABLED` должен оставаться `false`;
-- production startup validation отклоняет попытку включить Slice B upload вне development.
-
-Владелец ранее подтвердил production HC-016. Детальный VPS-отчёт HC-016 не был перенесён в репозиторий, поэтому отсутствующие operational values не восстанавливаются предположениями.
-
-## Что работает в production
-
-- FastAPI backend и React/Vite frontend;
-- PostgreSQL + Alembic;
-- direct Google OAuth 2.0 / OIDC;
-- Email Magic Links через Brevo;
-- локальные PostgreSQL sessions;
-- users, identities, workspaces, profiles и permissions;
-- FORCE RLS и tenant isolation;
-- account linking и controlled duplicate resolution;
-- Basic Health Profile;
-- история веса, consent, provenance и audit;
-- Clinical Context для состояний, аллергий, лекарств и добавок;
-- review states и contextual intake;
-- Clinical Dictionaries v2;
-- отдельные действия **Убрать из профиля** и **Удалить навсегда** для клинических записей.
-
-## HC-014 — Clinical Dictionaries v2
-
-Production seed подтверждён:
-
-- 69 concepts;
-- 107 aliases;
-- 0 duplicate concept business keys;
-- 0 duplicate aliases;
-- 0 orphan aliases;
-- все 66 reviewed business keys представлены;
-- повторный apply идемпотентен;
-- существовавшие UUID сохранены.
-
-Free-text fallback остаётся доступным.
-
-## HC-015 — Code Review Remediation
-
-Статус: `DEPLOYED / AUTOMATED VERIFIED / OWNER SMOKE CONFIRMED`.
-
-Production application commit:
+Production document upload is not available.
 
 ```text
-c87723d7b4d0e4d2db9f1e0df4e936fbfd543346
+DOCUMENT_UPLOAD_ENABLED=false
 ```
 
-Alembic после HC-015:
+The production application remains on `b8e868...` and Alembic `0049`. Repository migration `0050` and the Slice B UI/API have not been deployed.
 
-```text
-0048
-```
+## Production capabilities
 
-Canonical evidence:
+Production currently provides:
 
-```text
-docs/implementation/HC-015-PRODUCTION-EVIDENCE-2026-07-11.md
-```
+- Google OIDC and Email Magic Links;
+- PostgreSQL sessions;
+- tenant isolation with FORCE RLS;
+- workspaces, profiles and permissions;
+- Basic Health Profile and weight history;
+- consent, provenance and audit;
+- Clinical Context and review states;
+- contextual intake;
+- Russian-first Clinical Dictionaries;
+- owner-controlled permanent clinical-record erasure.
 
-## Safari Magic Link regression
+Production does not provide:
 
-Исправлен hotfix:
+- document upload;
+- document storage;
+- malware scanning;
+- preview/download;
+- OCR;
+- Labs observations;
+- metric dynamics.
 
-```text
-8c09c02fa007cd5e5945c5a93b4913ce63868e68
-```
+## HC-017 Slice A
 
-Работа Email Magic Link на iPhone Safari подтверждена владельцем.
-
-## HC-016 — Owner-controlled Clinical Record Erasure
-
-Статус: `MERGED / PRODUCTION MANUALLY ACCEPTED`.
-
-Source PRs:
-
-- PR `#44` — permanent clinical record erasure;
-- PR `#45` — удаление backup-retention sentence из пользовательского предупреждения.
-
-Merged application target:
-
-```text
-b8e868825f378195975e2729f3f36c21a1afa2d0
-```
-
-Alembic:
-
-```text
-0049
-```
-
-Security contract:
-
-- у runtime app нет прямого DELETE на clinical tables;
-- owner-only erasure идёт через restricted `SECURITY DEFINER` function;
-- stale `expected_updated_at` ничего не удаляет;
-- erasure доступен после отзыва consent;
-- value-bearing audit rows удаляются;
-- остаётся только content-free tombstone.
-
-## HC-017 — Human Documents, OCR Review and Labs
-
-### Architecture
-
-Status: `MERGED` through PR `#47`.
+Status: `ARCHITECTURE MERGED` through PR `#47`.
 
 Canonical document:
 
@@ -127,38 +54,18 @@ Canonical document:
 docs/implementation/HC-017-DOCUMENTS-OCR-LABS-FOUNDATION.md
 ```
 
-### Slice B — Secure Document Intake Foundation
+## HC-017 Slice B
 
-Status: `IMPLEMENTED / MERGED / NOT DEPLOYED`.
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
 
-Source PR:
-
-```text
-#48
-```
-
-Verified implementation head:
+Evidence:
 
 ```text
-46c5ea89d35cc85be0af3b80a9c56f40d5705ac5
-```
-
-Merge commit:
-
-```text
-ccabab77cf929456a74b69c3478c71f92f167f78
-```
-
-CI:
-
-```text
-#402 — success
-```
-
-Repository migration:
-
-```text
-0049 → 0050
+PR: #48
+verified head: 46c5ea89d35cc85be0af3b80a9c56f40d5705ac5
+merge: ccabab77cf929456a74b69c3478c71f92f167f78
+CI: #402
+migration: 0050
 ```
 
 Implemented in repository:
@@ -168,34 +75,19 @@ Implemented in repository:
 - RLS + FORCE RLS;
 - owner/edit insert;
 - owner/edit/view metadata visibility;
-- analyze excluded from document metadata;
+- analyze exclusion from raw-document metadata;
 - no direct runtime UPDATE/DELETE;
-- streamed development/test upload into private quarantine;
+- development/test-only private quarantine adapter;
 - PDF/JPEG/PNG checks;
-- 20 MiB file limit;
-- pre-parser multipart body limit, including chunked uploads;
+- 20 MiB source-file limit;
+- bounded multipart and chunked request body;
 - 25 MP image limit;
-- opaque UUID-based keys;
+- opaque UUID keys;
 - rollback cleanup for route, commit and cancellation failures;
 - content-free audit;
 - duplicate-account activity protection;
-- profile-aware capabilities API;
-- upload/list/detail API;
+- capabilities/upload/list/detail API;
 - `/app/documents` metadata/status UI.
-
-Not implemented:
-
-- production object storage;
-- malware scanner;
-- safe PDF inspection;
-- worker role and processing service;
-- preview or download;
-- OCR;
-- extraction review;
-- confirmed Labs observations;
-- metric dynamics;
-- document void/permanent erasure;
-- production rollout.
 
 Canonical evidence:
 
@@ -203,72 +95,154 @@ Canonical evidence:
 docs/implementation/HC-017-SLICE-B-IMPLEMENTATION-2026-07-12.md
 ```
 
-## Confirmed security properties
+## Independent Slice B security review
 
-- runtime role `NOBYPASSRLS`;
-- dedicated `health_compass_rls_definer NOLOGIN BYPASSRLS`;
-- sensitive definer functions have fixed settings and no PUBLIC EXECUTE;
-- one transaction per request for transaction-local RLS context;
-- document metadata uses a narrower read boundary than normal profile data;
-- `analyze` cannot access raw document metadata;
-- storage key never contains user filename or medical values;
-- external quarantine artifact is removed when the database transaction fails;
-- oversized document requests are rejected before multipart parsing;
-- document rows block incorrect “empty duplicate account” absorption.
+Status: `COMPLETE`.
 
-## Current product limitations
-
-- production document upload is not available;
-- OCR is not available;
-- Labs core is not available;
-- metric dynamics is not available;
-- no production document storage or scanner is approved;
-- no background document worker exists;
-- Oura and other wearable integrations are not implemented;
-- invitations and collaborative access are incomplete as a user flow;
-- AI explanation, evidence retrieval and doctor report are not implemented;
-- the system does not diagnose diseases or calculate medication doses.
-
-## Next required stage
+Verdict:
 
 ```text
-HC-017 Slice C — Scanner and Safe Rendering
+ACCEPT FOR REPOSITORY FOUNDATION
+NOT APPROVED FOR PRODUCTION DEPLOYMENT
+```
+
+No unresolved Critical or High finding remains in Slice B scope.
+
+Required Slice C controls:
+
+- encrypted production storage;
+- storage quota and reserved-free-space gate;
+- orphan-object reconciliation;
+- reverse-proxy body limit matching backend policy;
+- malware scanner with fail-closed behavior;
+- isolated worker OS and PostgreSQL identities;
+- bounded parser/rasterizer sandbox;
+- atomic accepted promotion;
+- no medical values or storage paths in ordinary logs.
+
+Canonical review:
+
+```text
+docs/reviews/HC-017-SLICE-B-INDEPENDENT-SECURITY-REVIEW-2026-07-12.md
+```
+
+## HC-017 Slice C
+
+Status: `ARCHITECTURE DEFINED / NOT IMPLEMENTED / NOT DEPLOYED`.
+
+Selected architecture:
+
+- local encrypted object storage on the production VPS for MVP;
+- root outside releases and public web roots;
+- versioned AES-256-GCM object envelope;
+- key supplied through systemd credentials;
+- local ClamAV `clamd` over Unix socket;
+- worker streams decrypted plaintext through ClamAV `INSTREAM`;
+- `freshclam` maintains official signatures;
+- separate `health_compass_worker` OS account;
+- separate `health_compass_worker LOGIN NOBYPASSRLS` database role;
+- worker uses only restricted job functions;
+- sandboxed PDF/image inspection;
+- rasterized encrypted derivatives;
+- no external OCR/LLM;
+- no production enablement in the implementation PR.
+
+Canonical design:
+
+```text
+docs/implementation/HC-017-SLICE-C-SCANNER-STORAGE-WORKER.md
+```
+
+## Slice C planned controls
+
+### Encrypted object storage
+
+Target root:
+
+```text
+/var/lib/health-compass/documents
+```
+
+Namespaces:
+
+- quarantine;
+- accepted;
+- derived;
+- orphan;
+- trash.
+
+Object keys use only internal UUIDs. Filenames, emails and medical values never appear in paths.
+
+### Malware scanner
+
+- ClamAV daemon on local Unix socket;
+- scanner has no direct document-storage access;
+- worker decrypts and streams plaintext;
+- scanner timeout/outage/stale signatures fail closed;
+- infected files never reach parser/rendering;
+- signature freshness becomes a rollout gate.
+
+### Restricted worker
+
+- separate OS identity;
+- separate NOBYPASSRLS database login;
+- no direct document/profile table grants;
+- constrained claim/heartbeat/complete/fail functions;
+- lease ownership and stale-attempt checks;
+- hardened systemd sandbox and resource limits.
+
+### Safe inspection/rendering
+
+- scanner runs before parser;
+- password-protected or malformed PDF rejected;
+- page limit enforced;
+- pages rendered individually under timeout/memory limits;
+- browser never embeds raw PDF;
+- image metadata stripped;
+- derivatives encrypted before persistent storage.
+
+### Operational safety
+
+- per-profile/global quotas;
+- reserved free-space threshold;
+- orphan reconciliation;
+- atomic accepted promotion;
+- reverse-proxy request limit;
+- non-sensitive logs and metrics only.
+
+## Next allowed work
+
+```text
+HC-017 Slice C implementation
 ```
 
 Before implementation:
 
-1. perform an independent security review of Slice B;
-2. choose the production private-storage model;
-3. choose and threat-review the malware scanner;
-4. define isolated worker role and credentials;
-5. define bounded PDF inspection and rasterization;
-6. recheck current main and Alembic head;
-7. create a separate Slice C branch.
+1. recheck current `main` and all Alembic heads;
+2. verify no open PR owns candidate migration `0051`;
+3. define exact storage envelope and parser tests;
+4. implement worker role/functions first;
+5. implement encryption and scanner clients;
+6. implement quota and reconciliation controls;
+7. implement safe rendering;
+8. run independent review before any deployment decision.
 
-No VPS deployment task should be created for Slice B.
-
-## Non-blocking technical follow-ups
-
-- revoke unnecessary PUBLIC EXECUTE from ordinary trigger functions;
-- migrate deprecated `authlib.jose` usage to `joserfc`;
-- add dictionary search indexes;
-- clean unused CORS configuration;
-- cache OIDC discovery/JWKS;
-- retain restricted historical Apache logs according to policy.
-
-## Stop conditions for Slice C
+## Stop conditions
 
 Stop merge or rollout when:
 
-- production storage is public or inside the web root;
-- scanner is absent, stubbed or fail-open;
-- scanner outage permits promotion or OCR;
-- worker uses app or migrator credentials;
-- worker can enumerate arbitrary profiles;
-- raw PDF is embedded directly in the browser;
-- page, CPU, memory or timeout limits are absent;
-- storage key or signed URL appears in logs;
-- document contents or medical values appear in ordinary logs;
+- storage is public or under the web root;
+- encryption key is stored in Git, `.env` or database;
+- nonce reuse is possible;
+- scanner is absent, stubbed, stale or fail-open;
+- worker uses app/migrator credentials;
+- worker has broad table access;
+- raw PDF is embedded in browser;
+- parser/rendering lacks page, CPU, memory or timeout limits;
+- storage quota/free-space protection is absent;
+- orphan reconciliation is absent;
+- object path, signed URL or medical content enters ordinary logs;
 - cross-profile access is possible;
 - migration has multiple heads;
-- exact-head CI or PostgreSQL negative tests are missing.
+- exact-head CI or PostgreSQL negative tests are missing;
+- production upload is enabled before explicit controlled rollout approval.
