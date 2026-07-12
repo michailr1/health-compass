@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -13,6 +13,7 @@ import ProfileQuestionnairePage from "./pages/ProfileQuestionnaire";
 import SignInMethodsPage from "./pages/SignInMethods";
 import Documents from "./pages/Documents";
 import DocumentOCRReview from "./pages/DocumentOCRReview";
+import LabDrafts from "./pages/LabDrafts";
 import Oura from "./pages/Oura";
 import Genetics from "./pages/Genetics";
 import ActionPlan from "./pages/ActionPlan";
@@ -49,6 +50,7 @@ const App = () => (
               <Route path="sign-in-methods" element={<SignInMethodsPage />} />
               <Route path="documents" element={<Documents />} />
               <Route path="documents/:documentId/review" element={<DocumentOCRReview />} />
+              <Route path="documents/:documentId/labs" element={<LabDrafts />} />
               <Route path="oura" element={<Oura />} />
               <Route path="genetics" element={<Genetics />} />
               <Route path="plan" element={<ActionPlan />} />
