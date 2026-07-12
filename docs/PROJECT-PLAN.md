@@ -1,6 +1,6 @@
 # Health Compass — канонический план проекта
 
-Версия: 1.8  
+Версия: 1.9  
 Дата: 2026-07-12  
 Основная ветка: `main`
 
@@ -32,14 +32,15 @@ Create a secure multi-user personal-health portal that combines profile data, cl
 - Destructive actions use least privilege and optimistic concurrency.
 - Documents are untrusted until quarantine, scanning and safe inspection succeed.
 - Raw documents, OCR drafts and confirmed facts have different access boundaries.
+- Repository implementation, merge, CI verification and production deployment remain separate states.
 
 ## 4. Repository and production state
 
 Repository application baseline:
 
 ```text
-ccabab77cf929456a74b69c3478c71f92f167f78
-Alembic head: 0050
+a0dd405ca3e789cb70e5c4ad94de9a272dff878f
+Alembic head: 0051
 ```
 
 Production:
@@ -48,13 +49,15 @@ Production:
 https://health.funti.cc
 application: b8e868825f378195975e2729f3f36c21a1afa2d0
 Alembic: 0049
+DOCUMENT_UPLOAD_ENABLED=false
 ```
 
 Current verdict:
 
 ```text
-SLICE B REVIEWED
-SLICE C ARCHITECTURE DEFINED
+HC-017 C1 MERGED
+HC-017 C1 CI VERIFIED
+HC-017 C1 NOT DEPLOYED
 PRODUCTION UNCHANGED
 ```
 
@@ -111,7 +114,7 @@ Target flow:
 
 ```text
 Upload
-→ quarantine
+→ encrypted quarantine
 → malware scan
 → safe rendering
 → OCR
@@ -142,8 +145,7 @@ Implemented:
 
 - document metadata and intake jobs;
 - FORCE RLS and document-specific read boundary;
-- dev/test private quarantine adapter;
-- format, size and image-dimension checks;
+- bounded format/size/dimension validation;
 - pre-parser body limit;
 - rollback cleanup;
 - API and minimal Documents UI.
@@ -161,16 +163,6 @@ ACCEPT FOR REPOSITORY FOUNDATION
 NOT APPROVED FOR PRODUCTION DEPLOYMENT
 ```
 
-Required follow-ups:
-
-- encrypted production storage;
-- storage quota/free-space gate;
-- orphan reconciliation;
-- proxy upload limit;
-- malware scanner;
-- isolated worker;
-- safe parser/rasterizer sandbox.
-
 Canonical review:
 
 ```text
@@ -179,7 +171,7 @@ docs/reviews/HC-017-SLICE-B-INDEPENDENT-SECURITY-REVIEW-2026-07-12.md
 
 ### Slice C — Encrypted Storage, Scanner and Safe Rendering
 
-Status: `ARCHITECTURE DEFINED / NEXT IMPLEMENTATION SLICE`.
+Status: `IN PROGRESS`.
 
 Canonical design:
 
@@ -189,78 +181,175 @@ docs/implementation/HC-017-SLICE-C-SCANNER-STORAGE-WORKER.md
 
 Selected MVP architecture:
 
-- local encrypted object storage on production VPS;
+- local encrypted private object storage;
 - `/var/lib/health-compass/documents` outside releases/web roots;
 - AES-256-GCM versioned object envelope;
-- keys delivered via systemd credentials;
-- ClamAV `clamd` over Unix socket;
-- `freshclam` signature updates;
-- scanner fail closed;
+- keys delivered through protected service credentials;
+- local ClamAV `clamd` over Unix socket;
+- FreshClam signature updates;
 - separate worker OS account;
 - separate worker PostgreSQL login `NOBYPASSRLS`;
 - constrained worker functions only;
-- sandboxed PDF/image inspection;
-- encrypted safe rasterized derivatives;
-- per-profile/global quotas;
-- reserved free-space threshold;
-- orphan reconciliation;
-- atomic accepted promotion;
+- bounded safe rendering;
+- encrypted safe derivatives;
+- quotas and orphan reconciliation;
 - no external OCR/LLM.
 
-#### Slice C implementation order
+### Slice C1 — Encrypted Scanner Worker Foundation
 
-1. Recheck main, open migrations and Alembic heads.
-2. Define migration and worker-role prerequisite.
-3. Add encryption envelope and key-loading abstraction.
-4. Add worker job claim/lease/complete functions.
-5. Add ClamAV Unix-socket INSTREAM client.
-6. Add signature freshness and fail-closed policy.
-7. Add quotas and free-space checks.
-8. Add orphan reconciliation.
-9. Add bounded PDF/image inspection.
-10. Add safe rasterization and encrypted derivatives.
-11. Add retry/failure states and UI.
-12. Run full independent security review.
-13. Keep production disabled until a later rollout approval.
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED` through PR `#51`.
 
-#### Candidate migration
-
-Current head:
+Evidence:
 
 ```text
-0050
+verified head: c32e420b59d950aad48366c79010f5ac9fecb43b
+merge: a0dd405ca3e789cb70e5c4ad94de9a272dff878f
+CI: #414
+migration: 0051
 ```
 
-Candidate:
+Canonical evidence:
 
 ```text
-0051
+docs/implementation/HC-017-SLICE-C1-IMPLEMENTATION-2026-07-12.md
 ```
 
-Number is assigned only after checking current heads and open PRs at implementation start.
+Implemented:
 
-#### Slice C implementation PR is not a rollout PR
+#### Authenticated object encryption
 
-The implementation PR must not:
+- `HCENC1` envelope;
+- streaming AES-256-GCM;
+- random nonce per object;
+- AAD binds document UUID and artifact role;
+- plaintext SHA-256 calculated during encryption;
+- GCM authentication before a scan can complete;
+- no application-created plaintext file in persistent document storage.
 
-- enable production upload;
-- install host packages;
-- provision production secrets;
-- alter Apache limits;
-- deploy worker/systemd units;
-- apply production migration.
+#### Key and path hardening
 
-### Slice D — OCR candidates and review
+- key files opened with `O_NOFOLLOW`;
+- regular single-link file requirement;
+- unsafe writable modes rejected;
+- exact 32-byte key requirement;
+- encrypted readers reject symlinks and multiple hard links;
+- object publication is exclusive;
+- occupied object keys are never overwritten or deleted;
+- opaque UUID storage keys only.
 
-Status: `PLANNED`.
+#### Scanner metadata and retry state
 
-- extraction runs;
+- encrypted byte size;
+- encryption format and key ID metadata;
+- scanner state/version/signature metadata;
+- scanner completion timestamp;
+- retry scheduling metadata;
+- initial encrypted intake creates a `scan` job.
+
+#### Restricted worker database boundary
+
+Required role:
+
+```text
+health_compass_worker LOGIN NOBYPASSRLS
+```
+
+Functions:
+
+```text
+app_claim_document_job
+app_heartbeat_document_job
+app_complete_document_scan
+app_fail_document_job
+```
+
+Controls:
+
+- definer ownership and fixed settings;
+- worker-only execution;
+- no direct table grants;
+- lease ownership and stale lease checks;
+- bounded retries and maximum attempts;
+- expired lease reclaim;
+- idempotent identical completion;
+- content-free audit.
+
+#### Local ClamAV client
+
+- Unix-socket `VERSION` and `INSTREAM`;
+- strict response parsing;
+- bounded stream;
+- signature freshness gate;
+- scanner unavailable/stale/protocol failure = fail closed;
+- infected document rejected and enters deletion lifecycle;
+- terminating INSTREAM frame only after GCM authentication;
+- raw scanner output and signature names are not exposed.
+
+#### Safe UI status
+
+The API/UI exposes only:
+
+```text
+not_scanned
+scanning
+clean
+infected
+error
+stale
+```
+
+No preview, download, rendering, OCR or Labs feature is added by C1.
+
+#### C1 verification
+
+CI `#414` passed:
+
+- backend compile/Ruff/unit tests;
+- frontend lint/typecheck/tests/build;
+- migration boundary;
+- isolated `head → base → head`;
+- PostgreSQL RLS/worker negative and state-transition tests.
+
+Final C1 verdict:
+
+```text
+MERGEABLE AND MERGED
+NOT DEPLOYABLE
+```
+
+### Slice C2 — Quotas, Reconciliation and Safe Rendering
+
+Status: `NEXT / NOT IMPLEMENTED`.
+
+Required scope:
+
+1. per-profile and global quotas;
+2. reserved free-space accounting;
+3. orphan and missing-object reconciliation;
+4. separate render-job authorization boundary;
+5. complete encrypted-source verification before parser access;
+6. bounded PDF/image inspection;
+7. CPU, memory, page, pixel, file-size and timeout limits;
+8. encrypted safe page derivatives;
+9. atomic and idempotent accepted promotion;
+10. retry/failure UI states;
+11. no raw PDF browser delivery;
+12. no OCR in this slice;
+13. independent security review.
+
+C2 must not broaden C1 scanner functions to arbitrary future job types. Render operations require explicitly scoped functions and tests.
+
+### Slice D — OCR candidates and human review
+
+Status: `PLANNED AFTER C2`.
+
+- extraction runs over safe rendered pages only;
 - protected OCR artifacts;
-- candidates `needs_review`;
-- page-region review;
+- candidates always begin as `needs_review`;
+- page-region provenance;
 - field confidence;
 - optimistic concurrency;
-- no auto-confirmation.
+- no automatic clinical confirmation.
 
 ### Slice E — Confirmed Labs
 
@@ -287,14 +376,22 @@ Status: `PLANNED`.
 
 Status: `PLANNED AFTER COMPLETE SECURITY REVIEW`.
 
-- production storage/scanner readiness;
+Required readiness:
+
+- production encrypted storage and key recovery;
+- worker OS/DB identities;
+- hardened systemd unit;
+- ClamAV/FreshClam and fresh signatures;
+- reverse-proxy body limit;
+- bounded private multipart spool;
+- quota/reconciliation readiness;
+- safe-renderer package/version evidence;
 - exact-SHA CI;
-- backup-first migration;
+- backup-first migrations;
 - worker privilege probes;
-- clean/EICAR/malformed-file tests;
-- public HTTPS body-limit test;
+- clean/EICAR/malformed-file probes;
 - no-sensitive-log verification;
-- manual disposable-document smoke;
+- disposable-document owner smoke;
 - canonical production evidence.
 
 ## 7. Later phases
@@ -352,33 +449,32 @@ Status: after Labs core.
 
 ## 8. Immediate plan
 
-1. Merge Slice B independent-review and Slice C design docs.
-2. Recheck current `main`, migration heads and open PRs.
-3. Start Slice C implementation in a dedicated branch.
-4. Implement database worker boundary before processing code.
-5. Implement encryption and scanner clients with unit/fuzz tests.
-6. Implement quota and reconciliation before safe rendering.
-7. Add parser/rasterizer sandbox and resource limits.
+1. Merge C1 status documentation.
+2. Recheck current `main`, Alembic heads and open migration PRs.
+3. Create a dedicated C2 branch.
+4. Implement quota and reconciliation controls before rendering.
+5. Define a separate render-worker database boundary.
+6. Implement complete authentication before parser access.
+7. Add bounded safe rasterization and encrypted derivatives.
 8. Run exact-head CI and independent security review.
-9. Do not create a production deployment task yet.
+9. Keep production upload disabled.
+10. Do not create a deployment task yet.
 
-## 9. Slice C stop conditions
+## 9. C2 stop conditions
 
 Do not merge or deploy if:
 
 - storage is public or inside web/release paths;
-- encryption key is in Git, `.env` or database;
-- nonce reuse is possible;
-- scanner is absent, stale, stubbed or fail-open;
-- worker uses app/migrator credentials;
+- key or plaintext enters Git, `.env`, database or persistent temp storage;
+- renderer can claim scanner or unrelated future jobs;
 - worker has broad table access;
-- raw PDF reaches browser;
-- parser lacks CPU/memory/page/time limits;
-- quota or free-space gates are absent;
-- orphan reconciliation is absent;
+- raw PDF reaches the browser;
+- parser lacks CPU, memory, page, pixel, file-size or timeout limits;
+- quota/free-space gates are absent;
+- orphan/missing-object reconciliation is absent;
+- derivatives are not encrypted;
 - accepted promotion is not atomic/idempotent;
-- filenames, paths, signed URLs or medical content enter ordinary logs;
-- cross-profile access is possible;
+- filenames, paths, scanner/parser output or medical content enter ordinary logs;
 - migration has multiple heads;
 - exact-head CI or negative PostgreSQL tests are missing;
 - production upload is enabled before controlled rollout approval.
