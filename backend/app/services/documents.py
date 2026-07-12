@@ -138,6 +138,11 @@ async def create_document(
             page_count=stored.page_count,
         )
         session.add(document)
+        # The job has a composite FK to (document_id, profile_id). Flush the
+        # parent explicitly so SQLAlchemy cannot emit the dependent job first.
+        # Both statements remain in the same request transaction.
+        await session.flush([document])
+
         session.add(
             DocumentProcessingJob(
                 id=uuid.uuid4(),
