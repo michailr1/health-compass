@@ -14,6 +14,7 @@ from app.models.profile_audit_event import ProfileAuditEvent
 from app.models.user import User
 from app.schemas.document import DocumentIntakeCapabilities
 from app.services.health_profile import (
+    can_edit_profile,
     get_visible_profile,
     require_health_data_consent,
     require_profile_edit_access,
@@ -25,9 +26,18 @@ from app.storage.documents import (
 )
 
 
-def document_capabilities() -> DocumentIntakeCapabilities:
+async def document_capabilities(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+) -> DocumentIntakeCapabilities:
+    await get_visible_profile(session, profile_id)
+    editable = await can_edit_profile(session, profile_id)
     return DocumentIntakeCapabilities(
-        upload_enabled=settings.document_upload_enabled and settings.is_development,
+        upload_enabled=(
+            settings.document_upload_enabled
+            and settings.is_development
+            and editable
+        ),
         accepted_media_types=sorted(SUPPORTED_MEDIA_TYPES),
         max_bytes=settings.document_max_bytes,
         max_image_pixels=settings.document_max_image_pixels,
