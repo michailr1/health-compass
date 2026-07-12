@@ -1,559 +1,415 @@
 # Health Compass — канонический план проекта
 
-Версия: 1.6  
+Версия: 1.7  
 Дата: 2026-07-12  
 Основная ветка: `main`
 
-Этот документ — живой основной план проекта. Он обновляется после завершённых этапов, архитектурных решений, внешних ревью и production-проверок.
+Этот документ — живой план проекта. Статусы implementation, merge и production deployment всегда разделяются.
 
 ## 1. Цель
 
-Создать многопользовательский защищённый портал персонального здоровья, который объединяет данные пользователя, лабораторные результаты, носимые устройства, медицинские документы и AI-помощника с обязательной опорой на источники и медицинские ограничения.
+Создать защищённый многопользовательский портал персонального здоровья, объединяющий профиль, клинический контекст, лабораторные результаты, документы, носимые устройства и AI-помощника с обязательной опорой на источники и медицинские ограничения.
 
-## 2. Источники плана
+## 2. Приоритет источников
 
-План сформирован на основе:
+1. Код, migrations и automated tests.
+2. Подтверждённое production state.
+3. ADR и `docs/SECURITY-INVARIANTS.md`.
+4. Канонические Markdown documents.
+5. Исходные PDF/XLSX/PPTX и внешние reviews.
 
-- `01-health-compass-master-plan.pdf`;
-- `03-implementation-roadmap.xlsx`;
-- `04-health-compass-vision-and-roadmap.pptx`;
-- `14-unit-economics.xlsx`;
-- `START-HERE.md`;
-- Fable Stage 2.5, 3 и 3.5 artifacts;
-- прежних Fable reviews по RLS, product и operations;
-- двух независимых code review от 2026-07-11;
-- фактического кода, миграций, tests и production evidence.
+Ключевые implementation documents:
 
-Канонические review и implementation documents:
-
-- `docs/reviews/CODE-REVIEW-CONSOLIDATED-2026-07-11.md`;
-- `docs/reviews/FABLE-5-INDEPENDENT-CODE-REVIEW-2026-07-11.md`;
 - `docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md`;
 - `docs/implementation/HC-015-PRODUCTION-EVIDENCE-2026-07-11.md`;
 - `docs/implementation/HC-016-CLINICAL-RECORD-ERASURE.md`;
 - `docs/implementation/HC-016-PRODUCTION-ACCEPTANCE-2026-07-12.md`;
-- `docs/implementation/HC-017-DOCUMENTS-OCR-LABS-FOUNDATION.md`.
+- `docs/implementation/HC-017-DOCUMENTS-OCR-LABS-FOUNDATION.md`;
+- `docs/implementation/HC-017-SLICE-B-IMPLEMENTATION-2026-07-12.md`.
 
-При расхождении приоритет источников:
-
-1. код, migrations и tests;
-2. подтверждённое production state;
-3. ADR и security invariants;
-4. этот план и канонические Markdown documents;
-5. исходные PDF/XLSX/PPTX и внешние reviews.
-
-## 3. Принципы
+## 3. Основные принципы
 
 - Security first.
-- PostgreSQL и RLS как boundary изоляции пользователей.
+- PostgreSQL RLS — основная tenant boundary.
+- Runtime role остаётся `NOBYPASSRLS`.
 - Никакого Authentik, Keycloak или внешнего IAM для MVP.
 - Direct Google OIDC и Email Magic Links.
-- Собственные users, identities, sessions, workspaces, profiles и permissions.
-- Одна DB transaction на request для RLS context.
-- Verified email само по себе не объединяет аккаунты.
+- Verified email не объединяет аккаунты автоматически.
 - Медицинские данные требуют consent, provenance и audit.
-- Free-text health input остаётся доступным и не переписывается молча.
+- Free text не переписывается молча.
+- OCR/AI output не становится фактом без human confirmation.
 - Никаких автоматических диагнозов, назначений или расчёта доз.
-- OCR/AI данные не становятся подтверждённым фактом без user confirmation.
-- Health intake прогрессивный и не блокирует первое полезное действие.
 - Human и Pet contours разделены.
-- Coding role меняет code; VPS-agent только разворачивает approved commit.
-- Каждый rollout выполняется backup-first и фиксируется точным SHA.
-- Destructive medical-data operations используют least privilege, explicit confirmation и optimistic concurrency.
-- Documents считаются недоверенным вводом и проходят quarantine before processing.
+- Каждый production rollout — backup-first и exact-SHA.
+- Destructive operations используют least privilege, explicit confirmation и optimistic concurrency.
+- Documents являются untrusted input и проходят quarantine before processing.
 - Raw documents, OCR drafts и confirmed observations имеют разные access boundaries.
 
-## 4. Текущее production state
+## 4. Current repository and production state
 
-Production URL:
+Repository:
 
 ```text
-https://health.funti.cc
+main: ccabab77cf929456a74b69c3478c71f92f167f78
+Alembic head: 0050
 ```
 
-На 2026-07-12:
+Production:
 
-- architecture baseline before HC-017 docs: `d32569f3eabbeeee5f803dde11d9b56ccf291cbe`;
-- последний approved application rollout target: `b8e868825f378195975e2729f3f36c21a1afa2d0`;
-- production Alembic target: `0049`;
-- Clinical Dictionaries: 69 concepts, 107 aliases;
-- HC-015: deployed, automated verified, owner smoke confirmed;
-- Safari Magic Link regression: fixed and manually confirmed on iPhone Safari;
-- HC-016: merged and manually accepted in production;
-- HC-017: architecture defined, not implemented, not deployed;
-- engineering verdict: `READY FOR HC-017 SLICE B AFTER ARCHITECTURE MERGE`.
+```text
+URL: https://health.funti.cc
+application: b8e868825f378195975e2729f3f36c21a1afa2d0
+Alembic: 0049
+```
 
-Детальный VPS-отчёт HC-016 не скопирован в репозиторий. Поэтому отсутствующие operational values не восстанавливаются предположениями.
+Current verdict:
 
-Подробное состояние: `docs/CURRENT-STATE.md`.
+```text
+HC-017 SLICE B MERGED / NOT DEPLOYED
+```
 
-## 5. Этапы
+Production document upload remains unavailable and must remain disabled.
 
-### PHASE-01 — Базовая платформа и production
+## 5. Completed platform phases
 
-Статус: `COMPLETED`
+### PHASE-01 — Base platform and production
 
-Реализовано:
+Status: `COMPLETED`.
 
 - FastAPI + React/Vite;
-- PostgreSQL и Alembic;
-- HTTPS production deployment;
-- health checks, systemd, release symlink и rollback process;
-- release `v0.1.0-auth-mvp`;
-- production from exact commit SHA.
+- PostgreSQL + Alembic;
+- HTTPS production;
+- health checks, systemd and release process;
+- exact-SHA deployment and rollback discipline.
 
-### PHASE-02 — Identity, sessions и tenant isolation
+### PHASE-02 — Identity, sessions and tenant isolation
 
-Статус: `COMPLETED / FOLLOW-UP HARDENING NON-BLOCKING`
+Status: `COMPLETED / NON-BLOCKING HARDENING REMAINS`.
 
-Реализовано:
-
-- Google OIDC с PKCE, state и nonce;
-- Email Magic Links через Brevo;
-- scanner-safe GET interstitial и explicit POST consume;
-- POST logout с Origin protection;
+- Google OIDC with PKCE, state and nonce;
+- scanner-safe Email Magic Link consume;
 - PostgreSQL sessions;
 - workspace/profile bootstrap;
 - FORCE RLS;
-- отдельный `health_compass_rls_definer`;
-- устранение RLS recursion;
-- закрытие self-grant owner и self-add workspace;
-- cross-user negative checks;
-- friendly invalid/replayed link states;
-- safe structured logging и query redaction;
-- fail-safe production account-linking configuration;
-- Safari-compatible Magic Link Origin handling.
-
-Non-blocking follow-ups:
-
-- OIDC discovery/JWKS caching;
-- переход с deprecated `authlib.jose` на `joserfc`;
-- cleanup неиспользуемой CORS configuration.
+- dedicated RLS definer role;
+- account linking and duplicate resolution;
+- POST logout and origin validation;
+- structured logging and query redaction;
+- Safari Magic Link hotfix.
 
 ### PHASE-02.5 — Progressive Health Intake
 
-Статус: `CORE SLICES DEPLOYED`
+Status: `CORE SLICES DEPLOYED`.
 
-Принятый path:
+Path:
 
 ```text
 Login
 → minimal onboarding
-→ Empty Dashboard / первое действие
-→ добровольный Health Profile
+→ Empty Dashboard
+→ voluntary Health Profile
 → Clinical Context
-→ contextual intake prompts
-→ подтверждённый импорт из документов
+→ contextual prompts
+→ confirmed document import
 ```
 
-#### Slice 1 — Basic Health Profile
+Implemented:
 
-Статус: `DEPLOYED`
-
-- name, date of birth, sex;
-- height, automatically detected timezone;
+- Basic Health Profile;
 - weight history;
-- consent;
-- provenance и audit;
-- contextual readiness;
-- `/app/profile`;
-- owner/edit/view/analyze access matrix.
-
-#### Slice 2 — Clinical Context
-
-Статус: `DEPLOYED / REMEDIATED / OWNER-CONTROLLED ERASURE ADDED`
-
-- conditions and symptoms;
-- allergies and intolerances;
-- medications;
-- supplements;
+- consent, provenance and audit;
+- Clinical Context;
 - review states;
-- active/history lifecycle;
-- dose, frequency and dates;
-- consent, provenance, audit и void;
-- typeahead and free-text fallback;
+- contextual intake;
 - Clinical Dictionaries v2;
-- optimistic concurrency for destructive changes;
-- separate **Убрать из профиля** and **Удалить навсегда** actions.
+- owner-controlled permanent erasure for clinical records.
 
-#### Slice 3 — Contextual Intake
+### PHASE-02.7 — HC-015 remediation
 
-Статус: `FOUNDATION DEPLOYED`
+Status: `DEPLOYED / VERIFIED`.
 
-- сохранить в profile;
-- использовать только для analysis;
-- отложить;
-- объяснить purpose;
-- append-only intake decisions.
+Closed blocking review findings in routing, duplicate resolution, Magic Links, dictionary integrity, concurrency, logging, privileges and CI.
 
-#### Slice 4 — Documents/OCR transition
+### PHASE-02.8 — HC-016 record erasure
 
-Статус: `HC-017 ARCHITECTURE DEFINED / IMPLEMENTATION PENDING`
+Status: `DEPLOYED / MANUALLY ACCEPTED`.
+
+- owner-only permanent erasure;
+- no direct clinical DELETE grant;
+- value-bearing audit scrubbing;
+- content-free tombstone;
+- explicit irreversible confirmation.
+
+## 6. PHASE-03 — Human Documents, OCR and Labs
+
+Status: `IN PROGRESS`.
+
+Target flow:
 
 ```text
 Upload analysis
 → quarantine
 → malware and format validation
-→ OCR processing
+→ safe rendering
+→ OCR
 → human review
 → explicit confirmation
-→ confirmed lab observations
-→ metric dynamics
-→ contextual intake
-```
-
-### PHASE-02.6 — Account linking и duplicate resolution
-
-Статус: `DEPLOYED / REMEDIATED`
-
-Реализованы:
-
-- HC-025 symmetric account linking;
-- HC-026 controlled duplicate resolution;
-- HC-027 prevention of silent duplicate creation;
-- step-up identity removal;
-- запрет удаления последней identity;
-- meaningful-activity assessment с учётом `profile_clinical_reviews` и `profile_intake_decisions`.
-
-### PHASE-02.7 — HC-015 Code Review Remediation
-
-Статус: `COMPLETED / DEPLOYED / AUTOMATED VERIFIED`
-
-Закрыты блокирующие findings двух независимых reviews:
-
-1. Clinical Context route cleanup.
-2. Duplicate resolution schema synchronization — migration `0046`.
-3. Magic Link/logout/account-linking/logging hardening.
-4. Clinical dictionary integrity — migration `0047`.
-5. Narrow users grants — migration `0048`.
-6. Full lint/typecheck and migration-cycle CI.
-7. Concurrency and frontend API contract fixes.
-8. Controlled backup-first production rollout.
-
-Production application commit HC-015:
-
-```text
-c87723d7b4d0e4d2db9f1e0df4e936fbfd543346
-```
-
-Canonical evidence:
-
-```text
-docs/implementation/HC-015-PRODUCTION-EVIDENCE-2026-07-11.md
-```
-
-### PHASE-02.8 — HC-016 Clinical Record Erasure
-
-Статус: `COMPLETED / MERGED / PRODUCTION MANUALLY ACCEPTED`
-
-Реализовано:
-
-- owner-only permanent erasure;
-- explicit irreversible confirmation;
-- `expected_updated_at` concurrency guard;
-- erasure after consent withdrawal;
-- no direct runtime DELETE on clinical tables;
-- restricted `SECURITY DEFINER` function;
-- atomic removal of value-bearing audit events;
-- content-free `clinical_record.erased` tombstone;
-- migration `0049`;
-- corrected user warning without backup-retention sentence.
-
-Canonical documents:
-
-```text
-docs/implementation/HC-016-CLINICAL-RECORD-ERASURE.md
-docs/implementation/HC-016-PRODUCTION-ACCEPTANCE-2026-07-12.md
-```
-
-### PHASE-03 — Human Documents, OCR и Labs
-
-Статус: `HC-017 ARCHITECTURE DEFINED / NOT IMPLEMENTED`
-
-Канонический contract:
-
-```text
-docs/implementation/HC-017-DOCUMENTS-OCR-LABS-FOUNDATION.md
-```
-
-Первый vertical slice:
-
-```text
-Login
-→ Minimal Onboarding
-→ Empty Dashboard
-→ Upload Analysis
-→ Quarantine and validation
-→ Processing
-→ OCR Review
-→ User Confirmation
 → Lab Results
 → Metric Dynamics
-→ Contextual Intake
 ```
 
-#### HC-017 Slice A — Architecture and contracts
+### HC-017 Slice A — Architecture and contracts
 
-Статус: `DEFINED IN DOCS`
+Status: `MERGED` through PR `#47`.
 
-Зафиксированы:
+Defined:
 
-- file upload threat model;
-- supported formats and backend limits;
-- quarantine and scanner fail-closed behavior;
-- private storage contract;
-- access matrix for owner/edit/view/analyze/outsider;
-- separate restricted worker boundary;
-- proposed document/job/extraction/candidate/lab schema;
-- OCR human-review and patient-match contract;
-- provenance and metric rules;
-- raw/derived/confirmed deletion lifecycle;
-- logging and test gates.
+- threat model;
+- quarantine and scanner behavior;
+- storage boundary;
+- access matrix;
+- worker boundary;
+- proposed schema;
+- OCR review contract;
+- patient matching;
+- provenance;
+- deletion lifecycle;
+- logging and rollout gates.
 
-#### HC-017 Slice B — Secure Document Intake Foundation
+### HC-017 Slice B — Secure Document Intake Foundation
 
-Статус: `NEXT IMPLEMENTATION SLICE`
+Status: `IMPLEMENTED / MERGED / NOT DEPLOYED` through PR `#48`.
 
-Scope:
+Verified head:
 
-- `profile_documents`;
-- processing jobs and content-free audit;
-- RLS/access matrix;
-- storage adapter interface;
-- streamed single-file upload into quarantine;
+```text
+46c5ea89d35cc85be0af3b80a9c56f40d5705ac5
+```
+
+Merge commit:
+
+```text
+ccabab77cf929456a74b69c3478c71f92f167f78
+```
+
+CI:
+
+```text
+#402 — passed
+```
+
+Implemented:
+
+- migration `0050`;
+- document metadata and intake-job tables;
+- FORCE RLS and permission matrix;
+- analyze exclusion from raw-document metadata;
+- private development/test quarantine adapter;
 - PDF/JPEG/PNG validation;
-- initial limits: 20 MiB, 50 PDF pages, 25 megapixels;
-- list/detail/status UI;
-- demo/test documents only;
+- pre-parser request limit;
+- opaque storage keys;
+- rollback cleanup;
+- capabilities/upload/list/detail APIs;
+- minimal Documents UI;
+- migration-cycle and RLS regression tests.
+
+Production restrictions:
+
+- no rollout;
+- no production storage;
+- no scanner;
+- no preview/download;
+- no worker;
 - no OCR;
-- no real lab observations;
-- no production rollout in the implementation PR.
+- no Labs data;
+- `DOCUMENT_UPLOAD_ENABLED=false`;
+- production startup rejects enablement.
 
-Migration candidate is `0050`, but numbering is assigned only after checking the current Alembic head and open migration PRs.
+### HC-017 Slice C — Scanner and Safe Rendering
 
-#### HC-017 Slice C — Scanner and safe rendering
+Status: `NEXT / NOT IMPLEMENTED`.
 
-Статус: `PLANNED AFTER SLICE B`
+Prerequisites:
 
-- production malware scanner;
+1. independent security review of Slice B;
+2. production private-storage decision;
+3. malware-scanner decision;
+4. worker-role and credential design;
+5. bounded PDF inspection and rasterization threat model;
+6. current-main and Alembic-head verification.
+
+Planned scope:
+
+- private production object storage;
+- malware scanner with fail-closed behavior;
+- restricted worker role;
+- job leases and retries;
+- PDF structure/page validation;
+- safe rasterized derivatives;
 - accepted-object promotion;
-- safe page rasterization;
-- restricted worker role and job leasing;
-- retry/failure UI.
+- failure and retry UI;
+- no OCR confirmation yet.
 
-#### HC-017 Slice D — OCR candidates and review
+### HC-017 Slice D — OCR candidates and review
 
-Статус: `PLANNED`
+Status: `PLANNED`.
 
 - extraction runs;
-- `needs_review` candidates;
-- page/region review UI;
-- confidence and field validation;
-- autosave with optimistic concurrency;
-- no auto-confirmation.
+- protected OCR artifacts;
+- candidates always `needs_review`;
+- page-region review UI;
+- confidence and validation;
+- optimistic concurrency;
+- no automatic confirmation.
 
-#### HC-017 Slice E — Confirmed Labs core
+### HC-017 Slice E — Confirmed Labs core
 
-Статус: `PLANNED`
+Status: `PLANNED`.
 
-- atomic user confirmation;
-- `lab_observations` and provenance;
-- patient matching gate;
+- atomic confirmation;
+- patient matching;
 - source-preserving values and units;
-- owner-controlled document-linked deletion lifecycle.
+- provenance-linked lab observations;
+- document-linked deletion lifecycle.
 
-#### HC-017 Slice F — Metric dynamics
+### HC-017 Slice F — Metric dynamics
 
-Статус: `PLANNED`
+Status: `PLANNED`.
 
 - compatible numeric series;
 - chart plus table;
-- source-specific reference ranges;
-- links to source document and provenance;
+- source-specific ranges;
+- provenance links;
 - no medical interpretation.
 
-#### HC-017 Slice G — Production rollout
+### HC-017 Slice G — Production rollout
 
-Статус: `PLANNED AFTER SECURITY REVIEW`
+Status: `PLANNED AFTER SECURITY REVIEW`.
 
-- independent security review;
-- exact-SHA CI;
 - storage/scanner readiness evidence;
+- exact-SHA CI;
 - backup-first migration;
-- tenant and worker privilege checks;
-- manual owner smoke with disposable documents;
+- tenant/worker privilege checks;
+- disposable-document owner smoke;
 - canonical production evidence.
 
-### PHASE-04 — Источники данных и integrations
+## 7. Later phases
 
-Статус: `PLANNED`
+### PHASE-04 — Data sources and integrations
 
-- Oura OAuth и sync;
-- laboratory PDF/CSV expansion;
-- Apple Health / Health Connect по отдельному ADR;
-- raw ingestion and normalization;
-- idempotency and cursors;
-- freshness and sync status;
-- safe bulk upload.
+Status: `PLANNED`.
 
-### PHASE-05 — Timeline и analytics
+- Oura;
+- laboratory CSV/PDF expansion;
+- Apple Health / Health Connect after ADR;
+- idempotent sync and freshness.
 
-Статус: `PLANNED`
+### PHASE-05 — Timeline and analytics
 
-- unified health timeline;
-- trends сна, активности, веса и labs;
+Status: `PLANNED`.
+
+- unified timeline;
+- sleep/activity/weight/lab trends;
 - personal baseline;
-- significant-change detection;
-- explainable priority cards;
 - Attention Inbox;
 - search.
 
 ### PHASE-05.5 — Nutrition Photo MVP
 
-Статус: `PLANNED AFTER LABS CORE`
+Status: `PLANNED AFTER LABS CORE`.
 
-Canonical document:
+### PHASE-06 — Shared access
 
-```text
-docs/NUTRITION-PHOTO-MVP.md
-```
-
-Invariants:
-
-- raw capture → machine analysis → human confirmation → normalized fact;
-- AI output не является fact без confirmation;
-- calorie range вместо ложной точности;
-- provenance и `ai_runs`;
-- `external_llm` consent;
-- wellbeing stop-list.
-
-### PHASE-06 — Совместный доступ
-
-Статус: `PLANNED`
+Status: `PLANNED`.
 
 - invitations;
-- owner/edit/analyze/view;
-- revoke;
-- audit;
-- RLS matrix;
-- caregiver/profile transfer только после threat review.
+- owner/edit/view/analyze lifecycle;
+- revoke and audit;
+- RLS matrix.
 
-### PHASE-07 — Privacy и data lifecycle
+### PHASE-07 — Privacy and data lifecycle
 
-Статус: `FOUNDATION STARTED / BROADER SCOPE PLANNED`
+Status: `FOUNDATION STARTED`.
 
-Уже реализовано:
+Implemented:
 
-- consent foundation;
-- clinical provenance and audit;
-- soft removal/void;
-- owner-controlled permanent erasure отдельных Clinical Context records.
+- consent;
+- provenance/audit;
+- clinical void;
+- clinical permanent erasure.
 
-HC-017 добавляет target contract для удаления:
+Planned:
 
-- raw documents;
-- quarantine objects;
-- safe previews;
-- OCR output;
-- candidates;
-- sole-provenance confirmed lab observations.
-
-Остаётся:
-
-- consent center;
+- document raw/derived/confirmed deletion;
+- account export;
+- profile/user deletion;
+- retention center;
 - active sessions;
-- export;
-- delete profile/user;
-- retention policy;
-- access audit;
-- deletion всех raw/normalized/derived/embeddings domains;
-- external LLM consent.
+- external-processing consent.
 
 ### PHASE-08 — AI Health Assistant
 
-Статус: `PLANNED`
+Status: `PLANNED`.
 
 - retrieval-grounded answers;
 - evidence/citations;
 - Fact / Interpretation / Recommendation separation;
 - red-flag routing;
 - no diagnosis or dose calculation;
-- `profile_id` retrieval filtering;
-- privacy-minimized `ai_runs`;
-- prompt-injection tests;
-- versioned prompts and medical rules.
+- prompt-injection tests.
 
-Implementation must comply with `docs/AI-PRODUCT-SAFETY.md`.
+### PHASE-09 — Product expansion
 
-### PHASE-09 — Расширение продукта
-
-Статус: `BACKLOG`
+Status: `BACKLOG`.
 
 - family profiles;
-- separate Pet Health model and retrieval;
+- Pet Health contour;
 - clinician/caregiver workflows;
 - Offline Emergency Card;
-- subscriptions and unit economics;
-- mobile app/PWA.
+- subscriptions;
+- mobile/PWA.
 
-## 6. Ближайший план
+## 8. Immediate plan
 
-1. Merge HC-017 architecture docs after green CI.
-2. Recheck current `main`, production target and Alembic heads.
-3. Check all open PRs for migration ownership.
-4. Create HC-017 Slice B branch from current `main`.
-5. Implement schema, RLS, privilege matrix and migration cycle first.
-6. Add private storage adapter and streamed quarantine upload.
-7. Add backend format/size/magic-byte validation and safe status API.
-8. Add minimal Documents list/detail/status UI.
-9. Test only with demo/test documents.
-10. Perform independent diff/security review before any scanner/OCR slice.
+1. Merge the Slice B status documentation.
+2. Perform independent Slice B security review.
+3. Compare production storage options and select one.
+4. Select and threat-review malware scanner.
+5. Define worker provisioning and restricted credentials.
+6. Define safe PDF inspection/rasterization resource limits.
+7. Recheck `main`, open PRs and Alembic head.
+8. Create a separate HC-017 Slice C implementation branch.
+9. Keep production unchanged until Slice C and a later controlled rollout are approved.
 
-Non-blocking technical follow-ups remain separate small PRs:
+## 9. Slice C merge and rollout gates
 
-- revoke unnecessary PUBLIC EXECUTE у обычных trigger functions;
-- `joserfc` migration;
-- dictionary search indexes;
-- OIDC discovery/JWKS caching;
-- CORS config cleanup.
+Do not merge or deploy if:
 
-## 7. Rollout gates для PHASE-03
+- storage is public or in the web root;
+- storage keys include filenames or medical values;
+- scanner is missing, stubbed or fail-open;
+- scanner outage permits acceptance or OCR;
+- worker uses app/migrator credentials;
+- worker can enumerate arbitrary profiles;
+- raw PDF is embedded directly in the browser;
+- page, CPU, memory or timeout limits are absent;
+- accepted-object promotion is not atomic and idempotent;
+- signed URLs or object keys appear in logs;
+- cross-profile access is possible;
+- document contents or medical values appear in ordinary logs;
+- migration has multiple heads;
+- exact-head CI or PostgreSQL negative tests are missing;
+- production upload is enabled before the approved rollout slice.
 
-Rollout запрещён, если:
+## 10. Documentation rule
 
-- upload допускает неограниченный размер или неподдерживаемые content types;
-- limits существуют только во frontend;
-- upload bypasses quarantine;
-- scanner unavailable/failure permits OCR;
-- object storage key не связан с tenant/profile boundary;
-- raw document публично доступен или доступен без profile authorization;
-- `analyze` получает raw document или OCR draft;
-- worker использует app/migrator credentials или broad profile-table grants;
-- OCR values становятся clinical facts без explicit confirmation;
-- provenance теряется между document, extracted candidate и confirmed observation;
-- source values silently replaced by normalization;
-- deletion lifecycle не покрывает raw, extracted, normalized and sole-provenance confirmed data;
-- CI выполнен не на exact deployed SHA;
-- миграции имеют несколько heads;
-- backup не подтверждён;
-- в logs появляются tokens, filenames, signed URLs, document contents, OCR text или medical values;
-- обнаружен cross-user access;
-- production storage/scanner uses a stub;
-- external OCR/LLM receives data without explicit consent and provider approval.
-
-## 8. Правило обновления
-
-После этапа или review обновляются:
+After each implementation, review, merge or rollout update:
 
 - `docs/CURRENT-STATE.md`;
-- `docs/PROJECT-PLAN.md`;
-- `docs/DEVELOPMENT-HISTORY.md` или отдельный dated evidence document;
-- `docs/reviews/FABLE-RECOMMENDATIONS.md`, если меняется статус рекомендаций;
+- this plan;
+- corresponding implementation/evidence document;
 - `docs/source-index/SOURCE-REGISTER.md`;
-- implementation document соответствующей HC-задачи;
-- `docs/SECURITY-INVARIANTS.md`, если меняются security rules;
-- product/UX/intake/AI baselines, если меняются соответствующие решения;
-- README, если меняются public URL, architecture или local run;
-- ADR, если принято новое архитектурное решение.
+- dated change record;
+- security invariants when rules change.
 
-Статус `VERIFIED` допускается только после test, merge и/или production evidence, соответствующего формулировке статуса. Manual acceptance не заменяет отсутствующие operational metrics.
+`VERIFIED`, `MERGED` and `DEPLOYED` are separate statuses and must never be used interchangeably.
