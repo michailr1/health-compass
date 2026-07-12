@@ -1,63 +1,51 @@
 # Health Compass — канонический план проекта
 
-Версия: 1.7  
+Версия: 1.8  
 Дата: 2026-07-12  
 Основная ветка: `main`
 
-Этот документ — живой план проекта. Статусы implementation, merge и production deployment всегда разделяются.
+## 1. Product goal
 
-## 1. Цель
+Create a secure multi-user personal-health portal that combines profile data, clinical context, documents, laboratory results, wearable sources and an evidence-grounded AI assistant.
 
-Создать защищённый многопользовательский портал персонального здоровья, объединяющий профиль, клинический контекст, лабораторные результаты, документы, носимые устройства и AI-помощника с обязательной опорой на источники и медицинские ограничения.
+## 2. Source priority
 
-## 2. Приоритет источников
+1. Code, migrations and automated tests.
+2. Confirmed production state.
+3. ADRs and security invariants.
+4. Canonical Markdown documents.
+5. Reference PDF/XLSX/PPTX and external reviews.
 
-1. Код, migrations и automated tests.
-2. Подтверждённое production state.
-3. ADR и `docs/SECURITY-INVARIANTS.md`.
-4. Канонические Markdown documents.
-5. Исходные PDF/XLSX/PPTX и внешние reviews.
-
-Ключевые implementation documents:
-
-- `docs/implementation/HC-015-CODE-REVIEW-REMEDIATION.md`;
-- `docs/implementation/HC-015-PRODUCTION-EVIDENCE-2026-07-11.md`;
-- `docs/implementation/HC-016-CLINICAL-RECORD-ERASURE.md`;
-- `docs/implementation/HC-016-PRODUCTION-ACCEPTANCE-2026-07-12.md`;
-- `docs/implementation/HC-017-DOCUMENTS-OCR-LABS-FOUNDATION.md`;
-- `docs/implementation/HC-017-SLICE-B-IMPLEMENTATION-2026-07-12.md`.
-
-## 3. Основные принципы
+## 3. Non-negotiable principles
 
 - Security first.
-- PostgreSQL RLS — основная tenant boundary.
-- Runtime role остаётся `NOBYPASSRLS`.
-- Никакого Authentik, Keycloak или внешнего IAM для MVP.
-- Direct Google OIDC и Email Magic Links.
-- Verified email не объединяет аккаунты автоматически.
-- Медицинские данные требуют consent, provenance и audit.
-- Free text не переписывается молча.
-- OCR/AI output не становится фактом без human confirmation.
-- Никаких автоматических диагнозов, назначений или расчёта доз.
-- Human и Pet contours разделены.
-- Каждый production rollout — backup-first и exact-SHA.
-- Destructive operations используют least privilege, explicit confirmation и optimistic concurrency.
-- Documents являются untrusted input и проходят quarantine before processing.
-- Raw documents, OCR drafts и confirmed observations имеют разные access boundaries.
+- PostgreSQL RLS is the tenant boundary.
+- Runtime role remains `NOBYPASSRLS`.
+- Direct Google OIDC and Email Magic Links for MVP.
+- Verified email does not silently merge accounts.
+- Medical data requires consent, provenance and audit.
+- Free text is not silently rewritten.
+- OCR/AI output is not a fact before explicit human confirmation.
+- No automatic diagnosis, prescription or dose calculation.
+- Human and Pet contours remain separated.
+- Production rollout is backup-first and exact-SHA.
+- Destructive actions use least privilege and optimistic concurrency.
+- Documents are untrusted until quarantine, scanning and safe inspection succeed.
+- Raw documents, OCR drafts and confirmed facts have different access boundaries.
 
-## 4. Current repository and production state
+## 4. Repository and production state
 
-Repository:
+Repository application baseline:
 
 ```text
-main: ccabab77cf929456a74b69c3478c71f92f167f78
+ccabab77cf929456a74b69c3478c71f92f167f78
 Alembic head: 0050
 ```
 
 Production:
 
 ```text
-URL: https://health.funti.cc
+https://health.funti.cc
 application: b8e868825f378195975e2729f3f36c21a1afa2d0
 Alembic: 0049
 ```
@@ -65,305 +53,298 @@ Alembic: 0049
 Current verdict:
 
 ```text
-HC-017 SLICE B MERGED / NOT DEPLOYED
+SLICE B REVIEWED
+SLICE C ARCHITECTURE DEFINED
+PRODUCTION UNCHANGED
 ```
 
-Production document upload remains unavailable and must remain disabled.
+## 5. Completed foundations
 
-## 5. Completed platform phases
-
-### PHASE-01 — Base platform and production
+### PHASE-01 — Platform and production
 
 Status: `COMPLETED`.
 
 - FastAPI + React/Vite;
 - PostgreSQL + Alembic;
 - HTTPS production;
-- health checks, systemd and release process;
-- exact-SHA deployment and rollback discipline.
+- systemd/release workflow;
+- exact-SHA deployment discipline.
 
-### PHASE-02 — Identity, sessions and tenant isolation
+### PHASE-02 — Identity and tenant isolation
 
 Status: `COMPLETED / NON-BLOCKING HARDENING REMAINS`.
 
-- Google OIDC with PKCE, state and nonce;
-- scanner-safe Email Magic Link consume;
+- Google OIDC;
+- Email Magic Links;
+- scanner-safe consume;
 - PostgreSQL sessions;
 - workspace/profile bootstrap;
 - FORCE RLS;
-- dedicated RLS definer role;
 - account linking and duplicate resolution;
-- POST logout and origin validation;
-- structured logging and query redaction;
-- Safari Magic Link hotfix.
+- structured logging and token/query redaction.
 
 ### PHASE-02.5 — Progressive Health Intake
 
 Status: `CORE SLICES DEPLOYED`.
 
-Path:
-
-```text
-Login
-→ minimal onboarding
-→ Empty Dashboard
-→ voluntary Health Profile
-→ Clinical Context
-→ contextual prompts
-→ confirmed document import
-```
-
-Implemented:
-
 - Basic Health Profile;
 - weight history;
-- consent, provenance and audit;
+- consent/provenance/audit;
 - Clinical Context;
 - review states;
 - contextual intake;
-- Clinical Dictionaries v2;
-- owner-controlled permanent erasure for clinical records.
+- Clinical Dictionaries v2.
 
-### PHASE-02.7 — HC-015 remediation
+### HC-015 — Code review remediation
 
 Status: `DEPLOYED / VERIFIED`.
 
-Closed blocking review findings in routing, duplicate resolution, Magic Links, dictionary integrity, concurrency, logging, privileges and CI.
-
-### PHASE-02.8 — HC-016 record erasure
+### HC-016 — Clinical-record permanent erasure
 
 Status: `DEPLOYED / MANUALLY ACCEPTED`.
 
-- owner-only permanent erasure;
-- no direct clinical DELETE grant;
-- value-bearing audit scrubbing;
-- content-free tombstone;
-- explicit irreversible confirmation.
-
-## 6. PHASE-03 — Human Documents, OCR and Labs
+## 6. PHASE-03 — Documents, OCR and Labs
 
 Status: `IN PROGRESS`.
 
 Target flow:
 
 ```text
-Upload analysis
+Upload
 → quarantine
-→ malware and format validation
+→ malware scan
 → safe rendering
 → OCR
 → human review
 → explicit confirmation
-→ Lab Results
-→ Metric Dynamics
+→ Labs
+→ metric dynamics
 ```
 
-### HC-017 Slice A — Architecture and contracts
+### Slice A — Architecture
 
 Status: `MERGED` through PR `#47`.
 
-Defined:
+### Slice B — Secure Document Intake Foundation
 
-- threat model;
-- quarantine and scanner behavior;
-- storage boundary;
-- access matrix;
-- worker boundary;
-- proposed schema;
-- OCR review contract;
-- patient matching;
-- provenance;
-- deletion lifecycle;
-- logging and rollout gates.
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED` through PR `#48`.
 
-### HC-017 Slice B — Secure Document Intake Foundation
-
-Status: `IMPLEMENTED / MERGED / NOT DEPLOYED` through PR `#48`.
-
-Verified head:
+Evidence:
 
 ```text
-46c5ea89d35cc85be0af3b80a9c56f40d5705ac5
-```
-
-Merge commit:
-
-```text
-ccabab77cf929456a74b69c3478c71f92f167f78
-```
-
-CI:
-
-```text
-#402 — passed
+verified head: 46c5ea89d35cc85be0af3b80a9c56f40d5705ac5
+merge: ccabab77cf929456a74b69c3478c71f92f167f78
+CI: #402
+migration: 0050
 ```
 
 Implemented:
 
-- migration `0050`;
-- document metadata and intake-job tables;
-- FORCE RLS and permission matrix;
-- analyze exclusion from raw-document metadata;
-- private development/test quarantine adapter;
-- PDF/JPEG/PNG validation;
-- pre-parser request limit;
-- opaque storage keys;
+- document metadata and intake jobs;
+- FORCE RLS and document-specific read boundary;
+- dev/test private quarantine adapter;
+- format, size and image-dimension checks;
+- pre-parser body limit;
 - rollback cleanup;
-- capabilities/upload/list/detail APIs;
-- minimal Documents UI;
-- migration-cycle and RLS regression tests.
+- API and minimal Documents UI.
 
-Production restrictions:
+Production upload remains disabled.
 
-- no rollout;
-- no production storage;
-- no scanner;
-- no preview/download;
-- no worker;
-- no OCR;
-- no Labs data;
-- `DOCUMENT_UPLOAD_ENABLED=false`;
-- production startup rejects enablement.
+### Slice B independent security review
 
-### HC-017 Slice C — Scanner and Safe Rendering
+Status: `COMPLETE`.
 
-Status: `NEXT / NOT IMPLEMENTED`.
+Verdict:
 
-Prerequisites:
+```text
+ACCEPT FOR REPOSITORY FOUNDATION
+NOT APPROVED FOR PRODUCTION DEPLOYMENT
+```
 
-1. independent security review of Slice B;
-2. production private-storage decision;
-3. malware-scanner decision;
-4. worker-role and credential design;
-5. bounded PDF inspection and rasterization threat model;
-6. current-main and Alembic-head verification.
+Required follow-ups:
 
-Planned scope:
+- encrypted production storage;
+- storage quota/free-space gate;
+- orphan reconciliation;
+- proxy upload limit;
+- malware scanner;
+- isolated worker;
+- safe parser/rasterizer sandbox.
 
-- private production object storage;
-- malware scanner with fail-closed behavior;
-- restricted worker role;
-- job leases and retries;
-- PDF structure/page validation;
-- safe rasterized derivatives;
-- accepted-object promotion;
-- failure and retry UI;
-- no OCR confirmation yet.
+Canonical review:
 
-### HC-017 Slice D — OCR candidates and review
+```text
+docs/reviews/HC-017-SLICE-B-INDEPENDENT-SECURITY-REVIEW-2026-07-12.md
+```
+
+### Slice C — Encrypted Storage, Scanner and Safe Rendering
+
+Status: `ARCHITECTURE DEFINED / NEXT IMPLEMENTATION SLICE`.
+
+Canonical design:
+
+```text
+docs/implementation/HC-017-SLICE-C-SCANNER-STORAGE-WORKER.md
+```
+
+Selected MVP architecture:
+
+- local encrypted object storage on production VPS;
+- `/var/lib/health-compass/documents` outside releases/web roots;
+- AES-256-GCM versioned object envelope;
+- keys delivered via systemd credentials;
+- ClamAV `clamd` over Unix socket;
+- `freshclam` signature updates;
+- scanner fail closed;
+- separate worker OS account;
+- separate worker PostgreSQL login `NOBYPASSRLS`;
+- constrained worker functions only;
+- sandboxed PDF/image inspection;
+- encrypted safe rasterized derivatives;
+- per-profile/global quotas;
+- reserved free-space threshold;
+- orphan reconciliation;
+- atomic accepted promotion;
+- no external OCR/LLM.
+
+#### Slice C implementation order
+
+1. Recheck main, open migrations and Alembic heads.
+2. Define migration and worker-role prerequisite.
+3. Add encryption envelope and key-loading abstraction.
+4. Add worker job claim/lease/complete functions.
+5. Add ClamAV Unix-socket INSTREAM client.
+6. Add signature freshness and fail-closed policy.
+7. Add quotas and free-space checks.
+8. Add orphan reconciliation.
+9. Add bounded PDF/image inspection.
+10. Add safe rasterization and encrypted derivatives.
+11. Add retry/failure states and UI.
+12. Run full independent security review.
+13. Keep production disabled until a later rollout approval.
+
+#### Candidate migration
+
+Current head:
+
+```text
+0050
+```
+
+Candidate:
+
+```text
+0051
+```
+
+Number is assigned only after checking current heads and open PRs at implementation start.
+
+#### Slice C implementation PR is not a rollout PR
+
+The implementation PR must not:
+
+- enable production upload;
+- install host packages;
+- provision production secrets;
+- alter Apache limits;
+- deploy worker/systemd units;
+- apply production migration.
+
+### Slice D — OCR candidates and review
 
 Status: `PLANNED`.
 
 - extraction runs;
 - protected OCR artifacts;
-- candidates always `needs_review`;
-- page-region review UI;
-- confidence and validation;
+- candidates `needs_review`;
+- page-region review;
+- field confidence;
 - optimistic concurrency;
-- no automatic confirmation.
+- no auto-confirmation.
 
-### HC-017 Slice E — Confirmed Labs core
+### Slice E — Confirmed Labs
 
 Status: `PLANNED`.
 
-- atomic confirmation;
+- explicit atomic confirmation;
 - patient matching;
 - source-preserving values and units;
 - provenance-linked lab observations;
 - document-linked deletion lifecycle.
 
-### HC-017 Slice F — Metric dynamics
+### Slice F — Metric dynamics
 
 Status: `PLANNED`.
 
 - compatible numeric series;
-- chart plus table;
+- no silent unit conversion;
+- chart and accessible table;
 - source-specific ranges;
 - provenance links;
 - no medical interpretation.
 
-### HC-017 Slice G — Production rollout
+### Slice G — Production rollout
 
-Status: `PLANNED AFTER SECURITY REVIEW`.
+Status: `PLANNED AFTER COMPLETE SECURITY REVIEW`.
 
-- storage/scanner readiness evidence;
+- production storage/scanner readiness;
 - exact-SHA CI;
 - backup-first migration;
-- tenant/worker privilege checks;
-- disposable-document owner smoke;
+- worker privilege probes;
+- clean/EICAR/malformed-file tests;
+- public HTTPS body-limit test;
+- no-sensitive-log verification;
+- manual disposable-document smoke;
 - canonical production evidence.
 
 ## 7. Later phases
 
 ### PHASE-04 — Data sources and integrations
 
-Status: `PLANNED`.
-
 - Oura;
-- laboratory CSV/PDF expansion;
+- lab CSV/PDF expansion;
 - Apple Health / Health Connect after ADR;
 - idempotent sync and freshness.
 
 ### PHASE-05 — Timeline and analytics
 
-Status: `PLANNED`.
-
 - unified timeline;
-- sleep/activity/weight/lab trends;
-- personal baseline;
+- trends and personal baseline;
 - Attention Inbox;
 - search.
 
 ### PHASE-05.5 — Nutrition Photo MVP
 
-Status: `PLANNED AFTER LABS CORE`.
+Status: after Labs core.
 
 ### PHASE-06 — Shared access
 
-Status: `PLANNED`.
-
 - invitations;
-- owner/edit/view/analyze lifecycle;
+- permissions lifecycle;
 - revoke and audit;
 - RLS matrix.
 
 ### PHASE-07 — Privacy and data lifecycle
 
-Status: `FOUNDATION STARTED`.
-
-Implemented:
-
-- consent;
-- provenance/audit;
-- clinical void;
-- clinical permanent erasure.
-
-Planned:
-
-- document raw/derived/confirmed deletion;
-- account export;
+- consent center;
+- export;
 - profile/user deletion;
-- retention center;
-- active sessions;
+- document raw/derived/confirmed deletion;
+- retention;
 - external-processing consent.
 
 ### PHASE-08 — AI Health Assistant
 
-Status: `PLANNED`.
-
 - retrieval-grounded answers;
 - evidence/citations;
-- Fact / Interpretation / Recommendation separation;
 - red-flag routing;
-- no diagnosis or dose calculation;
-- prompt-injection tests.
+- prompt-injection tests;
+- no diagnosis or dose calculation.
 
 ### PHASE-09 — Product expansion
 
-Status: `BACKLOG`.
-
 - family profiles;
-- Pet Health contour;
+- Pet Health;
 - clinician/caregiver workflows;
 - Offline Emergency Card;
 - subscriptions;
@@ -371,45 +352,37 @@ Status: `BACKLOG`.
 
 ## 8. Immediate plan
 
-1. Merge the Slice B status documentation.
-2. Perform independent Slice B security review.
-3. Compare production storage options and select one.
-4. Select and threat-review malware scanner.
-5. Define worker provisioning and restricted credentials.
-6. Define safe PDF inspection/rasterization resource limits.
-7. Recheck `main`, open PRs and Alembic head.
-8. Create a separate HC-017 Slice C implementation branch.
-9. Keep production unchanged until Slice C and a later controlled rollout are approved.
+1. Merge Slice B independent-review and Slice C design docs.
+2. Recheck current `main`, migration heads and open PRs.
+3. Start Slice C implementation in a dedicated branch.
+4. Implement database worker boundary before processing code.
+5. Implement encryption and scanner clients with unit/fuzz tests.
+6. Implement quota and reconciliation before safe rendering.
+7. Add parser/rasterizer sandbox and resource limits.
+8. Run exact-head CI and independent security review.
+9. Do not create a production deployment task yet.
 
-## 9. Slice C merge and rollout gates
+## 9. Slice C stop conditions
 
 Do not merge or deploy if:
 
-- storage is public or in the web root;
-- storage keys include filenames or medical values;
-- scanner is missing, stubbed or fail-open;
-- scanner outage permits acceptance or OCR;
+- storage is public or inside web/release paths;
+- encryption key is in Git, `.env` or database;
+- nonce reuse is possible;
+- scanner is absent, stale, stubbed or fail-open;
 - worker uses app/migrator credentials;
-- worker can enumerate arbitrary profiles;
-- raw PDF is embedded directly in the browser;
-- page, CPU, memory or timeout limits are absent;
-- accepted-object promotion is not atomic and idempotent;
-- signed URLs or object keys appear in logs;
+- worker has broad table access;
+- raw PDF reaches browser;
+- parser lacks CPU/memory/page/time limits;
+- quota or free-space gates are absent;
+- orphan reconciliation is absent;
+- accepted promotion is not atomic/idempotent;
+- filenames, paths, signed URLs or medical content enter ordinary logs;
 - cross-profile access is possible;
-- document contents or medical values appear in ordinary logs;
 - migration has multiple heads;
-- exact-head CI or PostgreSQL negative tests are missing;
-- production upload is enabled before the approved rollout slice.
+- exact-head CI or negative PostgreSQL tests are missing;
+- production upload is enabled before controlled rollout approval.
 
-## 10. Documentation rule
+## 10. Status terminology
 
-After each implementation, review, merge or rollout update:
-
-- `docs/CURRENT-STATE.md`;
-- this plan;
-- corresponding implementation/evidence document;
-- `docs/source-index/SOURCE-REGISTER.md`;
-- dated change record;
-- security invariants when rules change.
-
-`VERIFIED`, `MERGED` and `DEPLOYED` are separate statuses and must never be used interchangeably.
+`DEFINED`, `IMPLEMENTED`, `MERGED`, `VERIFIED` and `DEPLOYED` are separate states and must never be used interchangeably.
