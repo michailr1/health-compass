@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
-
 import json
 import os
 import uuid
+from decimal import Decimal
 
 import psycopg
 import pytest
