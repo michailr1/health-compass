@@ -1,28 +1,32 @@
 # Health Compass — текущее состояние
 
-Дата: 2026-07-12  
+Дата: 2026-07-13  
 Основная ветка: `main`  
-Repository application baseline: `2ad0ca47d994472201c218b3e6af37145cbacdec`  
-Repository Alembic head: `0057`  
+Repository application baseline: `1d61331194edf0f78b94a304d27ccf31dfa2a755`  
+Repository Alembic head: `0058`  
 Production URL: `https://health.funti.cc`  
 Production application: `b8e868825f378195975e2729f3f36c21a1afa2d0`  
-Production Alembic: `0049`  
-Текущий verdict: `SLICE E1 MERGED / CI VERIFIED / NOT DEPLOYED; E2 NOT IMPLEMENTED`
+Production Alembic: `0049`
 
-## Production boundary
+## Current verdict
 
 ```text
-DOCUMENT_UPLOAD_ENABLED=false
+HC-015 DEPLOYED / VERIFIED
+HC-016 DEPLOYED / MANUALLY ACCEPTED
+HC-017 B+C1+C2+D1+D2+E1+E2 MERGED / CI VERIFIED / NOT DEPLOYED
+HC-017 E3 NEXT / NOT IMPLEMENTED
+PRODUCTION DOCUMENT UPLOAD DISABLED
 ```
 
 Repository and production intentionally differ:
 
 ```text
-repository: 2ad0ca47... / Alembic 0057
+repository: 1d613311... / Alembic 0058
 production: b8e86882... / Alembic 0049
+DOCUMENT_UPLOAD_ENABLED=false
 ```
 
-Migrations `0050–0057`, encrypted document storage, scanner, renderer, reconciler and OCR workers, quotas, safe rendering, OCR review and source-preserving Lab drafts have not been deployed. Confirmed Lab observations do not exist. No HC-017 VPS rollout task has been issued.
+No HC-017 VPS rollout has been authorized.
 
 ## Production capabilities
 
@@ -46,9 +50,9 @@ Production does not provide:
 - Lab drafts or confirmed Lab observations;
 - metric dynamics.
 
-## HC-017 repository slices
+## HC-017 repository status
 
-### Slice A — Architecture
+### Slice A — Documents/OCR/Labs architecture
 
 Status: `MERGED` through PR `#47`.
 
@@ -64,6 +68,8 @@ CI: #402
 migration: 0050
 ```
 
+Provides document metadata, FORCE RLS, bounded PDF/JPEG/PNG intake, opaque quarantine keys, document API/UI and fail-safe production disablement.
+
 ### Slice C1 — Encrypted Scanner Worker Foundation
 
 Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
@@ -75,6 +81,8 @@ merge: a0dd405ca3e789cb70e5c4ad94de9a272dff878f
 CI: #414
 migration: 0051
 ```
+
+Provides authenticated encrypted objects, protected key-file loading, ClamAV scanning, a separate NOBYPASSRLS scanner role and restricted worker functions.
 
 ### Slice C2 — Quotas, Reconciliation and Safe Rendering
 
@@ -88,17 +96,9 @@ CI: #433
 migrations: 0052–0053
 ```
 
-Provides race-safe quotas, encrypted safe-page artifacts, separate renderer/reconciler roles, GCM-before-parser verification, sealed memory input/output, bounded rendering and storage reconciliation.
+Provides transaction-safe quotas, encrypted safe-page artifacts, separate renderer/reconciler roles, complete GCM verification, sealed-memory parsing, bounded rendering and storage reconciliation.
 
-Canonical evidence:
-
-```text
-docs/implementation/HC-017-SLICE-C2-SAFE-RENDERING-EVIDENCE-2026-07-12.md
-```
-
-### Combined C1+C2 security review
-
-Status: `COMPLETE`.
+Combined C1+C2 review verdict:
 
 ```text
 ACCEPT FOR REPOSITORY FOUNDATION
@@ -106,23 +106,9 @@ NO UNRESOLVED CRITICAL OR HIGH FINDING
 NOT APPROVED FOR PRODUCTION DEPLOYMENT
 ```
 
-Canonical review:
+### Slice D1 — Local OCR Candidate Extraction
 
-```text
-docs/reviews/HC-017-C1-C2-COMBINED-SECURITY-REVIEW-2026-07-12.md
-```
-
-## HC-017 Slice D — OCR Candidates and Human Review
-
-Status: `D1+D2 IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
-
-Canonical contract:
-
-```text
-docs/implementation/HC-017-SLICE-D-OCR-CANDIDATES-AND-HUMAN-REVIEW.md
-```
-
-### D1 — Local OCR Candidate Extraction
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
 
 ```text
 PR: #56
@@ -132,9 +118,11 @@ CI: #442
 migration: 0054
 ```
 
-Provides local bounded Tesseract, encrypted OCR provenance and owner/edit-only `needs_review` candidates. It creates no clinical or Lab facts.
+Provides bounded local Tesseract, encrypted TSV provenance and owner/edit-only review candidates. OCR creates no clinical or Lab facts.
 
-### D2 — Human Review and Patient Matching
+### Slice D2 — Human OCR Review and Patient Matching
+
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
 
 ```text
 PR: #58
@@ -144,23 +132,9 @@ CI: #454
 migration: 0055
 ```
 
-Provides explicit candidate review, optimistic concurrency, patient decisions and manifest-bound finalization. Finalized transcription remains source text, not a clinical fact.
+Provides accept/edit/reject/defer review, optimistic concurrency, explicit patient decisions and manifest-bound finalization. Finalized OCR remains source transcription, not a clinical fact.
 
-## HC-017 Slice E — Confirmed Labs Core
-
-Canonical contract:
-
-```text
-docs/implementation/HC-017-SLICE-E-CONFIRMED-LABS-CORE.md
-```
-
-Architecture review:
-
-```text
-docs/reviews/HC-017-SLICE-E-ARCHITECTURE-REVIEW-2026-07-12.md
-```
-
-### E1 — Source-preserving Lab drafts
+### Slice E1 — Source-preserving Lab Drafts
 
 Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
 
@@ -172,64 +146,86 @@ CI: #477
 migrations: 0056–0057
 ```
 
+Provides owner/edit-only source-preserving drafts and exact candidate manifests. Drafts preserve source analyte, value, unit, range, date, specimen, flag and comment. They remain invisible to `view`, `analyze`, analytics and AI interpretation.
+
+### Slice E2 — Explicit Confirmation and Confirmed Observations
+
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
+
+```text
+PR: #65
+verified head: 55f10d311d1f39262d557fa7b60cc07060ac5590
+merge: 1d61331194edf0f78b94a304d27ccf31dfa2a755
+CI: #491
+migration: 0058
+```
+
 Implemented:
 
-- owner/edit-only Lab drafts and exact OCR-candidate source manifests;
-- FORCE RLS and no direct runtime mutation grants;
-- explicit numeric, text and qualitative value kinds;
-- source analyte, value, unit, range, date, specimen, flag and comment preservation;
-- explicit unknown/not-present decisions;
-- current document, finalized OCR review and patient-decision timestamps on every mutation;
-- active health-data consent rechecked on create, update, source replacement and status transitions;
-- optimistic concurrency and content-free audit;
-- minimal Lab draft API and UI;
-- no confirmed observations, normalization, interpretation or metric dynamics.
+- separate explicit confirmation action;
+- immutable `lab_observations` and `lab_observation_sources`;
+- owner/edit-only confirmation;
+- owner/edit/view/analyze confirmed-only reads;
+- no worker confirmation or direct runtime mutation grants;
+- exact draft/document/review/patient/candidate version checks;
+- deterministic candidate locking before source snapshot copying;
+- active health-data consent recheck;
+- mandatory source/profile/structured-record acknowledgements;
+- additional assignment acknowledgement for `not_present`;
+- one observation per source draft;
+- profile-scoped idempotency and concurrent replay handling;
+- content-free audit;
+- separate confirmation API and UI;
+- no automatic mapping, unit conversion or medical interpretation.
+
+Final review verdict:
+
+```text
+ACCEPT FOR REPOSITORY FOUNDATION
+NO UNRESOLVED CRITICAL OR HIGH FINDING
+NOT APPROVED FOR PRODUCTION DEPLOYMENT
+```
 
 Canonical evidence:
 
 ```text
-docs/implementation/HC-017-SLICE-E1-LAB-DRAFTS-EVIDENCE-2026-07-12.md
+docs/implementation/HC-017-SLICE-E2-CONFIRMED-OBSERVATIONS-EVIDENCE-2026-07-13.md
 ```
-
-### E2 — Explicit confirmation
-
-Status: `NEXT / NOT IMPLEMENTED / NOT DEPLOYED`.
-
-E2 must introduce a separate atomic and idempotent confirmation transaction and immutable confirmed observations. An E1 draft in `ready` state remains non-clinical and invisible to `view`, `analyze`, analytics and AI interpretation.
 
 ## Next allowed work
 
 ```text
-HC-017 Slice E2 — Confirmed observations implementation contract and security review
+HC-017 Slice E3 — Correction, Void and Owner-only Erasure
 ```
 
-Before E2 code:
+E3 must preserve confirmed source/value immutability:
 
-1. independently review the exact E1 diff and migrations `0056–0057`;
-2. freeze immutable observation/source snapshot fields;
-3. define explicit confirmation acknowledgements, including `not_present` profile assignment;
-4. define idempotency and duplicate-submission behavior;
-5. define owner/edit confirmation and confirmed-only read matrix;
-6. define correction, void and erasure without in-place value mutation;
-7. keep every worker unable to confirm observations;
-8. prove E2 cannot consume stale draft/document/OCR/patient/source versions;
-9. keep production upload disabled and issue no VPS task.
+- corrections create replacement observations and supersession chains;
+- no confirmed value is edited in place;
+- voiding is explicit and reasoned;
+- owner-only permanent erasure removes observation and immutable sources atomically;
+- document erasure cannot leave unsupported sole-provenance observations;
+- restricted functions and negative PostgreSQL tests are required before API/UI;
+- production remains unchanged.
+
+Metric dynamics remain later than E3 and may use only active confirmed compatible numeric observations. No silent unit conversion is allowed.
 
 ## Remaining production blockers
 
-Before any document/Labs rollout:
+Before any Documents/OCR/Labs rollout:
 
 - production encryption credentials, recovery and rotation;
-- private storage and bounded temporary-spool directories;
+- private encrypted storage and bounded spool directories;
 - dedicated scanner/renderer/reconciler/OCR OS users;
-- hardened systemd units;
+- hardened systemd services;
 - verified Poppler, ImageMagick, Tesseract and traineddata versions;
-- ClamAV/FreshClam health;
-- reverse-proxy body limit;
-- measured quotas and disk reserve;
-- hostile-file and resource-limit probes;
-- backup/restore behavior;
+- ClamAV/FreshClam health and current signatures;
+- reverse-proxy request-body limit;
+- measured profile/global quotas and disk reserve;
+- hostile-file, timeout, memory and decompression-bomb probes;
+- database plus encrypted-object backup/restore validation;
 - no-sensitive-log verification;
+- disposable document/OCR/Labs owner smoke;
 - explicit controlled rollout approval.
 
 ## Stop conditions
@@ -237,17 +233,17 @@ Before any document/Labs rollout:
 Stop merge or rollout when:
 
 - OCR or a ready draft creates a confirmed observation automatically;
-- patient decision is unknown or mismatch;
-- source wording/value/unit/range is not preserved;
-- unit conversion or canonical mapping is silent;
-- confirmed observation lacks exact document/page/candidate provenance;
+- a worker, viewer or analyzer can confirm;
+- patient decision `unknown` or `mismatch` is accepted;
+- `not_present` lacks explicit profile assignment acknowledgement;
+- source wording/value/unit/range or exact provenance is lost;
+- stale versions can be confirmed;
+- concurrent/idempotent confirmation can create duplicates;
 - confirmed source/value fields can be edited in place;
-- drafts are visible to view/analyze;
-- analyze can access OCR text;
-- app or worker roles receive broad mutation privileges;
-- duplicate-looking observations are silently merged;
-- source erasure leaves unsupported sole-provenance observations;
-- audit/logs contain medical text or values;
+- drafts or raw OCR become visible to `view`/`analyze`;
+- direct broad mutation grants exist;
+- source erasure can orphan a sole-provenance observation;
+- medical text or values enter ordinary audit/logs;
 - Alembic has multiple heads;
-- exact-head CI or negative PostgreSQL tests are missing;
+- exact-head CI or negative PostgreSQL tests are absent;
 - production upload is enabled before controlled rollout approval.
