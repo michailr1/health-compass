@@ -1,9 +1,8 @@
-"""Private quarantine storage and bounded file validation for HC-017 Slice B."""
+"""Private encrypted quarantine storage and bounded validation for HC-017."""
 
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import os
 import struct
 import unicodedata
@@ -14,7 +13,14 @@ from typing import BinaryIO
 
 from fastapi import UploadFile
 
-CHUNK_SIZE = 1024 * 1024
+from app.storage.encrypted_objects import (
+    DocumentKeyring,
+    EncryptedObjectMetadata,
+    EncryptedObjectStorageFullError,
+    EncryptedObjectTooLargeError,
+    encrypt_stream_to_path,
+)
+
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 JPEG_SOF_MARKERS = {
     0xC0,
@@ -55,14 +61,17 @@ class StoredDocument:
     declared_media_type: str
     detected_media_type: str
     byte_size: int
+    encrypted_size: int
     sha256: str
+    encryption_format: str
+    encryption_key_id: str
     page_count: int | None
     image_width: int | None
     image_height: int | None
 
 
 def sanitize_original_filename(value: str | None) -> str:
-    """Return a display-only filename that can never influence a storage path."""
+    """Return display-only metadata that can never influence a storage path."""
 
     normalized = unicodedata.normalize("NFKC", value or "")
     normalized = normalized.replace("\\", "/").split("/")[-1]
@@ -106,9 +115,16 @@ def detect_media_type(prefix: bytes) -> str:
     )
 
 
-def _png_dimensions(path: Path) -> tuple[int, int]:
-    with path.open("rb") as handle:
-        header = handle.read(24)
+def _read_exact(handle: BinaryIO, count: int) -> bytes:
+    data = handle.read(count)
+    if len(data) != count:
+        raise DocumentValidationError("invalid_jpeg", "JPEG-файл повреждён.")
+    return data
+
+
+def _png_dimensions(handle: BinaryIO) -> tuple[int, int]:
+    handle.seek(0)
+    header = handle.read(24)
     if len(header) < 24 or not header.startswith(PNG_SIGNATURE):
         raise DocumentValidationError("invalid_png", "PNG-файл повреждён.")
     if header[12:16] != b"IHDR":
@@ -119,69 +135,58 @@ def _png_dimensions(path: Path) -> tuple[int, int]:
     return width, height
 
 
-def _read_exact(handle: BinaryIO, count: int) -> bytes:
-    data = handle.read(count)
-    if len(data) != count:
+def _jpeg_dimensions(handle: BinaryIO) -> tuple[int, int]:
+    handle.seek(0)
+    if _read_exact(handle, 2) != b"\xff\xd8":
         raise DocumentValidationError("invalid_jpeg", "JPEG-файл повреждён.")
-    return data
 
+    while True:
+        byte = handle.read(1)
+        if not byte:
+            break
+        if byte != b"\xff":
+            continue
 
-def _jpeg_dimensions(path: Path) -> tuple[int, int]:
-    with path.open("rb") as handle:
-        if _read_exact(handle, 2) != b"\xff\xd8":
+        marker_byte = handle.read(1)
+        while marker_byte == b"\xff":
+            marker_byte = handle.read(1)
+        if not marker_byte:
+            break
+
+        marker = marker_byte[0]
+        if marker in {0xD8, 0xD9}:
+            continue
+        if marker == 0xDA:
+            break
+
+        segment_length = int.from_bytes(_read_exact(handle, 2), "big")
+        if segment_length < 2:
             raise DocumentValidationError("invalid_jpeg", "JPEG-файл повреждён.")
 
-        while True:
-            byte = handle.read(1)
-            if not byte:
-                break
-            if byte != b"\xff":
-                continue
-
-            marker_byte = handle.read(1)
-            while marker_byte == b"\xff":
-                marker_byte = handle.read(1)
-            if not marker_byte:
-                break
-
-            marker = marker_byte[0]
-            if marker in {0xD8, 0xD9}:
-                continue
-            if marker == 0xDA:
-                break
-
-            segment_length = int.from_bytes(_read_exact(handle, 2), "big")
-            if segment_length < 2:
+        if marker in JPEG_SOF_MARKERS:
+            segment = _read_exact(handle, segment_length - 2)
+            if len(segment) < 5:
                 raise DocumentValidationError("invalid_jpeg", "JPEG-файл повреждён.")
+            height = int.from_bytes(segment[1:3], "big")
+            width = int.from_bytes(segment[3:5], "big")
+            if width < 1 or height < 1:
+                raise DocumentValidationError("invalid_jpeg", "JPEG-файл повреждён.")
+            return width, height
 
-            if marker in JPEG_SOF_MARKERS:
-                segment = _read_exact(handle, segment_length - 2)
-                if len(segment) < 5:
-                    raise DocumentValidationError(
-                        "invalid_jpeg", "JPEG-файл повреждён."
-                    )
-                height = int.from_bytes(segment[1:3], "big")
-                width = int.from_bytes(segment[3:5], "big")
-                if width < 1 or height < 1:
-                    raise DocumentValidationError(
-                        "invalid_jpeg", "JPEG-файл повреждён."
-                    )
-                return width, height
-
-            handle.seek(segment_length - 2, os.SEEK_CUR)
+        handle.seek(segment_length - 2, os.SEEK_CUR)
 
     raise DocumentValidationError("invalid_jpeg", "JPEG-файл повреждён.")
 
 
 def _validate_image_dimensions(
-    path: Path,
+    handle: BinaryIO,
     media_type: str,
     max_pixels: int,
 ) -> tuple[int | None, int | None]:
     if media_type == "image/png":
-        width, height = _png_dimensions(path)
+        width, height = _png_dimensions(handle)
     elif media_type == "image/jpeg":
-        width, height = _jpeg_dimensions(path)
+        width, height = _jpeg_dimensions(handle)
     else:
         return None, None
 
@@ -194,29 +199,39 @@ def _validate_image_dimensions(
     return width, height
 
 
-class LocalDocumentStorage:
-    """Development/test private filesystem adapter.
+def _source_size(handle: BinaryIO) -> int:
+    handle.seek(0, os.SEEK_END)
+    size = handle.tell()
+    handle.seek(0)
+    return size
 
-    The adapter accepts only opaque server-generated keys. It is intentionally
-    not production-ready; configuration validation keeps Slice B disabled
-    outside development until the scanner/object-storage slice is reviewed.
-    """
 
-    backend_name = "local"
+class EncryptedLocalDocumentStorage:
+    """Private filesystem adapter with streaming AES-GCM encryption."""
 
-    def __init__(self, root: str) -> None:
+    backend_name = "local_encrypted"
+
+    def __init__(
+        self,
+        root: str,
+        *,
+        keyring: DocumentKeyring,
+        min_free_bytes: int = 0,
+    ) -> None:
         self.root = Path(root).expanduser().resolve()
+        self.keyring = keyring
+        self.min_free_bytes = min_free_bytes
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(self.root, 0o700)
 
     def quarantine_key(self, document_id: uuid.UUID) -> str:
-        return f"quarantine/{document_id}/original"
+        return f"quarantine/{document_id}/original.hcenc"
 
     def _resolve_key(self, storage_key: str) -> Path:
         relative = Path(storage_key)
         if relative.is_absolute() or ".." in relative.parts:
             raise ValueError("Invalid storage key")
-        path = (self.root / relative).resolve()
+        path = (self.root / relative).resolve(strict=False)
         if path != self.root and self.root not in path.parents:
             raise ValueError("Invalid storage key")
         return path
@@ -248,80 +263,75 @@ class LocalDocumentStorage:
         declared_media_type = normalize_declared_media_type(upload.content_type)
         validate_filename_extension(filename, declared_media_type)
 
+        source = upload.file
+        total = _source_size(source)
+        if total == 0:
+            raise DocumentValidationError("empty_document", "Файл пуст.")
+        if total > max_bytes:
+            raise DocumentValidationError(
+                "document_too_large",
+                "Файл превышает допустимый размер.",
+                status_code=413,
+            )
+
+        prefix = source.read(32)
+        detected_media_type = detect_media_type(prefix)
+        if detected_media_type != declared_media_type:
+            raise DocumentValidationError(
+                "media_type_mismatch",
+                "Содержимое файла не соответствует заявленному формату.",
+            )
+
+        width, height = _validate_image_dimensions(
+            source,
+            detected_media_type,
+            max_image_pixels,
+        )
+
         storage_key = self.quarantine_key(document_id)
         destination = self._resolve_key(storage_key)
-        destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        os.chmod(destination.parent, 0o700)
-        temporary = destination.with_name(f".uploading-{uuid.uuid4()}")
-
-        digest = hashlib.sha256()
-        total = 0
-        prefix = bytearray()
+        try:
+            metadata: EncryptedObjectMetadata = encrypt_stream_to_path(
+                source,
+                destination,
+                document_id=document_id,
+                artifact_role="source_quarantine",
+                keyring=self.keyring,
+                max_plaintext_bytes=max_bytes,
+                min_free_bytes=self.min_free_bytes,
+            )
+        except EncryptedObjectTooLargeError as exc:
+            raise DocumentValidationError(
+                "document_too_large",
+                "Файл превышает допустимый размер.",
+                status_code=413,
+            ) from exc
+        except EncryptedObjectStorageFullError as exc:
+            raise DocumentValidationError(
+                "document_storage_full",
+                "Для безопасной загрузки документа временно недостаточно места.",
+                status_code=507,
+            ) from exc
 
         try:
-            upload.file.seek(0)
-            descriptor = os.open(
-                temporary,
-                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-                0o600,
-            )
-            with os.fdopen(descriptor, "wb") as output:
-                while True:
-                    chunk = upload.file.read(CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    total += len(chunk)
-                    if total > max_bytes:
-                        raise DocumentValidationError(
-                            "document_too_large",
-                            "Файл превышает допустимый размер.",
-                            status_code=413,
-                        )
-                    if len(prefix) < 32:
-                        prefix.extend(chunk[: 32 - len(prefix)])
-                    digest.update(chunk)
-                    output.write(chunk)
-                output.flush()
-                os.fsync(output.fileno())
-
-            if total == 0:
-                raise DocumentValidationError("empty_document", "Файл пуст.")
-
-            detected_media_type = detect_media_type(bytes(prefix))
-            if detected_media_type != declared_media_type:
-                raise DocumentValidationError(
-                    "media_type_mismatch",
-                    "Содержимое файла не соответствует заявленному формату.",
-                )
-
-            width, height = _validate_image_dimensions(
-                temporary,
-                detected_media_type,
-                max_image_pixels,
-            )
-
-            os.replace(temporary, destination)
-            os.chmod(destination, 0o600)
+            destination.parent.chmod(0o700)
+            destination.chmod(0o600)
             return StoredDocument(
                 storage_key=storage_key,
                 original_filename=filename,
                 declared_media_type=declared_media_type,
                 detected_media_type=detected_media_type,
-                byte_size=total,
-                sha256=digest.hexdigest(),
-                # PDF page counting is performed by the restricted inspection
-                # worker in Slice C before a document can leave quarantine.
+                byte_size=metadata.plaintext_size,
+                encrypted_size=metadata.encrypted_size,
+                sha256=metadata.plaintext_sha256,
+                encryption_format=metadata.format,
+                encryption_key_id=metadata.key_id,
                 page_count=None,
                 image_width=width,
                 image_height=height,
             )
         except Exception:
-            temporary.unlink(missing_ok=True)
             destination.unlink(missing_ok=True)
-            try:
-                destination.parent.rmdir()
-            except OSError:
-                pass
             raise
 
     async def delete(self, storage_key: str) -> None:
@@ -334,3 +344,8 @@ class LocalDocumentStorage:
             path.parent.rmdir()
         except OSError:
             pass
+
+    def object_path(self, storage_key: str) -> Path:
+        """Resolve an opaque storage key for restricted worker code."""
+
+        return self._resolve_key(storage_key)
