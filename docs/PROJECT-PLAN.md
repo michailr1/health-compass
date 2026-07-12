@@ -1,6 +1,6 @@
 # Health Compass — канонический план проекта
 
-Версия: 2.3  
+Версия: 2.4  
 Дата: 2026-07-12  
 Основная ветка: `main`
 
@@ -26,20 +26,22 @@ Create a secure multi-user personal-health portal combining profile data, clinic
 - Free text is not silently rewritten.
 - OCR/AI output is not a fact before explicit human confirmation.
 - Reviewed OCR remains transcription until a separate clinical confirmation.
+- Confirmed Labs preserve source wording and exact provenance.
 - No automatic diagnosis, prescription or dose calculation.
 - Human and Pet contours remain separated.
 - Production rollout is backup-first and exact-SHA.
 - Destructive actions use least privilege and optimistic concurrency.
 - Documents remain untrusted until quarantine, scanning and safe rendering succeed.
 - Raw documents, OCR drafts, reviewed transcription and confirmed facts have distinct access boundaries.
+- Confirmed source/value fields are immutable; corrections create replacement records.
 - `DEFINED`, `IMPLEMENTED`, `MERGED`, `CI VERIFIED` and `DEPLOYED` are separate states.
 
 ## 4. Repository and production state
 
-Repository:
+Repository application baseline:
 
 ```text
-main: f67a1128e29a1c62e8a3b27dd20c973df82947ad
+34425d89fb205a43d8ce543862b2ab8371dabbb4
 Alembic head: 0055
 ```
 
@@ -55,9 +57,9 @@ DOCUMENT_UPLOAD_ENABLED=false
 Current verdict:
 
 ```text
-D1+D2 IMPLEMENTED / MERGED / CI VERIFIED
-SLICE D NOT DEPLOYED
-SLICE E ARCHITECTURE NEXT
+SLICE D D1+D2 MERGED / CI VERIFIED / NOT DEPLOYED
+SLICE E ARCHITECTURE DEFINED / REVIEWED
+SLICE E NOT IMPLEMENTED
 PRODUCTION UNCHANGED
 ```
 
@@ -117,7 +119,8 @@ Upload
 → OCR candidates
 → human review
 → explicit patient matching
-→ explicit clinical confirmation
+→ structured Lab draft
+→ explicit observation confirmation
 → Labs
 → metric dynamics
 ```
@@ -211,12 +214,9 @@ Implemented:
 - OCR runs, encrypted provenance and candidate tables;
 - FORCE RLS and owner/edit-only candidate text;
 - dedicated OCR-worker role with no direct table grants;
-- renderer-only queue function and restricted worker functions;
 - bounded local Tesseract over authenticated safe-page PNG;
-- exact engine/language/traineddata provenance;
 - encrypted TSV artifacts;
 - strict parser and deterministic `needs_review` candidates;
-- OCR status and candidate-read API;
 - no automatic Clinical Context, measurement or Labs facts.
 
 Canonical evidence:
@@ -238,13 +238,12 @@ migration: 0055
 
 Implemented:
 
-- candidate accept/edit/reject/defer actions;
-- owner/edit authorization and active owner consent;
-- candidate, document and patient-decision optimistic concurrency;
-- explicit `unknown`, `match`, `mismatch` and `not_present` decisions;
-- exact candidate ID/timestamp manifest;
-- mismatch, unresolved and deferred blocking;
-- idempotent repeated finalization;
+- accept/edit/reject/defer candidate actions;
+- active consent and optimistic concurrency;
+- explicit patient decisions;
+- exact candidate manifest;
+- mismatch/unresolved/deferred blocking;
+- idempotent finalization;
 - content-free audit;
 - revisable decisions before finalization;
 - accessible review UI;
@@ -256,43 +255,101 @@ Canonical evidence:
 docs/implementation/HC-017-SLICE-D2-HUMAN-REVIEW-EVIDENCE-2026-07-12.md
 ```
 
-#### Slice D stop conditions
+### Slice E — Confirmed Labs Core
+
+Status: `ARCHITECTURE DEFINED / REVIEWED / NOT IMPLEMENTED / NOT DEPLOYED`.
+
+Canonical contract:
+
+```text
+docs/implementation/HC-017-SLICE-E-CONFIRMED-LABS-CORE.md
+```
+
+Architecture review:
+
+```text
+docs/reviews/HC-017-SLICE-E-ARCHITECTURE-REVIEW-2026-07-12.md
+```
+
+Architecture verdict:
+
+```text
+ARCHITECTURE ACCEPTED FOR FUTURE IMPLEMENTATION
+NO SLICE E CODE YET
+NOT APPROVED FOR PRODUCTION DEPLOYMENT
+```
+
+Selected model:
+
+- finalized D2 transcription remains source, not a Lab fact;
+- owner/editor creates a source-preserving Lab draft;
+- exact OCR candidates are mapped to analyte/value/unit/range/date/specimen roles;
+- source analyte/value/unit/range/date text is retained separately from parsed fields;
+- unknown/mismatch patient decision blocks confirmation;
+- `not_present` requires an additional explicit profile-assignment acknowledgement;
+- confirmation is a separate atomic transaction;
+- one draft creates at most one immutable observation;
+- corrections create replacement and supersession chains;
+- no silent unit conversion, canonical mapping or reference-range interpretation;
+- analyze receives active confirmed observations only;
+- document erasure removes sole-provenance drafts/observations;
+- no worker may confirm, correct, void or erase observations.
+
+#### E1 — Structured Lab Drafts
+
+Status: `NEXT / NOT IMPLEMENTED / NOT DEPLOYED`.
+
+Planned scope:
+
+- draft and draft-source tables;
+- FORCE RLS and owner/edit-only access;
+- current finalized D2/patient-decision gate;
+- explicit value kind and unknown/not-present choices;
+- source-preserving fields and optional parsed representations;
+- exact candidate/source-role manifest;
+- optimistic concurrency;
+- draft API and source-fragment selection UI;
+- zero confirmed observation rows.
+
+#### E2 — Explicit Confirmation
+
+Status: `PLANNED AFTER E1 REVIEW`.
+
+- immutable confirmed observation/source tables;
+- current document/D2/patient/draft/source manifest validation;
+- explicit confirmation acknowledgements;
+- idempotent atomic confirmation;
+- owner/edit confirmation;
+- owner/edit/view/analyze confirmed-only reads;
+- no interpretation or automatic normalization.
+
+#### E3 — Correction, Void and Erasure
+
+Status: `PLANNED AFTER E2 REVIEW`.
+
+- replacement correction chain;
+- explicit void reason;
+- owner-only permanent erasure;
+- document-linked deletion propagation;
+- no orphaned sole-provenance observation.
+
+#### Slice E stop conditions
 
 Do not merge or deploy when:
 
-- OCR receives raw PDF or unauthenticated bytes;
-- arbitrary OCR command options are accepted;
-- OCR output, memory, CPU or timeout is unbounded;
-- OCR/review text appears in ordinary logs;
-- view/analyze can read candidate text;
-- any worker has direct table privileges;
-- candidates begin accepted;
-- review mutations lack optimistic concurrency;
-- patient matching is inferred automatically;
-- D1/D2 creates clinical or Labs facts;
+- OCR/finalized transcription creates an observation automatically;
+- patient decision is unknown or mismatch;
+- source wording/value/unit/range is not preserved;
+- unit conversion/canonical mapping is silent;
+- exact source manifest is missing or stale;
+- confirmed data can be updated in place;
+- draft rows are visible to view/analyze;
+- analyze can access OCR text;
+- app/worker roles have broad mutation privileges;
+- duplicate-looking observations are silently merged;
+- source deletion leaves unsupported observations;
+- medical values appear in logs/audit;
 - exact-head negative PostgreSQL tests are absent.
-
-### Slice E — Confirmed Labs Core
-
-Status: `NEXT / ARCHITECTURE NOT YET DEFINED / NOT IMPLEMENTED / NOT DEPLOYED`.
-
-Slice E must introduce a new explicit confirmation boundary. Finalized D2 transcription is eligible input, not an automatically confirmed fact.
-
-Required architecture contract:
-
-- separate confirmation transaction;
-- current finalized D2 review and allowed patient decision;
-- exact source document, OCR run, candidate/page and confirmer provenance;
-- original analyte wording, value, unit and reference range preserved;
-- no silent terminology normalization or unit conversion;
-- numeric and text values represented without loss;
-- explicit duplicate/idempotency policy;
-- correction/void/permanent-erasure lifecycle;
-- owner/edit/view/analyze access matrix;
-- deletion propagation from document source through derived/OCR/confirmed records;
-- no diagnosis, interpretation, recommendation or dose calculation.
-
-Architecture/security review must be merged before any Slice E code.
 
 ### Slice F — Metric dynamics
 
@@ -377,15 +434,15 @@ Required readiness:
 
 ## 8. Immediate plan
 
-1. Merge D2 evidence documentation.
-2. Define the Slice E data and confirmation contract.
-3. Define source-preserving analyte/value/unit/reference-range fields.
-4. Define provenance, idempotency and duplicate-import behavior.
-5. Define correction, void, permanent-erasure and document-deletion propagation.
-6. Define the Labs permission matrix and RLS boundary.
-7. Define explicit confirmation UI and optimistic concurrency.
-8. Complete an independent Slice E architecture/security review.
-9. Create no Slice E implementation branch before that review is merged.
+1. Merge Slice E architecture/review documentation.
+2. Recheck current `main`, open migration PRs and Alembic heads.
+3. Resolve exact E1 numeric precision, source-role enum and field limits.
+4. Assign the next free migration only after that recheck.
+5. Implement E1 draft/source tables with FORCE RLS.
+6. Implement restricted draft/source functions and owner/edit-only UI.
+7. Require current finalized D2 review, allowed patient decision, active consent and optimistic concurrency.
+8. Prove zero confirmed observations before E2.
+9. Complete exact-head backend/frontend/migration/PostgreSQL gates and independent E1 review.
 10. Keep production document upload disabled and do not create a VPS deployment task.
 
 ## 9. Global rollout stop conditions
@@ -399,7 +456,8 @@ Stop rollout when:
 - scanner/parser/OCR can fail open;
 - plaintext escapes private bounded memory/spool;
 - quotas/reconciliation are not operational;
-- logs expose filenames, paths, OCR text or medical values;
+- OCR or medical values appear in logs;
+- source-preserving confirmation/deletion contracts are incomplete;
 - Alembic has multiple heads;
 - security review is incomplete;
 - disposable-document smoke is not approved.

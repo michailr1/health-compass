@@ -23,7 +23,7 @@
 - Runtime role: `health_compass_app` с `NOBYPASSRLS`.
 - Migrator role не используется приложением.
 - Helper-функции, которым необходим обход RLS, принадлежат только `health_compass_rls_definer NOLOGIN BYPASSRLS`.
-- Такие функции возвращают только scalar boolean/uuid, используют статический SQL, `search_path=''` и `row_security=off`.
+- Такие функции возвращают только ограниченные scalar/record contracts, используют статический SQL, `search_path=''` и `row_security=off`.
 - `PUBLIC EXECUTE` на security-definer функции запрещён.
 - Новая таблица не принимается без RLS policies и двухпользовательских негативных тестов.
 - Запрещены политики, позволяющие пользователю самостоятельно выдать себе доступ к чужому profile/workspace.
@@ -79,7 +79,32 @@
 - Original filename, OCR text, patient identifiers, analytes, values, units, ranges и signed URLs запрещены в ordinary logs и metrics labels.
 - External OCR/LLM получает документы только после отдельного provider review и explicit revocable consent.
 
-Канонический contract: `docs/implementation/HC-017-DOCUMENTS-OCR-LABS-FOUNDATION.md`.
+## Confirmed Labs invariants
+
+- Finalized OCR transcription остаётся источником, а не confirmed Lab observation.
+- Lab observation создаётся только отдельной явной owner/editor confirmation transaction.
+- Background worker, OCR parser, dictionary и AI не имеют права создавать confirmed observation.
+- Draft Lab rows доступны только owner/edit; view/analyze не получают drafts и OCR source text.
+- Analyze получает только active confirmed structured observations.
+- `source_analyte_text`, `source_value_text`, `source_unit_text`, `source_reference_range_text` и source date/specimen text сохраняются отдельно от parsed/canonical fields.
+- Parsed decimal/date/range и canonical concept не перезаписывают source wording.
+- Silent unit conversion, silent canonical mapping и automatic reference-range interpretation запрещены.
+- Unknown/mismatch patient decision блокирует confirmation; `not_present` требует отдельного explicit assignment acknowledgement.
+- Confirmation валидирует current finalized OCR run, document version, patient-decision version, draft version и exact OCR-candidate manifest в одной транзакции.
+- Identical confirmation retry идемпотентен; conflicting retry не создаёт частичных rows.
+- Confirmed source/value fields не изменяются in place; correction создаёт replacement observation и supersession chain.
+- Duplicate-looking observations не объединяются молча и не теряют document provenance.
+- Confirmed observation без valid source-document/OCR/candidate provenance запрещён.
+- Document deletion немедленно скрывает связанные drafts/observations и удаляет sole-provenance observations идемпотентно.
+- Void/correction используют optimistic concurrency; permanent erasure owner-only и доступен после consent withdrawal.
+- Ordinary audit/logs не содержат analyte, value, unit, range, patient identity или source text.
+- Confirmed Labs core не создаёт diagnosis, recommendation, treatment instruction или dose calculation.
+
+Канонические contracts:
+
+- `docs/implementation/HC-017-DOCUMENTS-OCR-LABS-FOUNDATION.md`;
+- `docs/implementation/HC-017-SLICE-D-OCR-CANDIDATES-AND-HUMAN-REVIEW.md`;
+- `docs/implementation/HC-017-SLICE-E-CONFIRMED-LABS-CORE.md`.
 
 ## Privacy и medical safety
 
@@ -95,10 +120,8 @@
 
 - Один method/path pair имеет одного канонического владельца route.
 - Нельзя полагаться на порядок `include_router` для выбора корректного API contract.
-- Backend errors используют документированный ограниченный набор envelopes
-  (`{"error": {...}}` глобальных handlers и `detail` route-level HTTPException);
-  `request_id` возвращается в body или `X-Request-ID` и сохраняется frontend;
-  stack traces и SQL details не раскрываются.
+- Backend errors используют документированный ограниченный набор envelopes; stack traces и SQL details не раскрываются.
+- `request_id` возвращается в body или `X-Request-ID` и сохраняется frontend.
 - State-changing GET routes запрещены, если нет отдельного ADR и компенсирующей защиты.
 
 ## CI и migrations
@@ -117,4 +140,4 @@
 - Автоматический downgrade запрещён после частично применённой или нетранзакционной миграции.
 - Cross-user leak важнее доступности: при подтверждении сервис переводится в maintenance до исправления.
 - Scanner GET, wrong-domain canonical mapping, duplicate-resolution 500 или token leakage являются stop conditions.
-- Для document pipeline дополнительными stop conditions являются scanner bypass, public raw-object access, cross-profile storage access, unconfirmed OCR facts и medical data in logs.
+- Для document/Labs pipeline stop conditions включают scanner bypass, public raw-object access, cross-profile access, unconfirmed OCR facts, silent normalization, unsupported observations и medical data in logs.
