@@ -186,7 +186,7 @@ def _create_queue_function() -> None:
           END IF;
           IF p_idempotency_key IS NULL OR length(p_idempotency_key) > 255
              OR p_input_manifest_sha256 !~ '^[0-9a-f]{{64}}$'
-             OR p_language_spec !~ '^[a-z]{{3}}(\+[a-z]{{3}}){{0,4}}$'
+             OR p_language_spec !~ '^[a-z]{{3}}([+][a-z]{{3}}){{0,4}}$'
              OR p_psm NOT IN (3, 4, 6, 11, 12) THEN
             RAISE EXCEPTION 'Invalid OCR queue payload' USING ERRCODE = 'HC422';
           END IF;
@@ -518,7 +518,7 @@ def _create_worker_functions() -> None:
             SELECT value FROM pg_catalog.jsonb_array_elements(p_artifacts)
           LOOP
             IF artifact_item ->> 'storage_key'
-                 !~ '^ocr/[0-9a-f-]{{36}}/[0-9a-f-]{{36}}/page-[1-9][0-9]*\.tsv\.hcenc$'
+                 !~ '^ocr/[0-9a-f-]{{36}}/[0-9a-f-]{{36}}/page-[1-9][0-9]*[.]tsv[.]hcenc$'
                OR artifact_item ->> 'sha256' !~ '^[0-9a-f]{{64}}$'
                OR artifact_item ->> 'encryption_format' <> 'hcenc1'
                OR artifact_item ->> 'encryption_key_id'
@@ -818,7 +818,7 @@ def _wrap_reconciliation() -> None:
             RAISE EXCEPTION 'Reconciliation operation denied' USING ERRCODE = 'HC404';
           END IF;
           IF p_storage_key IS NULL OR length(p_storage_key) > 512
-             OR p_storage_key !~ '^(quarantine|accepted|derived|ocr)/[A-Za-z0-9._/-]+\.hcenc$'
+             OR p_storage_key !~ '^(quarantine|accepted|derived|ocr)/[A-Za-z0-9._/-]+[.]hcenc$'
              OR p_error_code !~ '^[a-z0-9_:-]{{1,64}}$' THEN
             RAISE EXCEPTION 'Invalid reconciliation input' USING ERRCODE = 'HC422';
           END IF;
@@ -936,7 +936,7 @@ def upgrade() -> None:
                  OR traineddata_manifest_sha256 ~ '^[0-9a-f]{{64}}$')
           ),
           CONSTRAINT ck_document_ocr_runs_language CHECK (
-            language_spec ~ '^[a-z]{{3}}(\+[a-z]{{3}}){{0,4}}$'
+            language_spec ~ '^[a-z]{{3}}([+][a-z]{{3}}){{0,4}}$'
           ),
           CONSTRAINT ck_document_ocr_runs_psm CHECK (psm IN (3,4,6,11,12)),
           CONSTRAINT ck_document_ocr_runs_lease CHECK (
@@ -994,7 +994,7 @@ def upgrade() -> None:
           ),
           CONSTRAINT ck_document_ocr_artifacts_storage CHECK (
             storage_backend = 'local_encrypted'
-            AND storage_key ~ '^ocr/[0-9a-f-]{{36}}/[0-9a-f-]{{36}}/page-[1-9][0-9]*\.tsv\.hcenc$'
+            AND storage_key ~ '^ocr/[0-9a-f-]{{36}}/[0-9a-f-]{{36}}/page-[1-9][0-9]*[.]tsv[.]hcenc$'
           ),
           CONSTRAINT ck_document_ocr_artifacts_size CHECK (
             byte_size > 0 AND encrypted_size > byte_size
@@ -1107,6 +1107,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute(
+        f"DROP POLICY IF EXISTS document_ocr_candidates_select "
+        f"ON {S}.document_ocr_candidates"
+    )
+    op.execute(
+        f"DROP POLICY IF EXISTS document_ocr_runs_select "
+        f"ON {S}.document_ocr_runs"
+    )
     for signature, role in (
         (MARK_MISSING_SIG, RECONCILER),
         (LIST_REFS_SIG, RECONCILER),
