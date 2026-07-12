@@ -1,4 +1,4 @@
-"""Service layer for HC-017 E1 source-preserving laboratory drafts."""
+"""Service layer for HC-017 E1 drafts and E2 confirmed observations."""
 
 from __future__ import annotations
 
@@ -16,25 +16,34 @@ from app.models.document_ocr import (
     DocumentOCRPatientDecision,
     DocumentOCRRun,
 )
-from app.models.lab_observation import LabObservationDraft, LabObservationDraftSource
+from app.models.lab_observation import (
+    LabObservation,
+    LabObservationDraft,
+    LabObservationDraftSource,
+    LabObservationSource,
+)
 from app.schemas.document_ocr import DocumentOCRCandidateResponse
 from app.schemas.lab_observation import (
+    ConfirmLabObservationRequest,
     CreateLabDraftRequest,
     LabDraftContextResponse,
     LabDraftResponse,
     LabDraftSourceResponse,
+    LabObservationConfirmationPreview,
+    LabObservationResponse,
+    LabObservationSourceResponse,
     SetLabDraftSourcesRequest,
     SetLabDraftStatusRequest,
     UpdateLabDraftRequest,
 )
 from app.services.documents import get_document
-from app.services.health_profile import require_profile_edit_access
+from app.services.health_profile import get_visible_profile, require_profile_edit_access
 
 _SQLSTATE_RESPONSE = {
-    "HC404": (status.HTTP_404_NOT_FOUND, "Lab draft resource not found"),
-    "HC409": (status.HTTP_409_CONFLICT, "Lab draft source changed or is incomplete"),
-    "HC422": (status.HTTP_422_UNPROCESSABLE_CONTENT, "Invalid Lab draft request"),
-    "HC428": (status.HTTP_428_PRECONDITION_REQUIRED, "Lab draft precondition is required"),
+    "HC404": (status.HTTP_404_NOT_FOUND, "Lab resource not found"),
+    "HC409": (status.HTTP_409_CONFLICT, "Lab source changed or is incomplete"),
+    "HC422": (status.HTTP_422_UNPROCESSABLE_CONTENT, "Invalid Lab request"),
+    "HC428": (status.HTTP_428_PRECONDITION_REQUIRED, "Lab precondition is required"),
 }
 
 
@@ -372,3 +381,176 @@ async def set_lab_draft_status(
         },
     )
     return await get_lab_draft(session, profile_id, document_id, draft_id)
+
+
+async def get_lab_observation_confirmation_preview(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+    document_id: uuid.UUID,
+    draft_id: uuid.UUID,
+) -> LabObservationConfirmationPreview:
+    context = await get_lab_draft_context(session, profile_id, document_id)
+    draft = await get_lab_draft(session, profile_id, document_id, draft_id)
+    if draft.status != "ready":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Lab draft is not ready for confirmation",
+        )
+    source_roles = {source.source_role for source in draft.sources}
+    if not {"analyte", "value"}.issubset(source_roles):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Analyte and value provenance are required",
+        )
+    return LabObservationConfirmationPreview(
+        draft=draft,
+        patient_decision=context.patient_decision,
+        requires_not_present_assignment_ack=(
+            context.patient_decision == "not_present"
+        ),
+        expected_document_updated_at=context.document_updated_at,
+        expected_review_finalized_at=context.review_finalized_at,
+        expected_patient_decision_updated_at=context.patient_decision_updated_at,
+    )
+
+
+async def _sources_for_observations(
+    session: AsyncSession,
+    observation_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, list[LabObservationSourceResponse]]:
+    if not observation_ids:
+        return {}
+    result = await session.execute(
+        select(LabObservationSource)
+        .where(LabObservationSource.observation_id.in_(observation_ids))
+        .order_by(
+            LabObservationSource.page_number,
+            LabObservationSource.candidate_id,
+            LabObservationSource.source_role,
+        )
+    )
+    grouped: dict[uuid.UUID, list[LabObservationSourceResponse]] = {}
+    for source in result.scalars().all():
+        grouped.setdefault(source.observation_id, []).append(
+            LabObservationSourceResponse.model_validate(source)
+        )
+    return grouped
+
+
+def _observation_response(
+    observation: LabObservation,
+    sources: list[LabObservationSourceResponse],
+) -> LabObservationResponse:
+    response = LabObservationResponse.model_validate(observation)
+    return response.model_copy(update={"sources": sources})
+
+
+async def get_lab_observation(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+    observation_id: uuid.UUID,
+) -> LabObservationResponse:
+    await get_visible_profile(session, profile_id)
+    result = await session.execute(
+        select(LabObservation).where(
+            LabObservation.id == observation_id,
+            LabObservation.profile_id == profile_id,
+            LabObservation.status == "active",
+        )
+    )
+    observation = result.scalar_one_or_none()
+    if observation is None:
+        raise HTTPException(status_code=404, detail="Lab observation not found")
+    sources = await _sources_for_observations(session, [observation.id])
+    return _observation_response(observation, sources.get(observation.id, []))
+
+
+async def list_lab_observations(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+) -> list[LabObservationResponse]:
+    await get_visible_profile(session, profile_id)
+    result = await session.execute(
+        select(LabObservation)
+        .where(
+            LabObservation.profile_id == profile_id,
+            LabObservation.status == "active",
+        )
+        .order_by(
+            LabObservation.observed_at.desc().nullslast(),
+            LabObservation.observed_date.desc().nullslast(),
+            LabObservation.confirmed_at.desc(),
+            LabObservation.id,
+        )
+    )
+    observations = list(result.scalars().all())
+    sources = await _sources_for_observations(
+        session, [observation.id for observation in observations]
+    )
+    return [
+        _observation_response(observation, sources.get(observation.id, []))
+        for observation in observations
+    ]
+
+
+async def confirm_lab_observation(
+    session: AsyncSession,
+    profile_id: uuid.UUID,
+    document_id: uuid.UUID,
+    draft_id: uuid.UUID,
+    payload: ConfirmLabObservationRequest,
+    request_id: str | None,
+) -> LabObservationResponse:
+    preview = await get_lab_observation_confirmation_preview(
+        session,
+        profile_id,
+        document_id,
+        draft_id,
+    )
+    if (
+        preview.requires_not_present_assignment_ack
+        and not payload.acknowledge_not_present_assignment
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Explicit profile assignment acknowledgement is required",
+        )
+    observation_id = uuid.uuid4()
+    confirmed_id = await _execute_scalar(
+        session,
+        text(
+            """
+            SELECT health_compass.app_confirm_lab_observation(
+              :observation_id, :draft_id, :idempotency_key,
+              :expected_draft_updated_at, :expected_document_updated_at,
+              :expected_review_finalized_at,
+              :expected_patient_decision_updated_at,
+              :ack_source, :ack_unit_range, :ack_observed_at, :ack_profile,
+              :ack_structured_record, :ack_not_present_assignment,
+              :audit_event_id, :request_id
+            )
+            """
+        ),
+        {
+            "observation_id": observation_id,
+            "draft_id": draft_id,
+            "idempotency_key": payload.idempotency_key,
+            "expected_draft_updated_at": payload.expected_draft_updated_at,
+            "expected_document_updated_at": payload.expected_document_updated_at,
+            "expected_review_finalized_at": payload.expected_review_finalized_at,
+            "expected_patient_decision_updated_at": (
+                payload.expected_patient_decision_updated_at
+            ),
+            "ack_source": payload.acknowledge_source_matches,
+            "ack_unit_range": payload.acknowledge_unit_and_range,
+            "ack_observed_at": payload.acknowledge_observed_at,
+            "ack_profile": payload.acknowledge_profile,
+            "ack_structured_record": payload.acknowledge_structured_record,
+            "ack_not_present_assignment": (
+                payload.acknowledge_not_present_assignment
+            ),
+            "audit_event_id": uuid.uuid4(),
+            "request_id": request_id,
+        },
+    )
+    return await get_lab_observation(session, profile_id, confirmed_id)
