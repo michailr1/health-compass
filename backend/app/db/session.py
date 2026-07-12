@@ -77,15 +77,16 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     silently running after an intermediate commit has cleared the context.
 
     External side effects such as private quarantine objects can register an
-    async rollback cleanup. The callback runs when route execution or the final
-    database commit fails, preventing untracked orphan artifacts.
+    async rollback cleanup. The callback runs when route execution, request
+    cancellation or the final database commit fails, preventing untracked
+    orphan artifacts.
     """
 
     async with async_session_factory() as session:
         try:
             async with session.begin():
                 yield session
-        except Exception:
+        except BaseException:
             await _run_rollback_cleanups(session)
             raise
         else:
