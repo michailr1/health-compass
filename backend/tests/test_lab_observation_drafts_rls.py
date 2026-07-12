@@ -270,6 +270,13 @@ def lab_fixture() -> dict[str, object]:
             "review_patient_decision_updated_at=NULL WHERE profile_id=%s",
             (ids["profile"],),
         )
+        connection.execute(
+            "UPDATE health_compass.lab_observation_drafts SET "
+            "status='ready', confirmed_at=NULL, confirmed_by_user_id=NULL, "
+            "confirmed_observation_id=NULL WHERE profile_id=%s "
+            "AND status='confirmed'",
+            (ids["profile"],),
+        )
         for statement in (
             "DELETE FROM health_compass.lab_observation_sources WHERE profile_id=%s",
             "DELETE FROM health_compass.lab_observations WHERE profile_id=%s",
