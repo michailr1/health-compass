@@ -46,8 +46,12 @@ export function listDocuments(profileId: string): Promise<ProfileDocument[]> {
   return apiGet<ProfileDocument[]>(`/profiles/${profileId}/documents`);
 }
 
-export function getDocumentIntakeCapabilities(): Promise<DocumentIntakeCapabilities> {
-  return apiGet<DocumentIntakeCapabilities>("/document-intake/capabilities");
+export function getDocumentIntakeCapabilities(
+  profileId: string,
+): Promise<DocumentIntakeCapabilities> {
+  return apiGet<DocumentIntakeCapabilities>(
+    `/profiles/${profileId}/document-intake/capabilities`,
+  );
 }
 
 export async function uploadProfileDocument(
