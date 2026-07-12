@@ -81,12 +81,14 @@ describe("document intake helpers", () => {
       "queued",
       "processing",
       "review_required",
+      "reviewed",
       "error",
     ];
     for (const status of statuses) {
       expect(ocrStatusLabel(status)).not.toBe("");
     }
     expect(ocrStatusLabel("review_required")).toBe("Текст нужно проверить");
+    expect(ocrStatusLabel("reviewed")).toBe("Проверка текста завершена");
     expect(ocrStatusLabel("error")).not.toContain("Tesseract");
     expect(ocrStatusLabel("review_required")).not.toContain("подтверждён");
   });

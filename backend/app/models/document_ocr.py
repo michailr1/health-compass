@@ -1,9 +1,10 @@
-"""HC-017 D1 OCR run, provenance and review-candidate models."""
+"""HC-017 OCR run, provenance, candidates and human-review models."""
 
 from __future__ import annotations
 
 import datetime
 import uuid
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -17,7 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -79,6 +80,29 @@ class DocumentOCRRun(Base):
         DateTime(timezone=True), nullable=True
     )
     safe_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    review_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="not_started"
+    )
+    review_finalized_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey(f"{SCHEMA}.users.id"), nullable=True
+    )
+    review_finalized_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    review_source_document_updated_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    review_candidate_versions: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    review_patient_decision_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.document_ocr_patient_decisions.id"),
+        nullable=True,
+    )
+    review_patient_decision_updated_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -201,6 +225,48 @@ class DocumentOCRCandidate(Base):
         DateTime(timezone=True), nullable=True
     )
     review_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class DocumentOCRPatientDecision(Base):
+    __tablename__ = "document_ocr_patient_decisions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["document_id", "profile_id"],
+            [
+                f"{SCHEMA}.profile_documents.id",
+                f"{SCHEMA}.profile_documents.profile_id",
+            ],
+            name="fk_document_ocr_patient_decisions_document_profile",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("run_id", name="uq_document_ocr_patient_decisions_run"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.document_ocr_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    profile_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey(f"{SCHEMA}.health_profiles.id"), nullable=False
+    )
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    decided_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey(f"{SCHEMA}.users.id"), nullable=False
+    )
+    decided_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

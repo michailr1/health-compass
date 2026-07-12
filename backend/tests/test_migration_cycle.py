@@ -72,6 +72,18 @@ RECONCILER_FUNCTIONS = (
 APP_DOCUMENT_FUNCTIONS = (
     "app_reserve_document_upload(uuid, bigint, bigint, bigint, integer, integer)",
     "app_can_review_document_ocr(uuid)",
+    (
+        "app_review_document_ocr_candidate(uuid, text, text, text, "
+        "timestamp with time zone, uuid, text)"
+    ),
+    (
+        "app_set_document_ocr_patient_decision(uuid, uuid, text, text, "
+        "timestamp with time zone, timestamp with time zone, uuid, text)"
+    ),
+    (
+        "app_finalize_document_ocr_review(uuid, timestamp with time zone, jsonb, "
+        "timestamp with time zone, uuid, text)"
+    ),
 )
 
 DEFINER_FUNCTIONS = (
@@ -115,6 +127,7 @@ FORCE_RLS_TABLES = (
     "document_ocr_runs",
     "document_ocr_artifacts",
     "document_ocr_candidates",
+    "document_ocr_patient_decisions",
 )
 
 CANONICAL_TABLES = (
@@ -131,6 +144,7 @@ DOCUMENT_TABLES = (
     "document_ocr_runs",
     "document_ocr_artifacts",
     "document_ocr_candidates",
+    "document_ocr_patient_decisions",
 )
 
 WORKER_ROLES = (

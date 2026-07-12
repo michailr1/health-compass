@@ -35,6 +35,7 @@ export type OCRStatus =
   | "queued"
   | "processing"
   | "review_required"
+  | "reviewed"
   | "error";
 
 export interface ProfileDocument {
@@ -71,6 +72,7 @@ export interface DocumentOCRStatus {
   status: OCRStatus;
   run_id: string | null;
   run_status: "queued" | "leased" | "succeeded" | "failed" | "cancelled" | null;
+  review_status: "not_started" | "in_progress" | "finalized" | null;
   attempt: number | null;
   language_spec: string | null;
   psm: number | null;
@@ -79,6 +81,7 @@ export interface DocumentOCRStatus {
   candidate_count: number;
   needs_review_count: number;
   completed_at: string | null;
+  review_finalized_at: string | null;
   safe_error_code: string | null;
 }
 
@@ -188,6 +191,7 @@ export function ocrStatusLabel(status: OCRStatus): string {
     queued: "В очереди на распознавание",
     processing: "Распознаётся",
     review_required: "Текст нужно проверить",
+    reviewed: "Проверка текста завершена",
     error: "Распознавание не завершено",
   };
   return labels[status];
