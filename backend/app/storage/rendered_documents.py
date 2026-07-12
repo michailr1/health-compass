@@ -14,6 +14,12 @@ from app.storage.encrypted_objects import (
 )
 
 
+def page_artifact_role(artifact_id: uuid.UUID) -> str:
+    # 96 random bits fit the HCENC1 role limit and bind ciphertext to one
+    # document-artifact identity without exposing a storage path.
+    return f"page:{artifact_id.hex[:24]}"
+
+
 @dataclass(frozen=True)
 class StoredPageArtifact:
     id: uuid.UUID
@@ -25,9 +31,7 @@ class StoredPageArtifact:
 
     @property
     def artifact_role(self) -> str:
-        # 96 bits from the random artifact UUID fit the HCENC1 role bound and
-        # prevent same-document page ciphertext from being silently swapped.
-        return f"page:{self.id.hex[:24]}"
+        return page_artifact_role(self.id)
 
 
 class RenderedDocumentStorage:
@@ -57,8 +61,8 @@ class RenderedDocumentStorage:
         return path
 
     @staticmethod
-    def accepted_key(document_id: uuid.UUID) -> str:
-        return f"accepted/{document_id}/original.hcenc"
+    def accepted_key(document_id: uuid.UUID, run_id: uuid.UUID) -> str:
+        return f"accepted/{document_id}/{run_id}/original.hcenc"
 
     @staticmethod
     def page_key(
@@ -78,9 +82,10 @@ class RenderedDocumentStorage:
         verified_descriptor: int,
         *,
         document_id: uuid.UUID,
+        run_id: uuid.UUID,
         max_plaintext_bytes: int,
     ) -> tuple[str, EncryptedObjectMetadata]:
-        key = self.accepted_key(document_id)
+        key = self.accepted_key(document_id, run_id)
         with os.fdopen(os.dup(verified_descriptor), "rb") as source:
             source.seek(0)
             metadata = encrypt_stream_to_path(
@@ -107,27 +112,14 @@ class RenderedDocumentStorage:
         max_plaintext_bytes: int,
     ) -> StoredPageArtifact:
         key = self.page_key(document_id, run_id, page_number)
-        artifact = StoredPageArtifact(
-            id=artifact_id,
-            page_number=page_number,
-            storage_key=key,
-            metadata=EncryptedObjectMetadata(
-                format="",
-                key_id="",
-                plaintext_size=0,
-                encrypted_size=0,
-                plaintext_sha256="",
-            ),
-            width=width,
-            height=height,
-        )
+        role = page_artifact_role(artifact_id)
         with os.fdopen(os.dup(page_descriptor), "rb") as source:
             source.seek(0)
             metadata = encrypt_stream_to_path(
                 source,
                 self._resolve_key(key),
                 document_id=document_id,
-                artifact_role=artifact.artifact_role,
+                artifact_role=role,
                 keyring=self.keyring,
                 max_plaintext_bytes=max_plaintext_bytes,
                 min_free_bytes=self.min_free_bytes,
