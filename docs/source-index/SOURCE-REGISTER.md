@@ -7,8 +7,8 @@
 | Источник | Назначение | Каноническое отражение |
 |---|---|---|
 | `01-health-compass-master-plan.pdf` | полный мастер-план продукта | `docs/PROJECT-PLAN.md` |
-| `03-implementation-roadmap.xlsx` | этапы, зависимости и сроки | `docs/PROJECT-PLAN.md` |
-| `04-health-compass-vision-and-roadmap.pptx` | продуктовая концепция и roadmap | `docs/PROJECT-PLAN.md` |
+| `03-implementation-roadmap.xlsx` | этапы и зависимости | `docs/PROJECT-PLAN.md` |
+| `04-health-compass-vision-and-roadmap.pptx` | продуктовая концепция | `docs/PROJECT-PLAN.md` |
 | `14-unit-economics.xlsx` | экономика и монетизация | будущий economics plan |
 | `START-HERE.md` | навигация по исходному комплекту | этот реестр и README |
 | `health-compass-master-plan.zip` | reference archive | неизменяемый исходный архив |
@@ -18,155 +18,132 @@
 | Источник | Назначение | Каноническое отражение |
 |---|---|---|
 | Fable Stage 2.5 intake materials | progressive health intake | `docs/PROGRESSIVE-HEALTH-INTAKE.md` |
-| Fable Stage 3 product/UX/AI materials | Human/Pet product model, AI safety | `docs/PRODUCT-UX-BASELINE.md`, `docs/AI-PRODUCT-SAFETY.md` |
-| Fable Stage 3.5 UI blueprint | screens, navigation, actions, components | `docs/PRODUCT-UX-BASELINE.md`, project backlog |
-
-Accepted deviations are recorded in canonical Markdown, not by editing the source PDF/XLSX/PPTX artifacts.
+| Fable Stage 3 product/UX/AI materials | Human/Pet model and AI safety | `docs/PRODUCT-UX-BASELINE.md`, `docs/AI-PRODUCT-SAFETY.md` |
+| Fable Stage 3.5 UI blueprint | screens, navigation and actions | UX baseline and backlog |
 
 ## External reviews
 
 | Source | Scope | Canonical result |
 |---|---|---|
-| `ревью Fable5.txt` | architecture, product, security, operations | plans, ADRs, runbooks, recommendation register |
-| `2-Ревью-Fable5-Postgre-рекурсия.txt` | RLS recursion and escalation paths | migrations `0020–0021`, security invariants |
-| Fable 5 independent review, 2026-07-11 | backend/frontend/auth/RLS/Clinical Context/CI | `docs/reviews/FABLE-5-INDEPENDENT-CODE-REVIEW-2026-07-11.md` |
-| ChatGPT independent review, 2026-07-11 | code, migrations, contracts, operations | `docs/reviews/CODE-REVIEW-CONSOLIDATED-2026-07-11.md` |
+| `ревью Fable5.txt` | architecture, product, security, operations | plans, ADRs and runbooks |
+| `2-Ревью-Fable5-Postgre-рекурсия.txt` | RLS recursion and escalation | migrations `0020–0021`, security invariants |
+| Fable 5 review, 2026-07-11 | backend/frontend/auth/RLS/CI | `docs/reviews/FABLE-5-INDEPENDENT-CODE-REVIEW-2026-07-11.md` |
+| ChatGPT review, 2026-07-11 | code, migrations and operations | `docs/reviews/CODE-REVIEW-CONSOLIDATED-2026-07-11.md` |
 
 ## HC-015 evidence
 
 | Source | Purpose |
 |---|---|
-| PR `#39`, application commit `c87723d7b4d0e4d2db9f1e0df4e936fbfd543346` | remediation implementation |
-| migrations `0046–0048` | duplicate activity, dictionary integrity, users grants |
-| `docs/implementation/HC-015-PRODUCTION-EVIDENCE-2026-07-11.md` | backup, migration, health, logging and automated rollout evidence |
-| backend/frontend/PostgreSQL tests | exact contract and regression evidence |
+| PR `#39`, commit `c87723d7b4d0e4d2db9f1e0df4e936fbfd543346` | remediation implementation |
+| migrations `0046–0048` | schema and privilege hardening |
+| `docs/implementation/HC-015-PRODUCTION-EVIDENCE-2026-07-11.md` | controlled rollout evidence |
 
-## Safari Magic Link hotfix evidence
+## Safari Magic Link evidence
 
 | Source | Purpose |
 |---|---|
 | commit `8c09c02fa007cd5e5945c5a93b4913ce63868e68` | Safari-safe origin handling |
-| owner manual confirmation | iPhone Safari Magic Link works after hotfix |
+| owner confirmation | iPhone Safari flow accepted |
 
 ## HC-016 evidence
 
 | Source | Purpose |
 |---|---|
-| PR `#44`, merge `69b56f12c25457321b49c7412479f5aa4f238b86` | owner-controlled clinical erasure |
-| migration `0049` | restricted erasure, audit scrubbing and tombstone contract |
-| PR `#45`, merge `b8e868825f378195975e2729f3f36c21a1afa2d0` | approved UI copy correction |
-| `docs/implementation/HC-016-CLINICAL-RECORD-ERASURE.md` | product/API/database contract |
-| `docs/implementation/HC-016-PRODUCTION-ACCEPTANCE-2026-07-12.md` | manual acceptance and evidence boundary |
+| PR `#44`, merge `69b56f12c25457321b49c7412479f5aa4f238b86` | clinical-record erasure |
+| migration `0049` | restricted erasure and audit scrubbing |
+| PR `#45`, merge `b8e868825f378195975e2729f3f36c21a1afa2d0` | approved warning-copy fix |
+| HC-016 implementation/acceptance docs | contract and manual acceptance |
 
-## HC-017 Slice A architecture evidence
+## HC-017 Slice A evidence
 
 | Source | Purpose |
 |---|---|
 | PR `#47`, merge `435c6ff7bd05468a8c4a3d48d165b712ab64cedd` | Documents/OCR/Labs architecture |
-| `docs/implementation/HC-017-DOCUMENTS-OCR-LABS-FOUNDATION.md` | canonical architecture and delivery contract |
-| `docs/SECURITY-INVARIANTS.md` | upload, storage, worker, OCR, logging and deletion invariants |
-| `docs/PRODUCT-UX-BASELINE.md` | upload/review/result user-flow baseline |
-| `docs/AI-PRODUCT-SAFETY.md` | untrusted-document and human-confirmation rules |
+| `docs/implementation/HC-017-DOCUMENTS-OCR-LABS-FOUNDATION.md` | canonical foundation contract |
+| `docs/SECURITY-INVARIANTS.md` | upload/storage/worker/OCR rules |
 
-Slice A status:
-
-```text
-ARCHITECTURE MERGED
-NO PRODUCT CODE
-NO PRODUCTION CHANGE
-```
-
-## HC-017 Slice B implementation evidence
+## HC-017 Slice B evidence
 
 | Source | Purpose |
 |---|---|
-| PR `#48` | Secure Document Intake Foundation implementation |
-| verified head `46c5ea89d35cc85be0af3b80a9c56f40d5705ac5` | exact reviewed and tested implementation |
+| PR `#48` | secure document intake implementation |
+| verified head `46c5ea89d35cc85be0af3b80a9c56f40d5705ac5` | exact reviewed code |
 | merge `ccabab77cf929456a74b69c3478c71f92f167f78` | Slice B merged into `main` |
-| migration `0050` | document metadata, durable jobs, RLS, privileges and duplicate-activity sync |
-| CI run `#402` | backend, frontend, migration-cycle and PostgreSQL verification |
-| `docs/implementation/HC-017-SLICE-B-IMPLEMENTATION-2026-07-12.md` | canonical implementation evidence and production boundary |
+| migration `0050` | document tables, RLS and activity sync |
+| CI `#402` | backend/frontend/migration/PostgreSQL verification |
+| `docs/implementation/HC-017-SLICE-B-IMPLEMENTATION-2026-07-12.md` | canonical evidence |
 
-### Slice B database and security sources
+Key sources:
 
-| Source | Evidence |
-|---|---|
-| `backend/alembic/versions/0050_add_secure_document_intake_foundation.py` | tables, RLS, grants, helper ownership, audit action and activity wrapper |
-| `backend/tests/test_document_intake_rls.py` | owner/edit/view/analyze/outsider matrix, no direct UPDATE/DELETE |
-| `backend/tests/test_migration_cycle.py` | `head → base → head`, owners, grants, FORCE RLS |
-| `backend/tests/test_document_intake_http.py` | profile-aware capabilities, upload and access contracts |
+- `backend/alembic/versions/0050_add_secure_document_intake_foundation.py`;
+- `backend/app/storage/documents.py`;
+- `backend/app/core/document_upload_limit.py`;
+- `backend/tests/test_document_intake_http.py`;
+- `backend/tests/test_document_intake_rls.py`.
 
-### Slice B upload and artifact sources
-
-| Source | Evidence |
-|---|---|
-| `backend/app/storage/documents.py` | quarantine adapter, magic-byte and dimension checks |
-| `backend/app/core/document_upload_limit.py` | pre-parser Content-Length and chunked-body boundary |
-| `backend/app/db/session.py` | rollback cleanup hooks for external artifacts |
-| `backend/tests/test_document_storage.py` | opaque keys, permissions, formats and size checks |
-| `backend/tests/test_document_upload_limit.py` | body limit before multipart parsing |
-| `backend/tests/test_session_rollback_cleanup.py` | failure/cancellation cleanup behavior |
-
-Slice B status:
-
-```text
-IMPLEMENTED
-MERGED
-CI VERIFIED
-NOT DEPLOYED
-PRODUCTION UPLOAD DISABLED
-```
-
-## HC-017 Slice B independent review and Slice C architecture
+## HC-017 Slice B review and Slice C architecture
 
 | Source | Purpose |
 |---|---|
-| PR `#50`, merge `ee14826262c5436b9207541cf78fee7b4237e4e2` | Slice B review and Slice C architecture |
-| `docs/reviews/HC-017-SLICE-B-INDEPENDENT-SECURITY-REVIEW-2026-07-12.md` | independent post-merge Slice B review |
-| `docs/implementation/HC-017-SLICE-C-SCANNER-STORAGE-WORKER.md` | encrypted storage, scanner, worker and safe-rendering design |
+| PR `#50`, merge `ee14826262c5436b9207541cf78fee7b4237e4e2` | independent Slice B review and Slice C design |
+| `docs/reviews/HC-017-SLICE-B-INDEPENDENT-SECURITY-REVIEW-2026-07-12.md` | review evidence |
+| `docs/implementation/HC-017-SLICE-C-SCANNER-STORAGE-WORKER.md` | encrypted storage/scanner/worker design |
 
-## HC-017 Slice C1 implementation evidence
+## HC-017 Slice C1 evidence
 
 | Source | Purpose |
 |---|---|
 | PR `#51` | encrypted storage and scanner-worker implementation |
 | verified head `c32e420b59d950aad48366c79010f5ac9fecb43b` | exact reviewed implementation |
 | merge `a0dd405ca3e789cb70e5c4ad94de9a272dff878f` | C1 merged into `main` |
-| migration `0051` | encryption/scanner metadata, retry state and worker functions |
-| CI run `#414` | backend, frontend, migration-cycle and PostgreSQL worker/RLS verification |
-| `docs/implementation/HC-017-SLICE-C1-IMPLEMENTATION-2026-07-12.md` | canonical C1 implementation evidence |
+| migration `0051` | encryption/scanner metadata and worker functions |
+| CI `#414` | backend/frontend/migration/worker verification |
+| `docs/implementation/HC-017-SLICE-C1-IMPLEMENTATION-2026-07-12.md` | canonical C1 evidence |
 
-### C1 encryption and storage sources
+### C1 encryption sources
 
-| Source | Evidence |
+- `backend/app/storage/encrypted_objects.py` — `HCENC1`, AES-GCM, key/path hardening;
+- `backend/app/storage/documents.py` — encrypted quarantine storage;
+- `backend/tests/test_encrypted_objects.py` — AAD, tamper, nonce and key tests;
+- `backend/tests/test_encrypted_object_paths.py` — symlink/hard-link/occupied-key tests.
+
+### C1 scanner sources
+
+- `backend/app/scanning/clamav.py` — strict local Unix-socket client;
+- `backend/app/workers/document_scanner.py` — restricted worker process;
+- `backend/alembic/versions/0051_add_encrypted_document_scanner_worker.py` — scanner metadata and functions;
+- `backend/tests/test_clamav_client.py` — clean/infected/stale/corrupt behavior;
+- `backend/tests/test_document_worker_rls.py` — leases, privileges and state transitions.
+
+## HC-017 Slice C2 evidence
+
+| Source | Purpose |
 |---|---|
-| `backend/app/storage/encrypted_objects.py` | HCENC1 AES-GCM envelope, key handling, exclusive publication and authenticated read |
-| `backend/app/storage/documents.py` | encrypted quarantine storage and bounded upload validation |
-| `backend/tests/test_encrypted_objects.py` | round-trip, AAD, tamper, nonce and key-file tests |
-| `backend/tests/test_encrypted_object_paths.py` | symlink, hard-link and occupied-key regression tests |
-| `backend/tests/test_document_storage.py` | encrypted PDF/JPEG/PNG storage behavior |
+| PR `#53` | quota, reconciliation and safe-rendering implementation |
+| verified head `568eca1ec1c91005b907cc79349036a71d7f6f83` | exact reviewed C2 code |
+| merge `06e4f0a228b4867d9bf7983284bc04f3cb53cd05` | C2 merged into `main` |
+| migrations `0052–0053` | quota/render/reconciliation and idempotency hardening |
+| CI `#433` | backend/frontend/full migration/renderer/reconciler verification |
+| `docs/implementation/HC-017-SLICE-C2-SAFE-RENDERING-EVIDENCE-2026-07-12.md` | canonical C2 evidence |
 
-### C1 scanner and worker sources
+### C2 database and authorization sources
 
-| Source | Evidence |
-|---|---|
-| `backend/app/scanning/clamav.py` | strict local Unix-socket VERSION/INSTREAM client |
-| `backend/app/workers/document_scanner.py` | worker process using only restricted database functions |
-| `backend/alembic/versions/0051_add_encrypted_document_scanner_worker.py` | role prerequisite, scanner metadata and definer functions |
-| `backend/tests/test_clamav_client.py` | clean, infected, stale and corrupted encrypted-object behavior |
-| `backend/tests/test_document_worker_rls.py` | no direct table grants, leases, retries, clean/infected transitions and idempotency |
-| `backend/tests/test_migration_cycle.py` | ownership, execute grants and full migration cycle |
+- `backend/alembic/versions/0052_add_document_quota_reconciliation_rendering.py` — quota, artifacts and restricted functions;
+- `backend/alembic/versions/0053_make_document_missing_reconciliation_idempotent.py` — duplicate-audit prevention;
+- `backend/tests/test_migration_cycle.py` — exact execute matrix and FORCE RLS;
+- `backend/tests/test_document_rendering_rls.py` — renderer completion, artifact RLS and reference inventory;
+- `backend/tests/test_document_reconciliation_rls.py` — repeated missing-object idempotency.
 
-### C1 API and UI sources
+### C2 rendering and storage sources
 
-| Source | Evidence |
-|---|---|
-| `backend/app/schemas/document.py` | safe scanner status contract |
-| `src/lib/documentApi.ts` | safe scanner-state labels and response types |
-| `src/pages/Documents.tsx` | user-facing scanner states without internal details |
-| `src/lib/documentApi.test.ts` | scanner-state label coverage |
+- `backend/app/rendering/verified_memory.py` — full GCM verification before parser access;
+- `backend/app/rendering/safe_render.py` — sealed memfd and bounded subprocess execution;
+- `backend/app/storage/rendered_documents.py` — encrypted accepted source and page derivatives;
+- `backend/app/workers/document_renderer.py` — renderer process and lease heartbeat;
+- `backend/app/workers/document_reconciler.py` — opaque inventory and orphan handling;
+- `backend/tests/test_safe_render.py` — memfd sealing, PNG validation and GCM-before-parser tests.
 
-C1 status:
+C2 status:
 
 ```text
 IMPLEMENTED
@@ -175,8 +152,6 @@ CI VERIFIED
 NOT DEPLOYED
 PRODUCTION UPLOAD DISABLED
 ```
-
-C1 does not provide safe rendering, OCR, Labs or production deployment.
 
 ## Current factual sources
 
@@ -192,11 +167,11 @@ C1 does not provide safe rendering, OCR, Labs or production deployment.
 
 1. Source PDF/XLSX/PPTX artifacts remain immutable references.
 2. Accepted decisions are copied into canonical Markdown.
-3. External recommendations are not “implemented” without code/test evidence.
-4. Architecture status does not mean implementation or deployment.
-5. `IMPLEMENTED`, `MERGED`, `VERIFIED` and `DEPLOYED` are separate states.
-6. Production state has priority over repository plans when describing what users can access.
-7. Secrets, auth tokens, encryption keys, private storage paths and medical values are not stored in this register.
-8. Manual acceptance confirms user-visible behavior but does not invent absent operational metrics.
-9. Every rollout evidence record names an exact commit SHA.
-10. C1 must not be described as production-ready before C2, host provisioning and controlled rollout gates pass.
+3. External recommendations are not implemented without code/test evidence.
+4. Architecture, implementation, merge, verification and deployment are separate states.
+5. Production state overrides repository plans when describing user availability.
+6. Secrets, credentials, encryption keys, object paths, OCR text and medical values are excluded.
+7. Manual acceptance does not invent absent operational metrics.
+8. Every rollout record names an exact SHA.
+9. HC-017 C1+C2 must not be described as production-ready before host provisioning, independent review and controlled rollout gates pass.
+10. OCR output can never be treated as a clinical fact without explicit human review and later confirmation.
