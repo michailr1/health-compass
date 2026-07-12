@@ -100,20 +100,12 @@ NO PRODUCTION CHANGE
 
 | Source | Evidence |
 |---|---|
-| `backend/app/storage/documents.py` | private local quarantine adapter, magic-byte and dimension checks |
+| `backend/app/storage/documents.py` | quarantine adapter, magic-byte and dimension checks |
 | `backend/app/core/document_upload_limit.py` | pre-parser Content-Length and chunked-body boundary |
 | `backend/app/db/session.py` | rollback cleanup hooks for external artifacts |
 | `backend/tests/test_document_storage.py` | opaque keys, permissions, formats and size checks |
 | `backend/tests/test_document_upload_limit.py` | body limit before multipart parsing |
 | `backend/tests/test_session_rollback_cleanup.py` | failure/cancellation cleanup behavior |
-
-### Slice B frontend sources
-
-| Source | Evidence |
-|---|---|
-| `src/pages/Documents.tsx` | metadata/status page and disabled incomplete features |
-| `src/lib/documentApi.ts` | capabilities, upload and list contracts |
-| `src/lib/documentApi.test.ts` | format/status/size helper coverage |
 
 Slice B status:
 
@@ -124,6 +116,67 @@ CI VERIFIED
 NOT DEPLOYED
 PRODUCTION UPLOAD DISABLED
 ```
+
+## HC-017 Slice B independent review and Slice C architecture
+
+| Source | Purpose |
+|---|---|
+| PR `#50`, merge `ee14826262c5436b9207541cf78fee7b4237e4e2` | Slice B review and Slice C architecture |
+| `docs/reviews/HC-017-SLICE-B-INDEPENDENT-SECURITY-REVIEW-2026-07-12.md` | independent post-merge Slice B review |
+| `docs/implementation/HC-017-SLICE-C-SCANNER-STORAGE-WORKER.md` | encrypted storage, scanner, worker and safe-rendering design |
+
+## HC-017 Slice C1 implementation evidence
+
+| Source | Purpose |
+|---|---|
+| PR `#51` | encrypted storage and scanner-worker implementation |
+| verified head `c32e420b59d950aad48366c79010f5ac9fecb43b` | exact reviewed implementation |
+| merge `a0dd405ca3e789cb70e5c4ad94de9a272dff878f` | C1 merged into `main` |
+| migration `0051` | encryption/scanner metadata, retry state and worker functions |
+| CI run `#414` | backend, frontend, migration-cycle and PostgreSQL worker/RLS verification |
+| `docs/implementation/HC-017-SLICE-C1-IMPLEMENTATION-2026-07-12.md` | canonical C1 implementation evidence |
+
+### C1 encryption and storage sources
+
+| Source | Evidence |
+|---|---|
+| `backend/app/storage/encrypted_objects.py` | HCENC1 AES-GCM envelope, key handling, exclusive publication and authenticated read |
+| `backend/app/storage/documents.py` | encrypted quarantine storage and bounded upload validation |
+| `backend/tests/test_encrypted_objects.py` | round-trip, AAD, tamper, nonce and key-file tests |
+| `backend/tests/test_encrypted_object_paths.py` | symlink, hard-link and occupied-key regression tests |
+| `backend/tests/test_document_storage.py` | encrypted PDF/JPEG/PNG storage behavior |
+
+### C1 scanner and worker sources
+
+| Source | Evidence |
+|---|---|
+| `backend/app/scanning/clamav.py` | strict local Unix-socket VERSION/INSTREAM client |
+| `backend/app/workers/document_scanner.py` | worker process using only restricted database functions |
+| `backend/alembic/versions/0051_add_encrypted_document_scanner_worker.py` | role prerequisite, scanner metadata and definer functions |
+| `backend/tests/test_clamav_client.py` | clean, infected, stale and corrupted encrypted-object behavior |
+| `backend/tests/test_document_worker_rls.py` | no direct table grants, leases, retries, clean/infected transitions and idempotency |
+| `backend/tests/test_migration_cycle.py` | ownership, execute grants and full migration cycle |
+
+### C1 API and UI sources
+
+| Source | Evidence |
+|---|---|
+| `backend/app/schemas/document.py` | safe scanner status contract |
+| `src/lib/documentApi.ts` | safe scanner-state labels and response types |
+| `src/pages/Documents.tsx` | user-facing scanner states without internal details |
+| `src/lib/documentApi.test.ts` | scanner-state label coverage |
+
+C1 status:
+
+```text
+IMPLEMENTED
+MERGED
+CI VERIFIED
+NOT DEPLOYED
+PRODUCTION UPLOAD DISABLED
+```
+
+C1 does not provide safe rendering, OCR, Labs or production deployment.
 
 ## Current factual sources
 
@@ -143,7 +196,7 @@ PRODUCTION UPLOAD DISABLED
 4. Architecture status does not mean implementation or deployment.
 5. `IMPLEMENTED`, `MERGED`, `VERIFIED` and `DEPLOYED` are separate states.
 6. Production state has priority over repository plans when describing what users can access.
-7. Secrets, auth tokens, private storage keys and medical values are not stored in this register.
+7. Secrets, auth tokens, encryption keys, private storage paths and medical values are not stored in this register.
 8. Manual acceptance confirms user-visible behavior but does not invent absent operational metrics.
 9. Every rollout evidence record names an exact commit SHA.
-10. HC-017 Slice B must not be described as production-ready before scanner, private storage and worker reviews are complete.
+10. C1 must not be described as production-ready before C2, host provisioning and controlled rollout gates pass.
