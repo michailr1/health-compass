@@ -91,12 +91,15 @@
 - Silent unit conversion, silent canonical mapping и automatic reference-range interpretation запрещены.
 - Unknown/mismatch patient decision блокирует confirmation; `not_present` требует отдельного explicit assignment acknowledgement.
 - Confirmation валидирует current finalized OCR run, document version, patient-decision version, draft version и exact OCR-candidate manifest в одной транзакции.
+- OCR candidate rows блокируются в детерминированном порядке до проверки versions и копирования immutable source snapshots.
 - Identical confirmation retry идемпотентен; conflicting retry не создаёт частичных rows.
+- Same-draft replay возвращает существующую observation только при совпадении source versions и acknowledgements.
+- Concurrent confirmation создаёт не более одной observation.
 - Confirmed source/value fields не изменяются in place; correction создаёт replacement observation и supersession chain.
 - Duplicate-looking observations не объединяются молча и не теряют document provenance.
 - Confirmed observation без valid source-document/OCR/candidate provenance запрещён.
-- Document deletion немедленно скрывает связанные drafts/observations и удаляет sole-provenance observations идемпотентно.
-- Void/correction используют optimistic concurrency; permanent erasure owner-only и доступен после consent withdrawal.
+- Document deletion не имеет права оставлять sole-provenance observation; до E3 restrictive foreign keys блокируют такой сценарий.
+- Void/correction используют optimistic concurrency; permanent erasure owner-only.
 - Ordinary audit/logs не содержат analyte, value, unit, range, patient identity или source text.
 - Confirmed Labs core не создаёт diagnosis, recommendation, treatment instruction или dose calculation.
 
@@ -104,7 +107,8 @@
 
 - `docs/implementation/HC-017-DOCUMENTS-OCR-LABS-FOUNDATION.md`;
 - `docs/implementation/HC-017-SLICE-D-OCR-CANDIDATES-AND-HUMAN-REVIEW.md`;
-- `docs/implementation/HC-017-SLICE-E-CONFIRMED-LABS-CORE.md`.
+- `docs/implementation/HC-017-SLICE-E-CONFIRMED-LABS-CORE.md`;
+- `docs/implementation/HC-017-SLICE-E2-CONFIRMED-OBSERVATIONS.md`.
 
 ## Privacy и medical safety
 
@@ -130,7 +134,7 @@
 - PostgreSQL CI проверяет migrations, RLS и privilege invariants.
 - Для release-bound migration выполняется полный cycle `head → base → head` на отдельной test DB либо документируется безопасное исключение.
 - `downgrade(): pass` запрещён, если после downgrade database state не соответствует объявленной revision.
-- CI должен быть зелёным на exact commit SHA, который предлагается к deployment.
+- CI должен быть зелёным на exact commit SHA, который предлагается к deployment или merge security baseline.
 
 ## Deployment
 
@@ -139,5 +143,5 @@
 - Порядок: migration → backend → frontend → smoke.
 - Автоматический downgrade запрещён после частично применённой или нетранзакционной миграции.
 - Cross-user leak важнее доступности: при подтверждении сервис переводится в maintenance до исправления.
-- Scanner GET, wrong-domain canonical mapping, duplicate-resolution 500 или token leakage являются stop conditions.
+- Scanner bypass, wrong-domain canonical mapping, duplicate-resolution 500 или token leakage являются stop conditions.
 - Для document/Labs pipeline stop conditions включают scanner bypass, public raw-object access, cross-profile access, unconfirmed OCR facts, silent normalization, unsupported observations и medical data in logs.

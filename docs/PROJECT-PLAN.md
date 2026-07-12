@@ -1,7 +1,7 @@
 # Health Compass — канонический план проекта
 
-Версия: 2.5  
-Дата: 2026-07-12  
+Версия: 2.6  
+Дата: 2026-07-13  
 Основная ветка: `main`
 
 ## 1. Product goal
@@ -24,16 +24,14 @@ Create a secure multi-user personal-health portal combining profile data, clinic
 - Medical data requires consent, provenance and audit.
 - Verified email does not silently merge accounts.
 - Free text is not silently rewritten.
-- OCR/AI output is not a fact before explicit human confirmation.
+- OCR output is not a fact before explicit human review.
 - Reviewed OCR remains transcription until a separate clinical confirmation.
-- Lab drafts remain non-clinical until an explicit E2 confirmation.
+- Lab drafts remain non-clinical until E2 confirmation.
 - Confirmed Labs preserve source wording and exact provenance.
+- Confirmed source/value fields are immutable; correction creates replacement records.
 - No automatic diagnosis, prescription or dose calculation.
 - Human and Pet contours remain separated.
 - Production rollout is backup-first and exact-SHA.
-- Destructive actions use least privilege and optimistic concurrency.
-- Raw documents, OCR drafts, reviewed transcription, Lab drafts and confirmed facts have distinct access boundaries.
-- Confirmed source/value fields are immutable; corrections create replacement records.
 - `DEFINED`, `IMPLEMENTED`, `MERGED`, `CI VERIFIED` and `DEPLOYED` are separate states.
 
 ## 4. Repository and production state
@@ -41,8 +39,8 @@ Create a secure multi-user personal-health portal combining profile data, clinic
 Repository:
 
 ```text
-application: 2ad0ca47d994472201c218b3e6af37145cbacdec
-Alembic head: 0057
+application: 1d61331194edf0f78b94a304d27ccf31dfa2a755
+Alembic head: 0058
 ```
 
 Production:
@@ -57,9 +55,8 @@ DOCUMENT_UPLOAD_ENABLED=false
 Current verdict:
 
 ```text
-SLICE D D1+D2 MERGED / CI VERIFIED / NOT DEPLOYED
-SLICE E1 MERGED / CI VERIFIED / NOT DEPLOYED
-SLICE E2 NOT IMPLEMENTED
+HC-017 B+C1+C2+D1+D2+E1+E2 MERGED / CI VERIFIED / NOT DEPLOYED
+HC-017 E3 NEXT / NOT IMPLEMENTED
 PRODUCTION UNCHANGED
 ```
 
@@ -85,7 +82,7 @@ Status: `COMPLETED / NON-BLOCKING HARDENING REMAINS`.
 - workspace/profile bootstrap;
 - FORCE RLS;
 - account linking and duplicate resolution;
-- structured logging and query/token redaction.
+- structured logging and secret/query redaction.
 
 ### PHASE-02.5 — Progressive Health Intake
 
@@ -121,7 +118,7 @@ Upload
 → patient matching
 → source-preserving Lab draft
 → explicit observation confirmation
-→ Labs
+→ correction/void/erasure
 → metric dynamics
 ```
 
@@ -131,9 +128,10 @@ Status: `MERGED` through PR `#47`.
 
 ### Slice B — Secure Document Intake Foundation
 
-Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED` through PR `#48`.
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
 
 ```text
+PR: #48
 verified head: 46c5ea89d35cc85be0af3b80a9c56f40d5705ac5
 merge: ccabab77cf929456a74b69c3478c71f92f167f78
 CI: #402
@@ -142,41 +140,31 @@ migration: 0050
 
 ### Slice C1 — Encrypted Scanner Worker Foundation
 
-Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED` through PR `#51`.
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
 
 ```text
+PR: #51
 verified head: c32e420b59d950aad48366c79010f5ac9fecb43b
 merge: a0dd405ca3e789cb70e5c4ad94de9a272dff878f
 CI: #414
 migration: 0051
 ```
 
-Provides authenticated encryption, encrypted quarantine storage, local ClamAV and a restricted scanner worker.
-
 ### Slice C2 — Quotas, Reconciliation and Safe Rendering
 
-Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED` through PR `#53`.
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
 
 ```text
+PR: #53
 verified head: 568eca1ec1c91005b907cc79349036a71d7f6f83
 merge: 06e4f0a228b4867d9bf7983284bc04f3cb53cd05
 CI: #433
 migrations: 0052–0053
 ```
 
-Provides quotas, encrypted safe-page artifacts, restricted renderer/reconciler roles, GCM-before-parser verification, bounded rendering and storage reconciliation.
+### Slice D1 — Local OCR Candidates
 
-### Slice D — OCR Candidates and Human Review
-
-Status: `D1+D2 IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
-
-Canonical contract:
-
-```text
-docs/implementation/HC-017-SLICE-D-OCR-CANDIDATES-AND-HUMAN-REVIEW.md
-```
-
-#### D1 — Local OCR Candidate Extraction
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
 
 ```text
 PR: #56
@@ -186,9 +174,9 @@ CI: #442
 migration: 0054
 ```
 
-Provides bounded local Tesseract, encrypted provenance and owner/edit-only candidates. It creates no clinical or Lab facts.
+### Slice D2 — Human Review and Patient Matching
 
-#### D2 — Human Review and Patient Matching
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
 
 ```text
 PR: #58
@@ -198,176 +186,134 @@ CI: #454
 migration: 0055
 ```
 
-Provides explicit candidate review, optimistic concurrency, patient decisions and idempotent finalization. Finalized transcription remains source text, not a clinical fact.
+Finalized D2 transcription remains source text, not a clinical fact.
 
-### Slice E — Confirmed Labs Core
+### Slice E1 — Source-preserving Lab Drafts
 
-Canonical contract:
-
-```text
-docs/implementation/HC-017-SLICE-E-CONFIRMED-LABS-CORE.md
-```
-
-Architecture review:
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
 
 ```text
-docs/reviews/HC-017-SLICE-E-ARCHITECTURE-REVIEW-2026-07-12.md
-```
-
-#### E1 — Source-preserving Lab Drafts
-
-Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED` through PR `#61`.
-
-```text
+PR: #61
 verified head: 419386e909207ab67921c008e210c059aba6658c
 merge: 2ad0ca47d994472201c218b3e6af37145cbacdec
 CI: #477
 migrations: 0056–0057
 ```
 
+E1 drafts preserve source wording and exact candidate provenance. They remain owner/edit-only and are not visible to `view`, `analyze`, analytics or AI interpretation.
+
+### Slice E2 — Explicit Confirmation and Confirmed Observations
+
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
+
+```text
+PR: #65
+verified head: 55f10d311d1f39262d557fa7b60cc07060ac5590
+merge: 1d61331194edf0f78b94a304d27ccf31dfa2a755
+CI: #491
+migration: 0058
+```
+
 Implemented:
 
-- draft and exact source-role tables with FORCE RLS;
-- owner/edit-only access and no direct runtime mutation grants;
-- explicit numeric/text/qualitative values and absence decisions;
-- source analyte/value/unit/range/date/specimen/flag/comment preservation;
-- current finalized D2, patient decision, document and consent gates on every mutation;
-- optimistic concurrency and content-free audit;
-- API and minimal source-fragment selection UI;
-- zero confirmed observation rows.
+- explicit user confirmation separated from E1 draft mutations;
+- immutable confirmed observation and source snapshots;
+- owner/edit confirmation;
+- owner/edit/view/analyze confirmed-only reads;
+- active consent and exact source-version checks;
+- `not_present` assignment acknowledgement;
+- idempotent and concurrent-safe confirmation;
+- source-candidate row locking before snapshot copying;
+- no worker confirmation;
+- no interpretation, normalization or silent unit conversion.
 
 Canonical evidence:
 
 ```text
-docs/implementation/HC-017-SLICE-E1-LAB-DRAFTS-EVIDENCE-2026-07-12.md
+docs/implementation/HC-017-SLICE-E2-CONFIRMED-OBSERVATIONS-EVIDENCE-2026-07-13.md
 ```
 
-#### E2 — Explicit Confirmation and Confirmed Observations
+### Slice E3 — Correction, Void and Erasure
 
 Status: `NEXT / NOT IMPLEMENTED / NOT DEPLOYED`.
 
-Required design and implementation:
+Required implementation order:
 
-- immutable confirmed observation and source snapshot tables;
-- current document/D2/patient/draft/source manifest validation;
-- explicit confirmation acknowledgements;
-- additional profile-assignment acknowledgement for `not_present` patient decision;
-- idempotent atomic confirmation;
-- owner/edit confirmation;
-- owner/edit/view/analyze confirmed-only reads;
-- no worker confirmation;
-- no interpretation, automatic normalization or silent unit conversion.
+1. independently review the exact E2 migration/function/API boundaries;
+2. define immutable replacement and supersession model;
+3. define explicit void state and reason without in-place value mutation;
+4. define owner-only erasure transaction;
+5. define atomic source-document deletion propagation;
+6. add negative PostgreSQL tests before API/UI;
+7. prove sole-provenance observations cannot be orphaned;
+8. run exact-head backend/frontend/full migration/PostgreSQL CI;
+9. perform independent E3 security review;
+10. keep production unchanged.
 
-#### E3 — Correction, Void and Erasure
+E3 stop conditions:
 
-Status: `PLANNED AFTER E2 REVIEW`.
+- confirmed source/value fields can be edited in place;
+- correction loses prior observation or source provenance;
+- a non-owner can permanently erase;
+- document deletion leaves an unsupported observation;
+- erasure is not atomic across observation and sources;
+- view/analyze can see voided/erased data contrary to the contract;
+- broad runtime or worker mutation grants exist;
+- audit/logs contain medical text or values;
+- exact-head negative tests are absent.
 
-- replacement correction chain;
-- explicit void reason;
-- owner-only permanent erasure;
-- document-linked deletion propagation;
-- no orphaned sole-provenance observation.
+### Slice F — Metric Dynamics
 
-#### Slice E stop conditions
+Status: `PLANNED AFTER E3 REVIEW`.
 
-Do not merge or deploy when:
-
-- OCR or a ready draft creates an observation automatically;
-- patient decision is unknown or mismatch;
-- source wording/value/unit/range is not preserved;
-- unit conversion/canonical mapping is silent;
-- exact source manifest is missing or stale;
-- confirmed data can be updated in place;
-- draft rows are visible to view/analyze;
-- analyze can access OCR text;
-- app/worker roles have broad mutation privileges;
-- duplicate-looking observations are silently merged;
-- source erasure leaves unsupported observations;
-- medical values appear in logs/audit;
-- exact-head negative PostgreSQL tests are absent.
-
-### Slice F — Metric dynamics
-
-Status: `PLANNED AFTER CONFIRMED LABS`.
-
-- compatible numeric series only;
-- no silent unit conversion;
-- chart and accessible table;
-- source-specific ranges;
-- provenance links;
+- active confirmed numeric observations only;
+- compatible units only;
+- no silent conversion;
+- accessible table plus chart;
+- source-specific ranges and provenance links;
 - no diagnosis or treatment advice.
 
-### Slice G — Controlled production rollout
+### Slice G — Controlled Production Rollout
 
-Status: `PLANNED AFTER IMPLEMENTATION AND REVIEW`.
+Status: `BLOCKED`.
 
-Required readiness:
+No rollout is allowed until repository implementation, security review, host provisioning, backup/restore and hostile-file gates pass.
 
-- production encrypted storage and key recovery;
-- scanner/renderer/reconciler/OCR OS and DB identities;
-- hardened systemd units;
-- verified Poppler/ImageMagick/Tesseract and language models;
-- ClamAV/FreshClam and healthy signatures;
-- reverse-proxy body limit;
-- isolated bounded multipart spool;
+## 7. Remaining production blockers
+
+Before any Documents/OCR/Labs rollout:
+
+- production encryption credentials, recovery and rotation;
+- private encrypted storage and bounded spool directories;
+- dedicated scanner/renderer/reconciler/OCR OS users;
+- hardened systemd services;
+- verified Poppler, ImageMagick, Tesseract and traineddata versions;
+- ClamAV/FreshClam health and current signatures;
+- reverse-proxy request-body limit;
 - measured quotas and disk reserve;
-- exact-SHA CI;
-- backup-first migrations;
-- hostile-file and timeout probes;
+- hostile-file, timeout, memory and decompression-bomb probes;
+- database plus encrypted-object backup/restore validation;
 - no-sensitive-log verification;
-- disposable-document owner smoke;
-- canonical production evidence.
+- disposable document/OCR/Labs owner smoke;
+- explicit controlled rollout approval.
 
-## 7. Later phases
+## 8. Deferred platform work
 
-### PHASE-04 — Data sources and integrations
+The following remains outside the current E3 target and must be rebased/reimplemented from current main when scheduled:
 
-- Oura;
-- lab CSV expansion;
-- Apple Health / Health Connect after ADR;
-- idempotent sync and freshness.
+- HC-013 session-management UI and rotation from stale PR `#25`;
+- operational frontend-symlink documentation from stale PR `#17`;
+- wearable ingestion and Oura;
+- AI safety foundation and evidence-grounded assistant;
+- reports and doctor-visit preparation;
+- family sharing expansion;
+- Pet Health MVP;
+- monetization and entitlements.
 
-### PHASE-05 — Timeline and analytics
+## 9. Current next action
 
-- unified timeline;
-- trends and personal baseline;
-- Attention Inbox;
-- search.
-
-### PHASE-06 — Shared access
-
-- invitations;
-- permission lifecycle;
-- revoke and audit;
-- RLS matrix.
-
-### PHASE-07 — Privacy and lifecycle
-
-- consent center;
-- export;
-- profile/user deletion;
-- document source/derived/OCR/draft/confirmed deletion;
-- retention;
-- external-processing consent.
-
-### PHASE-08 — AI Health Assistant
-
-- retrieval-grounded answers;
-- evidence/citations;
-- red-flag routing;
-- prompt-injection tests;
-- no diagnosis or dose calculation.
-
-## 8. Immediate plan
-
-1. Merge E1 status/evidence documentation.
-2. Perform an independent E1 implementation/security review.
-3. Freeze E2 immutable observation/source snapshot schema.
-4. Define confirmation acknowledgements and idempotency.
-5. Define confirmed-only access matrix and correction lifecycle.
-6. Start E2 only in a separate implementation branch and migration.
-7. Keep production unchanged until controlled rollout readiness is independently verified.
-
-## 9. Status terminology
-
-`DEFINED`, `IMPLEMENTED`, `MERGED`, `CI VERIFIED` and `DEPLOYED` are separate states and must never be used interchangeably.
+```text
+START HC-017 E3 FROM MAIN 1d613311...
+DATABASE CONTRACT AND NEGATIVE TESTS FIRST
+NO PRODUCTION CHANGE
+```
