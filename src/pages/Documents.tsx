@@ -16,8 +16,12 @@ import {
   formatDocumentSize,
   getDocumentIntakeCapabilities,
   listDocuments,
+  ocrStatusLabel,
+  renderStatusLabel,
   scannerStatusLabel,
   type DocumentStatus,
+  type OCRStatus,
+  type RenderStatus,
   type ScannerStatus,
   uploadProfileDocument,
 } from "@/lib/documentApi";
@@ -45,6 +49,22 @@ const scannerTone: Record<ScannerStatus, string> = {
   infected: "border-destructive/30 bg-destructive/10 text-destructive",
   error: "border-warning/30 bg-warning/10 text-warning",
   stale: "border-warning/30 bg-warning/10 text-warning",
+};
+
+const renderTone: Record<RenderStatus, string> = {
+  not_started: "border-border bg-muted/40 text-muted-foreground",
+  queued: "border-warning/30 bg-warning/10 text-warning",
+  rendering: "border-primary/30 bg-primary/10 text-primary",
+  ready: "border-success/30 bg-success/10 text-success",
+  error: "border-destructive/30 bg-destructive/10 text-destructive",
+};
+
+const ocrTone: Record<OCRStatus, string> = {
+  not_started: "border-border bg-muted/40 text-muted-foreground",
+  queued: "border-warning/30 bg-warning/10 text-warning",
+  processing: "border-primary/30 bg-primary/10 text-primary",
+  review_required: "border-warning/30 bg-warning/10 text-warning",
+  error: "border-destructive/30 bg-destructive/10 text-destructive",
 };
 
 function uploadErrorMessage(error: unknown): string {
@@ -78,16 +98,42 @@ function mediaTypeLabel(mediaType: string): string {
 function displayStatus(document: {
   status: DocumentStatus;
   scanner_status: ScannerStatus;
+  render_status: RenderStatus;
+  ocr_status: OCRStatus;
 }): { label: string; tone: string } {
-  if (document.status === "quarantined" || document.status === "scanning") {
+  if (
+    document.status === "rejected" ||
+    document.status === "failed" ||
+    document.status === "voided" ||
+    document.status === "deletion_pending" ||
+    document.status === "erased"
+  ) {
+    return {
+      label: documentStatusLabel(document.status),
+      tone: statusTone[document.status],
+    };
+  }
+  if (document.scanner_status !== "clean") {
     return {
       label: scannerStatusLabel(document.scanner_status),
       tone: scannerTone[document.scanner_status],
     };
   }
+  if (document.render_status !== "ready") {
+    return {
+      label: renderStatusLabel(document.render_status),
+      tone: renderTone[document.render_status],
+    };
+  }
+  if (document.ocr_status !== "not_started") {
+    return {
+      label: ocrStatusLabel(document.ocr_status),
+      tone: ocrTone[document.ocr_status],
+    };
+  }
   return {
-    label: documentStatusLabel(document.status),
-    tone: statusTone[document.status],
+    label: renderStatusLabel(document.render_status),
+    tone: renderTone[document.render_status],
   };
 }
 
@@ -150,9 +196,8 @@ export default function Documents() {
           Медицинские документы
         </h1>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-          Безопасная загрузка анализов начинается с карантина. Документ не становится
-          медицинским фактом, пока распознанные значения не проверены и не подтверждены
-          человеком.
+          Безопасная загрузка анализов начинается с карантина. Распознанный текст остаётся
+          черновиком и не становится медицинским фактом без проверки человеком.
         </p>
       </header>
 
@@ -173,8 +218,9 @@ export default function Documents() {
               <div className="mt-4 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
-                  Загрузка для этого профиля сейчас недоступна. Зашифрованное хранилище и
-                  проверка файлов проходят отдельную подготовку к производственному запуску.
+                  Загрузка для этого профиля сейчас недоступна. Зашифрованное хранилище,
+                  проверка, безопасная подготовка страниц и распознавание проходят отдельную
+                  подготовку к производственному запуску.
                 </span>
               </div>
             )}
@@ -221,8 +267,8 @@ export default function Documents() {
           <div>
             <h2 className="font-display text-lg font-semibold">Загруженные документы</h2>
             <p className="text-sm text-muted-foreground">
-              Отображаются только безопасные метаданные и результат проверки — без доступа
-              к исходнику, внутренним путям и техническим ответам сканера.
+              Отображаются только безопасные метаданные и этап обработки — без доступа к
+              исходнику, внутренним путям, TSV и техническим ответам workers.
             </p>
           </div>
           <LockKeyhole className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
@@ -243,7 +289,7 @@ export default function Documents() {
             <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
             <p className="mt-3 font-medium">Документов пока нет</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              После включения тестовой загрузки файл появится здесь со статусом проверки.
+              После включения тестовой загрузки файл появится здесь со статусом обработки.
             </p>
           </div>
         )}
