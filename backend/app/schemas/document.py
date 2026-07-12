@@ -33,6 +33,14 @@ ScannerStatus = Literal[
     "stale",
 ]
 
+RenderStatus = Literal[
+    "not_started",
+    "queued",
+    "rendering",
+    "ready",
+    "error",
+]
+
 
 class DocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -41,6 +49,7 @@ class DocumentResponse(BaseModel):
     profile_id: uuid.UUID
     status: DocumentStatus
     scanner_status: ScannerStatus
+    render_status: RenderStatus
     original_filename: str
     declared_media_type: str
     detected_media_type: str
