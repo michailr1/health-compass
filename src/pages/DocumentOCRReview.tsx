@@ -78,7 +78,6 @@ function CandidateCard({
     setReviewNote(candidate.review_note ?? "");
   }, [candidate.original_text, candidate.review_note, candidate.reviewed_text]);
 
-  const isFinal = ["accepted", "edited", "rejected"].includes(candidate.status);
   const isDisabled = disabled || pendingAction !== null;
 
   return (
@@ -108,26 +107,24 @@ function CandidateCard({
         <span>Слов: {candidate.source_word_count}</span>
       </div>
 
-      {candidate.status !== "rejected" && (
-        <label className="mt-4 block">
-          <span className="mb-1.5 block text-sm font-medium">Текст после проверки</span>
-          <textarea
-            value={editedText}
-            onChange={(event) => setEditedText(event.target.value)}
-            disabled={isDisabled || isFinal}
-            maxLength={4000}
-            rows={3}
-            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm disabled:opacity-70"
-          />
-        </label>
-      )}
+      <label className="mt-4 block">
+        <span className="mb-1.5 block text-sm font-medium">Текст после проверки</span>
+        <textarea
+          value={editedText}
+          onChange={(event) => setEditedText(event.target.value)}
+          disabled={isDisabled}
+          maxLength={4000}
+          rows={3}
+          className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm disabled:opacity-70"
+        />
+      </label>
 
       <label className="mt-3 block">
         <span className="mb-1.5 block text-sm font-medium">Заметка к проверке — необязательно</span>
         <input
           value={reviewNote}
           onChange={(event) => setReviewNote(event.target.value)}
-          disabled={isDisabled || isFinal}
+          disabled={isDisabled}
           maxLength={500}
           className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm disabled:opacity-70"
         />
@@ -139,7 +136,7 @@ function CandidateCard({
         </p>
       )}
 
-      {!isFinal && (
+      {!disabled && (
         <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <button
             type="button"
@@ -365,7 +362,8 @@ export default function DocumentOCRReview() {
             Фрагменты текста
           </h2>
           <p className="text-sm text-muted-foreground">
-            Отложенный фрагмент блокирует завершение проверки.
+            До завершения проверки любое решение можно изменить. Отложенный фрагмент блокирует
+            финализацию.
           </p>
         </div>
         {review.candidates.map((candidate) => (
