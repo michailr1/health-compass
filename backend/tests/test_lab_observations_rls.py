@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 import psycopg
 import pytest
@@ -373,6 +374,41 @@ def test_revoked_consent_blocks_confirmation_without_partial_rows(
             "SELECT status FROM health_compass.lab_observation_drafts WHERE id=%s",
             (draft_id,),
         ).fetchone() == ("ready",)
+
+
+def test_concurrent_confirmation_returns_one_committed_observation(
+    lab_fixture: dict[str, object],
+) -> None:
+    ids = lab_fixture
+    with psycopg.connect(_sync_url(APP_ENV)) as connection:
+        draft = _create_ready_draft(connection, ids)
+
+    idempotency_key = f"confirm:{uuid.uuid4()}"
+
+    def run_confirmation(observation_id: uuid.UUID) -> uuid.UUID:
+        with psycopg.connect(_sync_url(APP_ENV)) as connection:
+            _set_user(connection, ids["owner"])
+            return _confirm(
+                connection,
+                observation_id=observation_id,
+                draft_id=draft[0],
+                idempotency_key=idempotency_key,
+                draft_updated_at=draft[1],
+                document_updated_at=draft[2],
+                finalized_at=draft[3],
+                decision_updated_at=draft[4],
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(run_confirmation, (uuid.uuid4(), uuid.uuid4())))
+
+    assert results[0] == results[1]
+    with psycopg.connect(_sync_url(ADMIN_ENV)) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM health_compass.lab_observations "
+            "WHERE source_draft_id=%s",
+            (draft[0],),
+        ).fetchone() == (1,)
 
 
 def test_same_idempotency_key_cannot_confirm_a_different_draft(
