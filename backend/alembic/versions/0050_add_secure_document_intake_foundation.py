@@ -22,6 +22,7 @@ R = "health_compass_rls_definer"
 APP = "health_compass_app"
 ACTIVITY_SIG = f"{S}.app_duplicate_user_activity(uuid)"
 PRE_DOCUMENT_ACTIVITY_SIG = f"{S}.app_duplicate_user_activity_pre_documents(uuid)"
+DOCUMENT_VIEW_SIG = f"{S}.app_can_view_document(uuid)"
 
 AUDIT_ACTIONS_0049 = """
             'profile.updated',
@@ -61,6 +62,43 @@ def _replace_audit_constraint(*, include_document_upload: bool) -> None:
         )
         """
     )
+
+
+def _create_document_view_function() -> None:
+    # Raw-document metadata is intentionally narrower than normal profile read
+    # access: analyze may use confirmed structured observations in later slices,
+    # but cannot see source-document metadata or OCR drafts.
+    op.execute(f"GRANT CREATE ON SCHEMA {S} TO {R}")
+    op.execute(
+        f"""
+        CREATE FUNCTION {S}.app_can_view_document(target_profile_id uuid)
+        RETURNS boolean
+        LANGUAGE sql
+        STABLE
+        SECURITY DEFINER
+        SET search_path = ''
+        SET row_security = off
+        AS $$
+          SELECT EXISTS (
+            SELECT 1
+            FROM {S}.health_profiles hp
+            WHERE hp.id = target_profile_id
+              AND hp.owner_user_id = {S}.app_current_user_id()
+          ) OR EXISTS (
+            SELECT 1
+            FROM {S}.profile_permissions pp
+            WHERE pp.profile_id = target_profile_id
+              AND pp.user_id = {S}.app_current_user_id()
+              AND pp.permission IN ('owner', 'edit', 'view')
+          )
+        $$
+        """
+    )
+    op.execute(f"ALTER FUNCTION {DOCUMENT_VIEW_SIG} OWNER TO {R}")
+    op.execute(f"ALTER FUNCTION {DOCUMENT_VIEW_SIG} SET row_security = off")
+    op.execute(f"REVOKE ALL ON FUNCTION {DOCUMENT_VIEW_SIG} FROM PUBLIC")
+    op.execute(f"GRANT EXECUTE ON FUNCTION {DOCUMENT_VIEW_SIG} TO {APP}")
+    op.execute(f"REVOKE CREATE ON SCHEMA {S} FROM {R}")
 
 
 def _install_document_activity_wrapper() -> None:
@@ -254,9 +292,10 @@ def upgrade() -> None:
         op.execute(f"ALTER TABLE {S}.{table} ENABLE ROW LEVEL SECURITY")
         op.execute(f"ALTER TABLE {S}.{table} FORCE ROW LEVEL SECURITY")
 
+    _create_document_view_function()
     op.execute(
         f"CREATE POLICY profile_documents_select ON {S}.profile_documents "
-        f"FOR SELECT USING ({S}.app_can_view_profile(profile_id))"
+        f"FOR SELECT USING ({S}.app_can_view_document(profile_id))"
     )
     op.execute(
         f"CREATE POLICY profile_documents_insert ON {S}.profile_documents "
@@ -266,7 +305,7 @@ def upgrade() -> None:
     )
     op.execute(
         f"CREATE POLICY document_processing_jobs_select ON {S}.document_processing_jobs "
-        f"FOR SELECT USING ({S}.app_can_view_profile(profile_id))"
+        f"FOR SELECT USING ({S}.app_can_view_document(profile_id))"
     )
     op.execute(
         f"CREATE POLICY document_processing_jobs_insert ON {S}.document_processing_jobs "
@@ -304,5 +343,7 @@ def downgrade() -> None:
         f"DROP POLICY IF EXISTS profile_documents_select ON {S}.profile_documents"
     )
 
+    op.execute(f"REVOKE EXECUTE ON FUNCTION {DOCUMENT_VIEW_SIG} FROM {APP}")
+    op.execute(f"DROP FUNCTION IF EXISTS {DOCUMENT_VIEW_SIG}")
     op.execute(f"DROP TABLE {S}.document_processing_jobs")
     op.execute(f"DROP TABLE {S}.profile_documents")
