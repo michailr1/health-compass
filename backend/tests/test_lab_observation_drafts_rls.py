@@ -227,7 +227,7 @@ def lab_fixture() -> dict[str, object]:
             ),
         )
         versions = connection.execute(
-            "SELECT jsonb_agg(jsonb_build_object(" 
+            "SELECT jsonb_agg(jsonb_build_object("
             "'id',id::text,'updated_at',updated_at::text) "
             "ORDER BY candidate_index) "
             "FROM health_compass.document_ocr_candidates WHERE run_id=%s",
@@ -262,9 +262,16 @@ def lab_fixture() -> dict[str, object]:
         )
     yield ids
     with psycopg.connect(_sync_url(ADMIN_ENV), autocommit=True) as connection:
+        connection.execute(
+            "UPDATE health_compass.document_ocr_runs SET "
+            "review_status='not_started', review_finalized_by_user_id=NULL, "
+            "review_finalized_at=NULL, review_source_document_updated_at=NULL, "
+            "review_candidate_versions=NULL, review_patient_decision_id=NULL, "
+            "review_patient_decision_updated_at=NULL WHERE profile_id=%s",
+            (ids["profile"],),
+        )
         for statement in (
-            "DELETE FROM health_compass.lab_observation_sources "
-            "WHERE profile_id=%s",
+            "DELETE FROM health_compass.lab_observation_sources WHERE profile_id=%s",
             "DELETE FROM health_compass.lab_observations WHERE profile_id=%s",
             "DELETE FROM health_compass.lab_observation_draft_sources "
             "WHERE profile_id=%s",
