@@ -231,9 +231,12 @@ class EncryptedLocalDocumentStorage:
         relative = Path(storage_key)
         if relative.is_absolute() or ".." in relative.parts:
             raise ValueError("Invalid storage key")
-        path = (self.root / relative).resolve(strict=False)
-        if path != self.root and self.root not in path.parents:
+        path = self.root / relative
+        resolved_parent = path.parent.resolve(strict=False)
+        if resolved_parent != self.root and self.root not in resolved_parent.parents:
             raise ValueError("Invalid storage key")
+        # Keep the final component unresolved so O_NOFOLLOW and exclusive
+        # publication can detect and reject a symlink or occupied object key.
         return path
 
     async def write_quarantine(
