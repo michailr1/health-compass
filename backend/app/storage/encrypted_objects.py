@@ -52,6 +52,10 @@ class EncryptedObjectStorageFullError(EncryptedObjectError):
     """Reserved free-space floor would be crossed."""
 
 
+class EncryptedObjectAlreadyExistsError(EncryptedObjectError):
+    """An opaque destination key is already occupied."""
+
+
 @dataclass(frozen=True)
 class EncryptedObjectMetadata:
     format: str
@@ -69,6 +73,10 @@ class EnvelopeHeader:
     header_size: int
 
 
+def _absolute_without_resolving_symlinks(path: Path) -> Path:
+    return Path(os.path.abspath(os.fspath(path)))
+
+
 class DocumentKeyring:
     """Read fixed-length binary AES keys from a protected credential directory."""
 
@@ -84,7 +92,7 @@ class DocumentKeyring:
 
     def key_path(self, key_id: str) -> Path:
         validated = self._validate_key_id(key_id)
-        path = (self.directory / validated).resolve(strict=False)
+        path = self.directory / validated
         if path.parent != self.directory:
             raise EncryptionKeyUnavailableError("Invalid document encryption key path")
         return path
@@ -174,6 +182,21 @@ def _check_free_space(path: Path, reserve_bytes: int) -> None:
         )
 
 
+def _publish_exclusive(temporary: Path, destination: Path) -> None:
+    try:
+        os.link(temporary, destination, follow_symlinks=False)
+    except FileExistsError as exc:
+        raise EncryptedObjectAlreadyExistsError(
+            "Encrypted object destination already exists"
+        ) from exc
+    temporary.unlink()
+    directory_fd = os.open(destination.parent, os.O_RDONLY)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
 def encrypt_stream_to_path(
     source: BinaryIO,
     destination: Path,
@@ -195,7 +218,7 @@ def encrypt_stream_to_path(
     header = MAGIC + struct.pack("!B", len(key_id_bytes)) + key_id_bytes + nonce
     associated_data = _aad(header, document_id, artifact_role)
 
-    destination = destination.resolve(strict=False)
+    destination = _absolute_without_resolving_symlinks(destination)
     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(destination.parent, 0o700)
     _check_free_space(destination.parent, min_free_bytes + max_plaintext_bytes)
@@ -207,6 +230,7 @@ def encrypt_stream_to_path(
     plaintext_size = 0
     digest = hashlib.sha256()
     descriptor: int | None = None
+    published = False
     try:
         source.seek(0)
         descriptor = _safe_open_exclusive(temporary)
@@ -232,7 +256,8 @@ def encrypt_stream_to_path(
             output.flush()
             os.fsync(output.fileno())
 
-        os.replace(temporary, destination)
+        _publish_exclusive(temporary, destination)
+        published = True
         os.chmod(destination, 0o600)
         encrypted_size = destination.stat().st_size
         return EncryptedObjectMetadata(
@@ -246,7 +271,8 @@ def encrypt_stream_to_path(
         if descriptor is not None:
             os.close(descriptor)
         temporary.unlink(missing_ok=True)
-        destination.unlink(missing_ok=True)
+        if published:
+            destination.unlink(missing_ok=True)
         raise
 
 
@@ -293,7 +319,8 @@ def iter_decrypted_for_untrusted_consumer(
     code must verify the complete envelope before it receives plaintext.
     """
 
-    descriptor = _safe_open_readonly(source_path.resolve(strict=False))
+    safe_path = _absolute_without_resolving_symlinks(source_path)
+    descriptor = _safe_open_readonly(safe_path)
     with os.fdopen(descriptor, "rb") as source:
         metadata = os.fstat(source.fileno())
         total_size = metadata.st_size
