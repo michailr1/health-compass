@@ -181,12 +181,27 @@ async def test_quarantine_upload_and_document_access_matrix(tmp_path: Path) -> N
     settings.document_storage_root = str(tmp_path)
 
     try:
-        async with _client(actors["owner"]) as client:
-            capabilities = await client.get("/document-intake/capabilities")
-            assert capabilities.status_code == 200
-            assert capabilities.json()["upload_enabled"] is True
+        for role, expected_upload in (
+            ("owner", True),
+            ("edit", True),
+            ("view", False),
+            ("analyze", False),
+        ):
+            async with _client(actors[role]) as client:
+                capabilities = await client.get(
+                    f"/profiles/{profile}/document-intake/capabilities"
+                )
+            assert capabilities.status_code == 200, (role, capabilities.text)
+            assert capabilities.json()["upload_enabled"] is expected_upload
             assert capabilities.json()["ocr_available"] is False
 
+        async with _client(actors["outsider"]) as client:
+            outsider_capabilities = await client.get(
+                f"/profiles/{profile}/document-intake/capabilities"
+            )
+        assert outsider_capabilities.status_code == 404
+
+        async with _client(actors["owner"]) as client:
             uploaded = await client.post(
                 f"/profiles/{profile}/documents",
                 files={"file": ("analysis.pdf", b"%PDF-1.4\n%%EOF\n", "application/pdf")},
@@ -263,10 +278,15 @@ async def test_upload_is_fail_safe_when_feature_is_disabled() -> None:
     settings.document_upload_enabled = False
     try:
         async with _client(actors["owner"]) as client:
+            capabilities = await client.get(
+                f"/profiles/{profile}/document-intake/capabilities"
+            )
             response = await client.post(
                 f"/profiles/{profile}/documents",
                 files={"file": ("analysis.pdf", b"%PDF-1.4\n%%EOF\n", "application/pdf")},
             )
+        assert capabilities.status_code == 200
+        assert capabilities.json()["upload_enabled"] is False
         assert response.status_code == 503
     finally:
         settings.document_upload_enabled = old_enabled
