@@ -32,6 +32,7 @@ from app.storage.encrypted_objects import (
     DocumentKeyring,
     EncryptedObjectAlreadyExistsError,
     EncryptedObjectError,
+    EncryptedObjectMetadata,
 )
 from app.storage.rendered_documents import (
     RenderedDocumentStorage,
@@ -155,7 +156,7 @@ class DocumentRendererWorker:
         *,
         run_id: uuid.UUID,
         accepted_key: str,
-        accepted_metadata,
+        accepted_metadata: EncryptedObjectMetadata,
         artifacts: list[StoredPageArtifact],
     ) -> None:
         with self._connect() as connection:
@@ -233,43 +234,27 @@ class DocumentRendererWorker:
             return "render_error", True, 300
         return "render_internal_error", True, 300
 
-    def _render_pages(
+    def _page_numbers(self, job: ClaimedRenderJob, verified_descriptor: int) -> range:
+        if job.detected_media_type == "application/pdf":
+            inspection = self.renderer.inspect_pdf(verified_descriptor)
+            return range(1, inspection.page_count + 1)
+        if job.detected_media_type in {"image/jpeg", "image/png"}:
+            return range(1, 2)
+        raise UnsupportedDocumentError("Unsupported source media type")
+
+    def _render_page(
         self,
         job: ClaimedRenderJob,
         verified_descriptor: int,
-        run_id: uuid.UUID,
-    ) -> tuple[ClaimedRenderJob, list[StoredPageArtifact]]:
-        artifacts: list[StoredPageArtifact] = []
+        page_number: int,
+    ):
         if job.detected_media_type == "application/pdf":
-            inspection = self.renderer.inspect_pdf(verified_descriptor)
-            page_numbers = range(1, inspection.page_count + 1)
-            render_page = self.renderer.render_pdf_page
-        elif job.detected_media_type in {"image/jpeg", "image/png"}:
-            page_numbers = range(1, 2)
-            render_page = lambda descriptor, _: self.renderer.render_image(descriptor)
-        else:
-            raise UnsupportedDocumentError("Unsupported source media type")
+            return self.renderer.render_pdf_page(verified_descriptor, page_number)
+        return self.renderer.render_image(verified_descriptor)
 
-        current_job = job
-        for page_number in page_numbers:
-            rendered = render_page(verified_descriptor, page_number)
-            try:
-                artifact_id = uuid.uuid4()
-                artifact = self.storage.store_page(
-                    rendered.descriptor,
-                    document_id=job.document_id,
-                    run_id=run_id,
-                    artifact_id=artifact_id,
-                    page_number=page_number,
-                    width=rendered.width,
-                    height=rendered.height,
-                    max_plaintext_bytes=settings.document_render_max_output_bytes,
-                )
-                artifacts.append(artifact)
-            finally:
-                os.close(rendered.descriptor)
-            current_job = self.heartbeat(current_job)
-        return current_job, artifacts
+    def _delete_created_keys(self, keys: list[str]) -> None:
+        for key in reversed(keys):
+            self.storage.delete_key(key)
 
     def run_once(self) -> bool:
         job = self.claim()
@@ -286,7 +271,7 @@ class DocumentRendererWorker:
 
         run_id = uuid.uuid4()
         created_keys: list[str] = []
-        accepted_key: str | None = None
+        completed = False
         try:
             source_path = self.storage.path_for_key(job.source_storage_key)
             with verified_document_memfd(
@@ -296,8 +281,28 @@ class DocumentRendererWorker:
                 keyring=self.keyring,
                 max_plaintext_bytes=settings.document_max_bytes,
             ) as verified_descriptor:
-                job, artifacts = self._render_pages(job, verified_descriptor, run_id)
-                created_keys.extend(item.storage_key for item in artifacts)
+                artifacts: list[StoredPageArtifact] = []
+                for page_number in self._page_numbers(job, verified_descriptor):
+                    # Renew before each parser invocation so any later failure is
+                    # reported with the current lease value.
+                    job = self.heartbeat(job)
+                    rendered = self._render_page(job, verified_descriptor, page_number)
+                    try:
+                        artifact = self.storage.store_page(
+                            rendered.descriptor,
+                            document_id=job.document_id,
+                            run_id=run_id,
+                            artifact_id=uuid.uuid4(),
+                            page_number=page_number,
+                            width=rendered.width,
+                            height=rendered.height,
+                            max_plaintext_bytes=settings.document_render_max_output_bytes,
+                        )
+                        artifacts.append(artifact)
+                        created_keys.append(artifact.storage_key)
+                    finally:
+                        os.close(rendered.descriptor)
+
                 accepted_key, accepted_metadata = self.storage.store_accepted_source(
                     verified_descriptor,
                     document_id=job.document_id,
@@ -311,19 +316,16 @@ class DocumentRendererWorker:
                     accepted_metadata=accepted_metadata,
                     artifacts=artifacts,
                 )
-            self.storage.delete_key(job.source_storage_key)
-            return True
+                completed = True
         except psycopg.DatabaseError as exc:
-            # HC409/HC422 prove the completion was rejected. Network/connection
-            # errors are ambiguous and their staged objects are left for the
-            # reconciliation grace period rather than risking committed data.
+            # HC409/HC422 prove that completion was rejected. Connection errors
+            # are ambiguous: leave staged objects for reconciliation rather than
+            # deleting data that may already be committed.
             if exc.sqlstate in {"HC409", "HC422"}:
-                for key in reversed(created_keys):
-                    self.storage.delete_key(key)
+                self._delete_created_keys(created_keys)
             raise
         except Exception as exc:
-            for key in reversed(created_keys):
-                self.storage.delete_key(key)
+            self._delete_created_keys(created_keys)
             code, retryable, delay = self._failure_policy(exc)
             self._fail(
                 job,
@@ -332,6 +334,17 @@ class DocumentRendererWorker:
                 retry_after_seconds=delay,
             )
             return True
+
+        if completed:
+            # The database already points at accepted/artifact objects. Failure
+            # to remove the old quarantine copy must never roll back committed
+            # data; reconciliation will isolate it after the grace period.
+            try:
+                self.storage.delete_key(job.source_storage_key)
+            except OSError:
+                pass
+            return True
+        return False
 
     def run_forever(self, *, idle_sleep_seconds: float = 2.0) -> None:
         while True:
