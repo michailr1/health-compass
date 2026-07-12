@@ -220,6 +220,12 @@ def review_fixture() -> dict[str, object]:
 
     with psycopg.connect(_sync_url(ADMIN_ENV), autocommit=True) as connection:
         connection.execute(
+            "UPDATE health_compass.document_ocr_runs "
+            "SET review_patient_decision_id = NULL "
+            "WHERE profile_id = %s",
+            (ids["profile"],),
+        )
+        connection.execute(
             "DELETE FROM health_compass.document_ocr_patient_decisions WHERE profile_id = %s",
             (ids["profile"],),
         )
@@ -516,7 +522,7 @@ def test_owner_editor_review_patient_decision_and_finalization(
                 'document.ocr_patient_decision',
                 'document.ocr_review_finalized'
               )
-            ORDER BY created_at, id
+            ORDER BY occurred_at, id
             """,
             (ids["profile"],),
         ).fetchall()
