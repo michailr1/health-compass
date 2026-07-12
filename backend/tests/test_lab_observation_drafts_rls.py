@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import datetime
+from decimal import Decimal
+
 import json
 import os
 import uuid
@@ -518,7 +519,13 @@ def test_lab_draft_source_preserving_flow(lab_fixture: dict[str, object]) -> Non
             """,
             (draft_id,),
         ).fetchone()
-        assert row == ("ready", "Глюкоза", "5.4", "ммоль/л", 5.4)
+        assert row == (
+            "ready",
+            "Глюкоза",
+            "5.4",
+            "ммоль/л",
+            Decimal("5.400000000000"),
+        )
         assert connection.execute(
             "SELECT count(*) FROM health_compass.lab_observation_draft_sources "
             "WHERE draft_id = %s",
