@@ -1,4 +1,4 @@
-"""HC-017 E1 source-preserving laboratory draft endpoints."""
+"""HC-017 E1 draft and E2 confirmed laboratory observation endpoints."""
 
 from __future__ import annotations
 
@@ -11,24 +11,31 @@ from app.api.deps import get_current_user
 from app.db.session import get_session
 from app.models.user import User
 from app.schemas.lab_observation import (
+    ConfirmLabObservationRequest,
     CreateLabDraftRequest,
     LabDraftContextResponse,
     LabDraftResponse,
+    LabObservationConfirmationPreview,
+    LabObservationResponse,
     SetLabDraftSourcesRequest,
     SetLabDraftStatusRequest,
     UpdateLabDraftRequest,
 )
 from app.services.lab_observation import (
+    confirm_lab_observation,
     create_lab_draft,
     get_lab_draft,
     get_lab_draft_context,
+    get_lab_observation,
+    get_lab_observation_confirmation_preview,
     list_lab_drafts,
+    list_lab_observations,
     set_lab_draft_sources,
     set_lab_draft_status,
     update_lab_draft,
 )
 
-router = APIRouter(tags=["lab-drafts"])
+router = APIRouter(tags=["lab-observations"])
 
 
 def _request_id(request: Request) -> str | None:
@@ -164,3 +171,72 @@ async def post_status(
         payload,
         _request_id(request),
     )
+
+
+@router.get(
+    "/profiles/{profile_id}/documents/{document_id}/lab-drafts/"
+    "{draft_id}/confirmation",
+    response_model=LabObservationConfirmationPreview,
+)
+async def get_confirmation_preview(
+    profile_id: uuid.UUID,
+    document_id: uuid.UUID,
+    draft_id: uuid.UUID,
+    _: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> LabObservationConfirmationPreview:
+    return await get_lab_observation_confirmation_preview(
+        session,
+        profile_id,
+        document_id,
+        draft_id,
+    )
+
+
+@router.post(
+    "/profiles/{profile_id}/documents/{document_id}/lab-drafts/{draft_id}/confirm",
+    response_model=LabObservationResponse,
+    status_code=201,
+)
+async def post_confirmation(
+    profile_id: uuid.UUID,
+    document_id: uuid.UUID,
+    draft_id: uuid.UUID,
+    payload: ConfirmLabObservationRequest,
+    request: Request,
+    _: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> LabObservationResponse:
+    return await confirm_lab_observation(
+        session,
+        profile_id,
+        document_id,
+        draft_id,
+        payload,
+        _request_id(request),
+    )
+
+
+@router.get(
+    "/profiles/{profile_id}/lab-observations",
+    response_model=list[LabObservationResponse],
+)
+async def get_observations(
+    profile_id: uuid.UUID,
+    _: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[LabObservationResponse]:
+    return await list_lab_observations(session, profile_id)
+
+
+@router.get(
+    "/profiles/{profile_id}/lab-observations/{observation_id}",
+    response_model=LabObservationResponse,
+)
+async def get_observation(
+    profile_id: uuid.UUID,
+    observation_id: uuid.UUID,
+    _: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> LabObservationResponse:
+    return await get_lab_observation(session, profile_id, observation_id)
