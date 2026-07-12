@@ -91,12 +91,16 @@ jobs:
       TEST_DATABASE_MIGRATOR_URL: postgresql+psycopg://health_compass_migrator:test@127.0.0.1:5432/health_compass_test
       TEST_DATABASE_URL: postgresql+asyncpg://health_compass_app:test@127.0.0.1:5432/health_compass_test
       TEST_DATABASE_WORKER_URL: postgresql+psycopg://health_compass_worker:test@127.0.0.1:5432/health_compass_test
+      TEST_DATABASE_RENDERER_URL: postgresql+psycopg://health_compass_renderer:test@127.0.0.1:5432/health_compass_test
+      TEST_DATABASE_RECONCILER_URL: postgresql+psycopg://health_compass_reconciler:test@127.0.0.1:5432/health_compass_test
       DATABASE_URL: postgresql+asyncpg://health_compass_app:test@127.0.0.1:5432/health_compass_test
       DATABASE_MIGRATOR_URL: postgresql+psycopg://health_compass_migrator:test@127.0.0.1:5432/health_compass_test
       HC_TEST_DATABASE_ADMIN_DSN: postgresql://postgres:postgres@127.0.0.1:5432/health_compass_test
       HC_TEST_DATABASE_APP_DSN: postgresql://health_compass_app:test@127.0.0.1:5432/health_compass_test
       HC_TEST_DATABASE_MIGRATOR_DSN: postgresql://health_compass_migrator:test@127.0.0.1:5432/health_compass_test
       HC_TEST_DATABASE_WORKER_DSN: postgresql://health_compass_worker:test@127.0.0.1:5432/health_compass_test
+      HC_TEST_DATABASE_RENDERER_DSN: postgresql://health_compass_renderer:test@127.0.0.1:5432/health_compass_test
+      HC_TEST_DATABASE_RECONCILER_DSN: postgresql://health_compass_reconciler:test@127.0.0.1:5432/health_compass_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -111,11 +115,15 @@ jobs:
           CREATE ROLE health_compass_migrator LOGIN PASSWORD 'test';
           CREATE ROLE health_compass_app LOGIN PASSWORD 'test' NOBYPASSRLS;
           CREATE ROLE health_compass_worker LOGIN PASSWORD 'test' NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+          CREATE ROLE health_compass_renderer LOGIN PASSWORD 'test' NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+          CREATE ROLE health_compass_reconciler LOGIN PASSWORD 'test' NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
           CREATE ROLE health_compass_rls_definer NOLOGIN BYPASSRLS;
           GRANT health_compass_rls_definer TO health_compass_migrator;
           CREATE DATABASE health_compass_test OWNER health_compass_migrator;
           GRANT CONNECT ON DATABASE health_compass_test TO health_compass_app;
           GRANT CONNECT ON DATABASE health_compass_test TO health_compass_worker;
+          GRANT CONNECT ON DATABASE health_compass_test TO health_compass_renderer;
+          GRANT CONNECT ON DATABASE health_compass_test TO health_compass_reconciler;
           SQL
           psql -h 127.0.0.1 -U postgres -d health_compass_test -v ON_ERROR_STOP=1 <<'SQL'
           CREATE SCHEMA health_compass AUTHORIZATION health_compass_migrator;
