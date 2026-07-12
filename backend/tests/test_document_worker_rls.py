@@ -175,31 +175,22 @@ def _claim(worker_id: str) -> dict[str, object] | None:
         ).fetchone()
 
 
-def test_worker_has_no_direct_document_table_access(
-    worker_fixture: dict[str, object],
-) -> None:
+def test_restricted_worker_queue_flow(worker_fixture: dict[str, object]) -> None:
     with psycopg.connect(_sync_url(WORKER_ENV)) as connection:
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             connection.execute("SELECT id FROM health_compass.profile_documents")
-
     with psycopg.connect(_sync_url(WORKER_ENV)) as connection:
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             connection.execute(
                 "UPDATE health_compass.document_processing_jobs SET status = 'failed'"
             )
 
-
-def test_clean_scan_flow_is_lease_safe_and_idempotent(
-    worker_fixture: dict[str, object],
-) -> None:
-    worker_id = "scanner-worker:test-clean"
-    claimed = _claim(worker_id)
-    assert claimed is not None
-    assert claimed["job_id"] == worker_fixture["clean_job"]
-    assert claimed["document_id"] == worker_fixture["clean_document"]
-    assert claimed["storage_backend"] == "local_encrypted"
-    assert claimed["encryption_format"] == "hcenc1"
-    lease = claimed["lease_expires_at"]
+    clean_worker = "scanner-worker:test-clean"
+    clean = _claim(clean_worker)
+    assert clean is not None
+    assert clean["job_id"] == worker_fixture["clean_job"]
+    assert clean["storage_backend"] == "local_encrypted"
+    assert clean["encryption_format"] == "hcenc1"
 
     with psycopg.connect(_sync_url(WORKER_ENV)) as connection:
         with pytest.raises(psycopg.DatabaseError) as exc_info:
@@ -209,94 +200,42 @@ def test_clean_scan_flow_is_lease_safe_and_idempotent(
                 """,
                 (
                     worker_fixture["clean_job"],
-                    worker_id,
-                    lease - datetime.timedelta(seconds=1),
+                    clean_worker,
+                    clean["lease_expires_at"] - datetime.timedelta(seconds=1),
                 ),
             ).fetchone()
         assert exc_info.value.sqlstate == "HC409"
 
     render_job_id = uuid.uuid4()
-    audit_event_id = uuid.uuid4()
-    signature_time = datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=5)
-    completion_args = (
+    clean_audit_id = uuid.uuid4()
+    clean_args = (
         worker_fixture["clean_job"],
-        worker_id,
-        lease,
+        clean_worker,
+        clean["lease_expires_at"],
         "clamav",
         "1.4.3",
         "27800",
-        signature_time,
+        datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=5),
         "clean",
         render_job_id,
         f"render:{worker_fixture['clean_document']}:safe-render-v1",
-        audit_event_id,
+        clean_audit_id,
     )
-    with psycopg.connect(_sync_url(WORKER_ENV)) as connection:
-        assert connection.execute(
-            """
-            SELECT health_compass.app_complete_document_scan(
-              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-            )
-            """,
-            completion_args,
-        ).fetchone() == (True,)
+    for _ in range(2):
+        with psycopg.connect(_sync_url(WORKER_ENV)) as connection:
+            assert connection.execute(
+                """
+                SELECT health_compass.app_complete_document_scan(
+                  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                """,
+                clean_args,
+            ).fetchone() == (True,)
 
-    # A lost response may cause an identical completion retry. It must not add a
-    # second audit event or render job.
-    with psycopg.connect(_sync_url(WORKER_ENV)) as connection:
-        assert connection.execute(
-            """
-            SELECT health_compass.app_complete_document_scan(
-              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-            )
-            """,
-            completion_args,
-        ).fetchone() == (True,)
-
-    with psycopg.connect(_sync_url(ADMIN_ENV)) as connection:
-        document = connection.execute(
-            """
-            SELECT status, scanner_status, scanner_engine, failure_code
-            FROM health_compass.profile_documents WHERE id = %s
-            """,
-            (worker_fixture["clean_document"],),
-        ).fetchone()
-        assert document == ("quarantined", "clean", "clamav", None)
-        scan_job = connection.execute(
-            """
-            SELECT status, attempt, lease_owner, lease_expires_at
-            FROM health_compass.document_processing_jobs WHERE id = %s
-            """,
-            (worker_fixture["clean_job"],),
-        ).fetchone()
-        assert scan_job == ("succeeded", 1, None, None)
-        render_jobs = connection.execute(
-            """
-            SELECT count(*) FROM health_compass.document_processing_jobs
-            WHERE document_id = %s AND job_type = 'render'
-            """,
-            (worker_fixture["clean_document"],),
-        ).fetchone()[0]
-        audits = connection.execute(
-            """
-            SELECT count(*), min(changed_fields)
-            FROM health_compass.profile_audit_events
-            WHERE entity_id = %s AND action = 'document.scan_clean'
-            """,
-            (worker_fixture["clean_document"],),
-        ).fetchone()
-        assert render_jobs == 1
-        assert audits == (1, {})
-
-
-def test_infected_scan_is_rejected_and_enters_deletion_lifecycle(
-    worker_fixture: dict[str, object],
-) -> None:
-    worker_id = "scanner-worker:test-infected"
-    claimed = _claim(worker_id)
-    assert claimed is not None
-    assert claimed["job_id"] == worker_fixture["infected_job"]
-
+    infected_worker = "scanner-worker:test-infected"
+    infected = _claim(infected_worker)
+    assert infected is not None
+    assert infected["job_id"] == worker_fixture["infected_job"]
     with psycopg.connect(_sync_url(WORKER_ENV)) as connection:
         assert connection.execute(
             """
@@ -307,49 +246,17 @@ def test_infected_scan_is_rejected_and_enters_deletion_lifecycle(
             """,
             (
                 worker_fixture["infected_job"],
-                worker_id,
-                claimed["lease_expires_at"],
+                infected_worker,
+                infected["lease_expires_at"],
                 datetime.datetime.now(datetime.UTC),
                 uuid.uuid4(),
             ),
         ).fetchone() == (True,)
 
-    with psycopg.connect(_sync_url(ADMIN_ENV)) as connection:
-        document = connection.execute(
-            """
-            SELECT status, scanner_status, failure_code,
-                   deletion_requested_at IS NOT NULL
-            FROM health_compass.profile_documents WHERE id = %s
-            """,
-            (worker_fixture["infected_document"],),
-        ).fetchone()
-        render_count = connection.execute(
-            """
-            SELECT count(*) FROM health_compass.document_processing_jobs
-            WHERE document_id = %s AND job_type = 'render'
-            """,
-            (worker_fixture["infected_document"],),
-        ).fetchone()[0]
-        audit = connection.execute(
-            """
-            SELECT changed_fields FROM health_compass.profile_audit_events
-            WHERE entity_id = %s AND action = 'document.scan_rejected'
-            """,
-            (worker_fixture["infected_document"],),
-        ).fetchone()
-        assert document == ("rejected", "infected", "malware_detected", True)
-        assert render_count == 0
-        assert audit == ({},)
-
-
-def test_retryable_scanner_failure_returns_job_to_queue(
-    worker_fixture: dict[str, object],
-) -> None:
-    worker_id = "scanner-worker:test-retry"
-    claimed = _claim(worker_id)
-    assert claimed is not None
-    assert claimed["job_id"] == worker_fixture["retry_job"]
-
+    retry_worker = "scanner-worker:test-retry"
+    retry = _claim(retry_worker)
+    assert retry is not None
+    assert retry["job_id"] == worker_fixture["retry_job"]
     with psycopg.connect(_sync_url(WORKER_ENV)) as connection:
         assert connection.execute(
             """
@@ -359,13 +266,65 @@ def test_retryable_scanner_failure_returns_job_to_queue(
             """,
             (
                 worker_fixture["retry_job"],
-                worker_id,
-                claimed["lease_expires_at"],
+                retry_worker,
+                retry["lease_expires_at"],
             ),
         ).fetchone() == (True,)
 
     with psycopg.connect(_sync_url(ADMIN_ENV)) as connection:
-        job = connection.execute(
+        clean_document = connection.execute(
+            """
+            SELECT status, scanner_status, scanner_engine, failure_code
+            FROM health_compass.profile_documents WHERE id = %s
+            """,
+            (worker_fixture["clean_document"],),
+        ).fetchone()
+        clean_job = connection.execute(
+            """
+            SELECT status, attempt, lease_owner, lease_expires_at
+            FROM health_compass.document_processing_jobs WHERE id = %s
+            """,
+            (worker_fixture["clean_job"],),
+        ).fetchone()
+        render_jobs = connection.execute(
+            """
+            SELECT count(*) FROM health_compass.document_processing_jobs
+            WHERE document_id = %s AND job_type = 'render'
+            """,
+            (worker_fixture["clean_document"],),
+        ).fetchone()[0]
+        clean_audits = connection.execute(
+            """
+            SELECT changed_fields FROM health_compass.profile_audit_events
+            WHERE entity_id = %s AND action = 'document.scan_clean'
+            """,
+            (worker_fixture["clean_document"],),
+        ).fetchall()
+
+        infected_document = connection.execute(
+            """
+            SELECT status, scanner_status, failure_code,
+                   deletion_requested_at IS NOT NULL
+            FROM health_compass.profile_documents WHERE id = %s
+            """,
+            (worker_fixture["infected_document"],),
+        ).fetchone()
+        infected_render_count = connection.execute(
+            """
+            SELECT count(*) FROM health_compass.document_processing_jobs
+            WHERE document_id = %s AND job_type = 'render'
+            """,
+            (worker_fixture["infected_document"],),
+        ).fetchone()[0]
+        infected_audit = connection.execute(
+            """
+            SELECT changed_fields FROM health_compass.profile_audit_events
+            WHERE entity_id = %s AND action = 'document.scan_rejected'
+            """,
+            (worker_fixture["infected_document"],),
+        ).fetchone()
+
+        retry_job = connection.execute(
             """
             SELECT status, attempt, error_code, next_attempt_at IS NOT NULL,
                    lease_owner, lease_expires_at
@@ -373,15 +332,39 @@ def test_retryable_scanner_failure_returns_job_to_queue(
             """,
             (worker_fixture["retry_job"],),
         ).fetchone()
-        document = connection.execute(
+        retry_document = connection.execute(
             """
             SELECT status, scanner_status, failure_code
             FROM health_compass.profile_documents WHERE id = %s
             """,
             (worker_fixture["retry_document"],),
         ).fetchone()
-        assert job == ("queued", 1, "scanner_unavailable", True, None, None)
-        assert document == ("quarantined", "error", "scanner_unavailable")
+
+        assert clean_document == ("quarantined", "clean", "clamav", None)
+        assert clean_job == ("succeeded", 1, None, None)
+        assert render_jobs == 1
+        assert clean_audits == [({},)]
+        assert infected_document == (
+            "rejected",
+            "infected",
+            "malware_detected",
+            True,
+        )
+        assert infected_render_count == 0
+        assert infected_audit == ({},)
+        assert retry_job == (
+            "queued",
+            1,
+            "scanner_unavailable",
+            True,
+            None,
+            None,
+        )
+        assert retry_document == (
+            "quarantined",
+            "error",
+            "scanner_unavailable",
+        )
 
 
 def test_worker_functions_are_hardened_and_exclusive() -> None:
