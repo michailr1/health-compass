@@ -94,6 +94,14 @@ function basePath(profileId: string, documentId: string): string {
   return `/profiles/${profileId}/documents/${documentId}/lab-drafts`;
 }
 
+function contextVersions(context: LabDraftContext) {
+  return {
+    expected_document_updated_at: context.document_updated_at,
+    expected_review_finalized_at: context.review_finalized_at,
+    expected_patient_decision_updated_at: context.patient_decision_updated_at,
+  };
+}
+
 export function getLabDraftContext(
   profileId: string,
   documentId: string,
@@ -115,9 +123,7 @@ export function createLabDraft(
   fields: LabDraftFields,
 ): Promise<LabDraft> {
   return apiPost<LabDraft>(basePath(profileId, documentId), {
-    expected_document_updated_at: context.document_updated_at,
-    expected_review_finalized_at: context.review_finalized_at,
-    expected_patient_decision_updated_at: context.patient_decision_updated_at,
+    ...contextVersions(context),
     fields,
   });
 }
@@ -131,9 +137,7 @@ export function updateLabDraft(
 ): Promise<LabDraft> {
   return apiPatch<LabDraft>(`${basePath(profileId, documentId)}/${draft.id}`, {
     expected_updated_at: draft.updated_at,
-    expected_document_updated_at: context.document_updated_at,
-    expected_review_finalized_at: context.review_finalized_at,
-    expected_patient_decision_updated_at: context.patient_decision_updated_at,
+    ...contextVersions(context),
     fields,
   });
 }
@@ -141,6 +145,7 @@ export function updateLabDraft(
 export function setLabDraftSources(
   profileId: string,
   documentId: string,
+  context: LabDraftContext,
   draft: LabDraft,
   sources: Array<{
     candidate_id: string;
@@ -150,6 +155,7 @@ export function setLabDraftSources(
 ): Promise<LabDraft> {
   return apiPut<LabDraft>(`${basePath(profileId, documentId)}/${draft.id}/sources`, {
     expected_updated_at: draft.updated_at,
+    ...contextVersions(context),
     sources,
   });
 }
@@ -157,12 +163,14 @@ export function setLabDraftSources(
 export function setLabDraftStatus(
   profileId: string,
   documentId: string,
+  context: LabDraftContext,
   draft: LabDraft,
   status: "ready" | "rejected",
 ): Promise<LabDraft> {
   return apiPost<LabDraft>(`${basePath(profileId, documentId)}/${draft.id}/status`, {
     status,
     expected_updated_at: draft.updated_at,
+    ...contextVersions(context),
   });
 }
 
