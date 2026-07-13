@@ -6,6 +6,7 @@ import {
   SECURE_ANALYSES_COPY,
   getEmptyDashboardPrimaryAction,
   isDemoDataSource,
+  isPrimaryNavigationActive,
 } from "./productUx";
 
 describe("HC-019 product UX contract", () => {
@@ -23,6 +24,22 @@ describe("HC-019 product UX contract", () => {
     expect(PRIMARY_NAVIGATION.map((item) => item.label)).not.toContain("Генетика");
     expect(PRIMARY_NAVIGATION.map((item) => item.label)).not.toContain("План");
     expect(PRIMARY_NAVIGATION.map((item) => item.label)).not.toContain("Источники");
+  });
+
+  it("marks exactly the matching primary destination as active", () => {
+    const home = PRIMARY_NAVIGATION.find((item) => item.id === "home")!;
+    const history = PRIMARY_NAVIGATION.find((item) => item.id === "history")!;
+    const more = PRIMARY_NAVIGATION.find((item) => item.id === "more")!;
+
+    expect(isPrimaryNavigationActive(home, "/app")).toBe(true);
+    expect(isPrimaryNavigationActive(home, "/app/history")).toBe(false);
+    expect(isPrimaryNavigationActive(history, "/app/history")).toBe(true);
+    expect(isPrimaryNavigationActive(history, "/app/history/item")).toBe(true);
+    expect(isPrimaryNavigationActive(more, "/app/profile")).toBe(true);
+    expect(isPrimaryNavigationActive(more, "/app/documents/123/review")).toBe(true);
+    expect(isPrimaryNavigationActive(more, "/app/sleep")).toBe(true);
+    expect(isPrimaryNavigationActive(more, "/app/oura")).toBe(true);
+    expect(isPrimaryNavigationActive(more, "/app/add")).toBe(false);
   });
 
   it("preserves the approved analyses explanation exactly", () => {
