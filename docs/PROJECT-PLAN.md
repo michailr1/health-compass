@@ -349,6 +349,14 @@ Before any Documents/OCR/Labs rollout:
 
 The following remains outside the current E3 target and must be rebased/reimplemented from current main when scheduled:
 
+- HC-019 navigation and empty-state UX revision per owner decisions of
+  2026-07-13 recorded in `docs/PRODUCT-UX-BASELINE.md` §3: mobile bottom
+  navigation back to the five-item baseline, Documents tab renamed in
+  user-task terms with an explanatory empty state, «Сон» data domain instead
+  of the vendor-branded Oura tab (device connections live in
+  Sources/integrations), connect-source CTA hidden until a real integration
+  exists, secure-upload copy without storage-path/quarantine wording;
+  scheduled after the current HC-017 slice, never mixed into its rollout;
 - HC-013 session-management UI and rotation from stale PR `#25`;
 - operational frontend-symlink documentation from stale PR `#17`;
 - wearable ingestion and Oura;
