@@ -15,9 +15,12 @@ workers: not created as services and not running
 
 ## Rollout transition
 
+`HEAD_BEFORE` in the VPS report refers to the server repository checkout left by the stopped preflight. It is not the SHA of the still-running pre-rollout backend process.
+
 ```text
-application before: 80c7ec3f60ff6d74e2db15a8c6363c82d8cac4d8
-application after:  fb1e7a2f70c4b24edbdff6dfd2889c34a63e2c75
+running production application before restart: b8e868825f378195975e2729f3f36c21a1afa2d0
+server repository HEAD before resumed rollout: 80c7ec3f60ff6d74e2db15a8c6363c82d8cac4d8
+production application after restart: fb1e7a2f70c4b24edbdff6dfd2889c34a63e2c75
 alembic before: 0049
 alembic after:  0058
 frontend before: /opt/health-compass/releases/hc016-erasure-20260712T051208Z
