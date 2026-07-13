@@ -81,3 +81,7 @@ export function getEmptyDashboardPrimaryAction(uploadEnabled: boolean): Dashboar
     description: "Начните с доступного шага: добавьте основные сведения и медицинский контекст.",
   };
 }
+
+export function isDemoDataSource(sourceLabel: string | null | undefined): boolean {
+  return /(^|[^a-z])(demo|mock)([^a-z]|$)/i.test(sourceLabel ?? "");
+}
