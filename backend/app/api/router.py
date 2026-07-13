@@ -20,6 +20,9 @@ from app.api.routes.health_profile import router as health_profile_router
 from app.api.routes.identity import router as user_router
 from app.api.routes.identity_removal import router as identity_removal_router
 from app.api.routes.lab_observation import router as lab_observation_router
+from app.api.routes.lab_observation_lifecycle import (
+    router as lab_observation_lifecycle_router,
+)
 from app.api.routes.private import router as private_router
 from app.api.routes.profile_completion import router as profile_completion_router
 from app.api.routes.sign_in_methods import router as sign_in_methods_router
@@ -38,6 +41,7 @@ api_router.include_router(contextual_intake_router)
 api_router.include_router(documents_router)
 api_router.include_router(document_ocr_router)
 api_router.include_router(lab_observation_router)
+api_router.include_router(lab_observation_lifecycle_router)
 # Summary/review-state and section create routes are owned by
 # clinical_review_router; clinical_context_router owns list/update/void and
 # safety flags; clinical_erasure_router owns DELETE routes. The routers never
