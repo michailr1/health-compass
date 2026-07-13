@@ -39,8 +39,9 @@ describe("document intake helpers", () => {
     ];
     for (const status of statuses) {
       expect(documentStatusLabel(status)).not.toBe("");
+      expect(documentStatusLabel(status).toLowerCase()).not.toContain("карантин");
     }
-    expect(documentStatusLabel("quarantined")).toBe("В карантине");
+    expect(documentStatusLabel("quarantined")).toBe("Идёт проверка файла");
   });
 
   it("has a safe user-facing label for every scanner state", () => {
@@ -59,7 +60,7 @@ describe("document intake helpers", () => {
     expect(scannerStatusLabel("error")).not.toContain("ClamAV");
   });
 
-  it("has safe labels for every rendering state", () => {
+  it("has user-facing labels for every rendering state", () => {
     const statuses: RenderStatus[] = [
       "not_started",
       "queued",
@@ -70,9 +71,10 @@ describe("document intake helpers", () => {
     for (const status of statuses) {
       expect(renderStatusLabel(status)).not.toBe("");
     }
-    expect(renderStatusLabel("ready")).toBe("Безопасные страницы готовы");
+    expect(renderStatusLabel("ready")).toBe("Файл подготовлен");
     expect(renderStatusLabel("error")).not.toContain("ImageMagick");
     expect(renderStatusLabel("error")).not.toContain("Poppler");
+    expect(renderStatusLabel("ready")).not.toContain("страниц");
   });
 
   it("has draft-oriented labels for every OCR state", () => {
