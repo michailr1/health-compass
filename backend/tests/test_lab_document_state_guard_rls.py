@@ -95,8 +95,7 @@ def test_document_erasure_returns_hc409_while_lab_row_is_locked(
     with psycopg.connect(_sync_url(APP_ENV)) as setup_connection:
         observation_id = _create_confirmed(setup_connection, ids)
 
-    with psycopg.connect(_sync_url(APP_ENV)) as lock_connection:
-        _set_user(lock_connection, ids["owner"])
+    with psycopg.connect(_sync_url(ADMIN_ENV)) as lock_connection:
         document_updated_at = lock_connection.execute(
             "SELECT updated_at FROM health_compass.profile_documents WHERE id=%s",
             (ids["document"],),
