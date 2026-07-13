@@ -317,6 +317,22 @@ export function correctLabObservation(
   fields: LabDraftFields,
   idempotencyKey: string,
 ): Promise<LabObservation> {
+  const baseAcknowledgement = window.confirm(
+    "Подтвердите исправление: вы сверили значение с источником, проверили единицы и референсный диапазон, дату и выбранный профиль. Будет создана новая медицинская запись, а прежняя останется в истории.",
+  );
+  if (!baseAcknowledgement) {
+    return Promise.reject(new ApiError(422, "Исправление отменено"));
+  }
+
+  const notPresentAcknowledgement =
+    observation.patient_decision !== "not_present" ||
+    window.confirm(
+      "В документе не найдено имя пациента. Подтвердите, что вы вручную назначаете исправленную запись текущему профилю.",
+    );
+  if (!notPresentAcknowledgement) {
+    return Promise.reject(new ApiError(422, "Назначение профилю не подтверждено"));
+  }
+
   return apiPost<LabObservation>(
     `${lifecyclePath(profileId)}/${observation.id}/correct`,
     {
@@ -324,6 +340,13 @@ export function correctLabObservation(
       idempotency_key: idempotencyKey,
       reason,
       fields,
+      acknowledge_source_matches: true,
+      acknowledge_unit_and_range: true,
+      acknowledge_observed_at: true,
+      acknowledge_profile: true,
+      acknowledge_structured_record: true,
+      acknowledge_not_present_assignment:
+        observation.patient_decision === "not_present",
     },
   );
 }
