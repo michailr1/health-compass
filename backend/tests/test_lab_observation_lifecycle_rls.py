@@ -25,9 +25,14 @@ pytestmark = pytest.mark.integration
 VOID_SIGNATURE = (
     "health_compass.app_void_lab_observation(uuid,integer,text,uuid,text)"
 )
-CORRECT_SIGNATURE = (
+OLD_CORRECT_SIGNATURE = (
     "health_compass.app_correct_lab_observation("
     "uuid,uuid,integer,text,text,jsonb,uuid,text)"
+)
+CORRECT_SIGNATURE = (
+    "health_compass.app_correct_lab_observation("
+    "uuid,uuid,integer,text,text,jsonb,"
+    "boolean,boolean,boolean,boolean,boolean,boolean,uuid,text)"
 )
 ERASE_SIGNATURE = (
     "health_compass.app_erase_lab_observation(uuid,integer,boolean,uuid,text)"
@@ -58,11 +63,46 @@ def _create_confirmed(
     return observation_id, draft[0]
 
 
-def _corrected_payload() -> dict[str, object]:
+def _corrected_payload(value: str = "5.6") -> dict[str, object]:
     payload = _draft_payload()
-    payload["source_value_text"] = "5.6"
-    payload["numeric_value"] = "5.6"
+    payload["source_value_text"] = value
+    payload["numeric_value"] = value
     return payload
+
+
+def _correct(
+    connection: psycopg.Connection,
+    *,
+    replacement_id: uuid.UUID,
+    original_id: uuid.UUID,
+    idempotency_key: str,
+    payload: dict[str, object] | None = None,
+    acknowledgements: tuple[bool, bool, bool, bool, bool, bool] = (
+        True,
+        True,
+        True,
+        True,
+        True,
+        False,
+    ),
+) -> uuid.UUID:
+    return connection.execute(
+        """
+        SELECT health_compass.app_correct_lab_observation(
+          %s,%s,1,%s,%s,%s::jsonb,
+          %s,%s,%s,%s,%s,%s,%s,'lab-correction-test'
+        )
+        """,
+        (
+            replacement_id,
+            original_id,
+            idempotency_key,
+            "Исправлена опечатка при переносе значения",
+            json.dumps(payload or _corrected_payload()),
+            *acknowledgements,
+            uuid.uuid4(),
+        ),
+    ).fetchone()[0]
 
 
 def test_source_snapshots_are_owner_editor_only(
@@ -92,7 +132,7 @@ def test_source_snapshots_are_owner_editor_only(
             ).fetchone() == (source_count,)
 
 
-def test_correction_creates_replacement_chain_without_mutating_source(
+def test_correction_creates_replacement_with_fresh_acknowledgements(
     lab_fixture: dict[str, object],
 ) -> None:
     ids = lab_fixture
@@ -102,38 +142,18 @@ def test_correction_creates_replacement_chain_without_mutating_source(
     with psycopg.connect(_sync_url(APP_ENV)) as connection:
         original_id, _ = _create_confirmed(connection, ids)
         _set_user(connection, ids["editor"])
-        corrected = connection.execute(
-            """
-            SELECT health_compass.app_correct_lab_observation(
-              %s,%s,1,%s,%s,%s::jsonb,%s,'lab-correction-test'
-            )
-            """,
-            (
-                replacement_id,
-                original_id,
-                correction_key,
-                "Исправлена опечатка при переносе значения",
-                json.dumps(_corrected_payload()),
-                uuid.uuid4(),
-            ),
-        ).fetchone()[0]
-        assert corrected == replacement_id
-        replay = connection.execute(
-            """
-            SELECT health_compass.app_correct_lab_observation(
-              %s,%s,1,%s,%s,%s::jsonb,%s,'lab-correction-test'
-            )
-            """,
-            (
-                uuid.uuid4(),
-                original_id,
-                correction_key,
-                "Исправлена опечатка при переносе значения",
-                json.dumps(_corrected_payload()),
-                uuid.uuid4(),
-            ),
-        ).fetchone()[0]
-        assert replay == replacement_id
+        assert _correct(
+            connection,
+            replacement_id=replacement_id,
+            original_id=original_id,
+            idempotency_key=correction_key,
+        ) == replacement_id
+        assert _correct(
+            connection,
+            replacement_id=uuid.uuid4(),
+            original_id=original_id,
+            idempotency_key=correction_key,
+        ) == replacement_id
 
     with psycopg.connect(_sync_url(ADMIN_ENV)) as connection:
         original = connection.execute(
@@ -147,7 +167,10 @@ def test_correction_creates_replacement_chain_without_mutating_source(
         replacement = connection.execute(
             """
             SELECT status, source_draft_id, source_value_text, numeric_value,
-                   supersedes_observation_id, correction_reason, lifecycle_version
+                   supersedes_observation_id, correction_reason,
+                   lifecycle_version, ack_source, ack_unit_range,
+                   ack_observed_at, ack_profile, ack_structured_record,
+                   ack_not_present_assignment
             FROM health_compass.lab_observations WHERE id=%s
             """,
             (replacement_id,),
@@ -167,12 +190,26 @@ def test_correction_creates_replacement_chain_without_mutating_source(
             original_id,
             "Исправлена опечатка при переносе значения",
             1,
+            True,
+            True,
+            True,
+            True,
+            True,
+            False,
         )
         assert connection.execute(
             "SELECT count(*) FROM health_compass.lab_observation_sources "
             "WHERE observation_id=%s",
             (replacement_id,),
         ).fetchone() == (2,)
+        assert connection.execute(
+            """
+            SELECT action, changed_fields
+            FROM health_compass.profile_audit_events
+            WHERE entity_type='lab_observation' AND entity_id=%s
+            """,
+            (replacement_id,),
+        ).fetchall() == [("lab.observation.corrected", {})]
 
     for role, expected_ids in (
         ("owner", {original_id, replacement_id}),
@@ -192,6 +229,40 @@ def test_correction_creates_replacement_chain_without_mutating_source(
                 ).fetchall()
             }
             assert visible == expected_ids, role
+
+
+def test_correction_rejects_missing_acknowledgement_without_partial_rows(
+    lab_fixture: dict[str, object],
+) -> None:
+    ids = lab_fixture
+    replacement_id = uuid.uuid4()
+    with psycopg.connect(_sync_url(APP_ENV)) as connection:
+        original_id, _ = _create_confirmed(connection, ids)
+
+    with psycopg.connect(_sync_url(APP_ENV)) as connection:
+        _set_user(connection, ids["owner"])
+        with pytest.raises(psycopg.DatabaseError) as denied:
+            _correct(
+                connection,
+                replacement_id=replacement_id,
+                original_id=original_id,
+                idempotency_key=f"correct:{uuid.uuid4()}",
+                acknowledgements=(True, True, True, True, False, False),
+            )
+        assert denied.value.sqlstate == "HC422"
+
+    with psycopg.connect(_sync_url(ADMIN_ENV)) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM health_compass.lab_observations WHERE id=%s",
+            (replacement_id,),
+        ).fetchone() == (0,)
+        assert connection.execute(
+            """
+            SELECT status, lifecycle_version, superseded_by_observation_id
+            FROM health_compass.lab_observations WHERE id=%s
+            """,
+            (original_id,),
+        ).fetchone() == ("active", 1, None)
 
 
 def test_void_hides_observation_from_view_and_analyze_without_consent(
@@ -258,21 +329,12 @@ def test_only_owner_can_erase_complete_chain_after_consent_withdrawal(
     with psycopg.connect(_sync_url(APP_ENV)) as connection:
         original_id, draft_id = _create_confirmed(connection, ids)
         _set_user(connection, ids["editor"])
-        connection.execute(
-            """
-            SELECT health_compass.app_correct_lab_observation(
-              %s,%s,1,%s,%s,%s::jsonb,%s,'lab-erasure-test'
-            )
-            """,
-            (
-                replacement_id,
-                original_id,
-                f"correct:{uuid.uuid4()}",
-                "Исправлена опечатка",
-                json.dumps(_corrected_payload()),
-                uuid.uuid4(),
-            ),
-        ).fetchone()
+        _correct(
+            connection,
+            replacement_id=replacement_id,
+            original_id=original_id,
+            idempotency_key=f"correct:{uuid.uuid4()}",
+        )
 
     with psycopg.connect(_sync_url(APP_ENV)) as connection:
         _set_user(connection, ids["editor"])
@@ -291,11 +353,10 @@ def test_only_owner_can_erase_complete_chain_after_consent_withdrawal(
 
     with psycopg.connect(_sync_url(APP_ENV)) as connection:
         _set_user(connection, ids["owner"])
-        deleted = connection.execute(
+        assert connection.execute(
             "SELECT health_compass.app_erase_lab_observation(%s,1,true,%s,%s)",
             (replacement_id, uuid.uuid4(), "lab-erasure-test"),
-        ).fetchone()[0]
-        assert deleted == 2
+        ).fetchone() == (2,)
 
     with psycopg.connect(_sync_url(ADMIN_ENV)) as connection:
         assert connection.execute(
@@ -320,7 +381,7 @@ def test_only_owner_can_erase_complete_chain_after_consent_withdrawal(
             """,
             (replacement_id,),
         ).fetchall()
-        assert audit_rows == [("lab.observation_erased", {})]
+        assert audit_rows == [("lab.observation.erased", {})]
         assert "5.4" not in str(audit_rows)
         assert "5.6" not in str(audit_rows)
 
@@ -351,15 +412,14 @@ def test_document_erasure_immediately_removes_all_lab_provenance(
 
     with psycopg.connect(_sync_url(APP_ENV)) as connection:
         _set_user(connection, ids["owner"])
-        deleted = connection.execute(
+        assert connection.execute(
             """
             SELECT health_compass.app_request_document_lab_erasure(
               %s,%s,true,%s,'document-lab-erasure-test'
             )
             """,
             (ids["document"], document_updated_at, uuid.uuid4()),
-        ).fetchone()[0]
-        assert deleted == 1
+        ).fetchone() == (1,)
 
     with psycopg.connect(_sync_url(ADMIN_ENV)) as connection:
         assert connection.execute(
@@ -377,7 +437,7 @@ def test_document_erasure_immediately_removes_all_lab_provenance(
         ).fetchone() == (0,)
 
 
-def test_e3_functions_are_tightly_owned_and_workers_cannot_execute(
+def test_e3_functions_are_tightly_owned_and_old_correction_is_revoked(
     lab_fixture: dict[str, object],
 ) -> None:
     del lab_fixture
@@ -388,6 +448,11 @@ def test_e3_functions_are_tightly_owned_and_workers_cannot_execute(
         DOCUMENT_ERASURE_SIGNATURE,
     )
     with psycopg.connect(_sync_url(ADMIN_ENV)) as connection:
+        assert connection.execute(
+            "SELECT has_function_privilege('health_compass_app', %s, 'EXECUTE')",
+            (OLD_CORRECT_SIGNATURE,),
+        ).fetchone() == (False,)
+
         for signature in signatures:
             row = connection.execute(
                 """
