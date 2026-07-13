@@ -15,10 +15,9 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiGet, type HealthProfile } from "@/lib/api";
 import {
-  MORE_NAVIGATION,
   PRIMARY_NAVIGATION,
+  isPrimaryNavigationActive,
   type PrimaryNavigationId,
-  type ProductNavigationItem,
 } from "@/lib/productUx";
 
 const navIcons: Record<PrimaryNavigationId, LucideIcon> = {
@@ -29,26 +28,12 @@ const navIcons: Record<PrimaryNavigationId, LucideIcon> = {
   more: Menu,
 };
 
-const legacySecondaryRoutes = ["/app/genetics", "/app/plan", "/app/oura"];
-
 export function resolveProfileDisplayName(
   profiles: HealthProfile[] | undefined,
   accountDisplayName: string | null | undefined,
   email: string | null | undefined,
 ): string {
   return profiles?.[0]?.display_name || accountDisplayName || email || "Пользователь";
-}
-
-function isPrimaryNavigationActive(item: ProductNavigationItem, pathname: string): boolean {
-  if (item.id === "home") return pathname === "/app" || pathname === "/app/";
-  if (item.id === "more") {
-    return (
-      pathname === item.to ||
-      MORE_NAVIGATION.some((secondary) => pathname.startsWith(secondary.to)) ||
-      legacySecondaryRoutes.some((route) => pathname.startsWith(route))
-    );
-  }
-  return pathname === item.to || pathname.startsWith(`${item.to}/`);
 }
 
 export default function AppLayout() {
