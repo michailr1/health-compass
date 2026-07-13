@@ -1,32 +1,35 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  Activity,
-  Beaker,
   ChevronRight,
-  Database,
-  Dna,
-  FileText,
+  CirclePlus,
   HeartPulse,
   History,
-  KeyRound,
-  LayoutDashboard,
-  ListChecks,
+  House,
   LogOut,
+  Menu,
+  MessageCircleMore,
+  type LucideIcon,
 } from "lucide-react";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/context/AuthContext";
 import { apiGet, type HealthProfile } from "@/lib/api";
+import {
+  MORE_NAVIGATION,
+  PRIMARY_NAVIGATION,
+  type PrimaryNavigationId,
+  type ProductNavigationItem,
+} from "@/lib/productUx";
 
-const nav = [
-  { to: "/app", label: "Дашборд", icon: LayoutDashboard, end: true },
-  { to: "/app/documents", label: "Документы", icon: FileText },
-  { to: "/app/oura", label: "Oura", icon: Activity },
-  { to: "/app/genetics", label: "Генетика", icon: Dna },
-  { to: "/app/plan", label: "План", icon: ListChecks },
-  { to: "/app/sources", label: "Источники", icon: Database },
-  { to: "/app/history", label: "История", icon: History },
-];
+const navIcons: Record<PrimaryNavigationId, LucideIcon> = {
+  home: House,
+  history: History,
+  add: CirclePlus,
+  assistant: MessageCircleMore,
+  more: Menu,
+};
+
+const legacySecondaryRoutes = ["/app/genetics", "/app/plan", "/app/oura"];
 
 export function resolveProfileDisplayName(
   profiles: HealthProfile[] | undefined,
@@ -36,9 +39,22 @@ export function resolveProfileDisplayName(
   return profiles?.[0]?.display_name || accountDisplayName || email || "Пользователь";
 }
 
+function isPrimaryNavigationActive(item: ProductNavigationItem, pathname: string): boolean {
+  if (item.id === "home") return pathname === "/app" || pathname === "/app/";
+  if (item.id === "more") {
+    return (
+      pathname === item.to ||
+      MORE_NAVIGATION.some((secondary) => pathname.startsWith(secondary.to)) ||
+      legacySecondaryRoutes.some((route) => pathname.startsWith(route))
+    );
+  }
+  return pathname === item.to || pathname.startsWith(`${item.to}/`);
+}
+
 export default function AppLayout() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: profiles } = useQuery({
     queryKey: ["health-profiles", "layout"],
     queryFn: () => apiGet<HealthProfile[]>("/profiles"),
@@ -65,25 +81,27 @@ export default function AppLayout() {
             </div>
           </div>
 
-          <nav className="mt-2 flex-1 space-y-1 px-3">
-            {nav.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  [
-                    "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors",
-                    isActive
+          <nav aria-label="Основная навигация" className="mt-2 flex-1 space-y-1 px-3">
+            {PRIMARY_NAVIGATION.map((item) => {
+              const Icon = navIcons[item.id];
+              const active = isPrimaryNavigationActive(item, location.pathname);
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  aria-current={active ? "page" : undefined}
+                  className={[
+                    "group flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors",
+                    active
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-                  ].join(" ")
-                }
-              >
-                <item.icon className="h-4 w-4 opacity-80 group-hover:opacity-100" />
-                {item.label}
-              </NavLink>
-            ))}
+                  ].join(" ")}
+                >
+                  <Icon className="h-4 w-4 opacity-80 group-hover:opacity-100" />
+                  {item.label}
+                </Link>
+              );
+            })}
           </nav>
 
           <div className="border-t border-sidebar-border p-3">
@@ -104,21 +122,10 @@ export default function AppLayout() {
                   <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
                 </div>
               </Link>
-              <Link
-                to="/app/labs"
-                className="mt-1 flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
-              >
-                <Beaker className="h-3.5 w-3.5" /> Подтверждённые показатели
-              </Link>
-              <Link
-                to="/app/sign-in-methods"
-                className="mt-1 flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
-              >
-                <KeyRound className="h-3.5 w-3.5" /> Способы входа
-              </Link>
               <button
+                type="button"
                 onClick={onLogout}
-                className="mt-0.5 flex w-full items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+                className="mt-0.5 flex min-h-10 w-full items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
               >
                 <LogOut className="h-3.5 w-3.5" /> Выйти
               </button>
@@ -134,24 +141,22 @@ export default function AppLayout() {
               </div>
               <span className="font-display text-sm font-semibold">Health Compass</span>
             </div>
-            <div className="flex items-center gap-3">
-              <Link
-                to="/app/labs"
-                aria-label="Подтверждённые показатели"
-                className="text-muted-foreground"
-              >
-                <Beaker className="h-4 w-4" />
-              </Link>
-              <Link to="/app/sign-in-methods" aria-label="Способы входа" className="text-muted-foreground">
-                <KeyRound className="h-4 w-4" />
-              </Link>
+            <div className="flex items-center gap-2">
               <Link
                 to="/app/profile"
-                className="max-w-32 truncate rounded-md px-2 py-1 text-xs text-primary transition-colors hover:bg-primary/10"
+                aria-label={`Открыть профиль здоровья: ${displayName}`}
+                className="max-w-32 truncate rounded-md px-2 py-1.5 text-xs text-primary transition-colors hover:bg-primary/10"
               >
                 {displayName}
               </Link>
-              <button onClick={onLogout} className="text-xs text-muted-foreground">Выйти</button>
+              <button
+                type="button"
+                onClick={onLogout}
+                aria-label="Выйти"
+                className="grid h-9 w-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
             </div>
           </header>
 
@@ -161,25 +166,30 @@ export default function AppLayout() {
         </main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 backdrop-blur md:hidden">
-        <ul className="mx-auto grid max-w-lg grid-cols-7">
-          {nav.map((item) => (
-            <li key={item.to}>
-              <NavLink
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  [
-                    "flex flex-col items-center gap-0.5 py-2.5 text-[10px]",
-                    isActive ? "text-primary" : "text-muted-foreground",
-                  ].join(" ")
-                }
-              >
-                <item.icon className="h-5 w-5" />
-                {item.label}
-              </NavLink>
-            </li>
-          ))}
+      <nav
+        aria-label="Основная навигация"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+      >
+        <ul className="mx-auto grid max-w-lg grid-cols-5">
+          {PRIMARY_NAVIGATION.map((item) => {
+            const Icon = navIcons[item.id];
+            const active = isPrimaryNavigationActive(item, location.pathname);
+            return (
+              <li key={item.to}>
+                <Link
+                  to={item.to}
+                  aria-current={active ? "page" : undefined}
+                  className={[
+                    "flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60",
+                    active ? "text-primary" : "text-muted-foreground",
+                  ].join(" ")}
+                >
+                  <Icon className="h-5 w-5" />
+                  <span>{item.label}</span>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </nav>
     </div>
