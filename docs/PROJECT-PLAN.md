@@ -1,6 +1,6 @@
 # Health Compass — канонический план проекта
 
-Версия: 2.7  
+Версия: 2.8  
 Дата: 2026-07-13  
 Основная ветка: `main`
 
@@ -32,14 +32,15 @@ Create a secure multi-user personal-health portal combining profile data, clinic
 - No automatic diagnosis, prescription or dose calculation.
 - Human and Pet contours remain separated.
 - Production rollout is backup-first and exact-SHA.
-- `DEFINED`, `IMPLEMENTED`, `MERGED`, `CI VERIFIED` and `DEPLOYED` are separate states.
+- `DEFINED`, `IMPLEMENTED`, `MERGED`, `CI VERIFIED`, `DEPLOYED` and `OPERATIONALLY ENABLED` are separate states.
+- User navigation is organized by tasks and health-data domains, not implementation modules or vendors.
 
 ## 4. Repository and production state
 
-Repository:
+Application baseline in repository:
 
 ```text
-application: 1d61331194edf0f78b94a304d27ccf31dfa2a755
+application: fb1e7a2f70c4b24edbdff6dfd2889c34a63e2c75
 Alembic head: 0058
 ```
 
@@ -47,18 +48,29 @@ Production:
 
 ```text
 https://health.funti.cc
-application: b8e868825f378195975e2729f3f36c21a1afa2d0
-Alembic: 0049
+application: fb1e7a2f70c4b24edbdff6dfd2889c34a63e2c75
+Alembic: 0058
 DOCUMENT_UPLOAD_ENABLED=false
+scanner/renderer/reconciler/OCR services: not running
 ```
 
 Current verdict:
 
 ```text
-HC-017 B+C1+C2+D1+D2+E1+E2 MERGED / CI VERIFIED / NOT DEPLOYED
+HC-015 DEPLOYED / VERIFIED
+HC-016 DEPLOYED / MANUALLY ACCEPTED
+HC-017 B+C1+C2+D1+D2+E1+E2 PHASE 1 DEPLOYED / MANUALLY ACCEPTED
+HC-017 DOCUMENT/OCR PIPELINE DISABLED / NOT OPERATIONALLY ACCEPTED
 HC-017 E3 NEXT / NOT IMPLEMENTED
+HC-019 NAVIGATION AND EMPTY-STATE UX DEFINED / SCHEDULED AFTER E3
 HC-018 MEDICATION REMINDERS PLANNED / NOT IMPLEMENTED
-PRODUCTION UNCHANGED
+```
+
+Canonical production evidence:
+
+```text
+docs/changes/2026-07-13-hc-017-phase1-production-deployed.md
+docs/implementation/HC-017-B-E2-CONTROLLED-PRODUCTION-ROLLOUT.md
 ```
 
 ## 5. Completed platform foundations
@@ -107,11 +119,13 @@ Status: `DEPLOYED / MANUALLY ACCEPTED`.
 
 ## 6. PHASE-03 — Documents, OCR and Labs
 
-Status: `IN PROGRESS / REPOSITORY ONLY`.
+Status: `IN PROGRESS / PHASE 1 FOUNDATION DEPLOYED / PIPELINE DISABLED`.
+
+Target product flow:
 
 ```text
 Upload
-→ encrypted quarantine
+→ encrypted intake
 → malware scan
 → safe rendering
 → OCR candidates
@@ -123,13 +137,15 @@ Upload
 → metric dynamics
 ```
 
+The production database, API foundation and frontend routes through E2 are deployed. Upload and all document-processing workers remain disabled until Phase 2 controls are complete.
+
 ### Slice A — Architecture
 
 Status: `MERGED` through PR `#47`.
 
 ### Slice B — Secure Document Intake Foundation
 
-Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / PHASE 1 DEPLOYED / UPLOAD DISABLED`.
 
 ```text
 PR: #48
@@ -141,7 +157,7 @@ migration: 0050
 
 ### Slice C1 — Encrypted Scanner Worker Foundation
 
-Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / PHASE 1 DEPLOYED / WORKER NOT RUNNING`.
 
 ```text
 PR: #51
@@ -153,7 +169,7 @@ migration: 0051
 
 ### Slice C2 — Quotas, Reconciliation and Safe Rendering
 
-Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / PHASE 1 DEPLOYED / WORKERS NOT RUNNING`.
 
 ```text
 PR: #53
@@ -165,7 +181,7 @@ migrations: 0052–0053
 
 ### Slice D1 — Local OCR Candidates
 
-Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / PHASE 1 DEPLOYED / OCR WORKER NOT RUNNING`.
 
 ```text
 PR: #56
@@ -177,7 +193,7 @@ migration: 0054
 
 ### Slice D2 — Human Review and Patient Matching
 
-Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / PHASE 1 DEPLOYED / NO LIVE OCR INPUT`.
 
 ```text
 PR: #58
@@ -191,7 +207,7 @@ Finalized D2 transcription remains source text, not a clinical fact.
 
 ### Slice E1 — Source-preserving Lab Drafts
 
-Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / PHASE 1 DEPLOYED / NO LIVE DOCUMENT PIPELINE`.
 
 ```text
 PR: #61
@@ -205,7 +221,7 @@ E1 drafts preserve source wording and exact candidate provenance. They remain ow
 
 ### Slice E2 — Explicit Confirmation and Confirmed Observations
 
-Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`.
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / PHASE 1 DEPLOYED / MANUAL UI SMOKE PASSED`.
 
 ```text
 PR: #65
@@ -234,6 +250,18 @@ Canonical evidence:
 docs/implementation/HC-017-SLICE-E2-CONFIRMED-OBSERVATIONS-EVIDENCE-2026-07-13.md
 ```
 
+### Production memfd compatibility
+
+PR #68 resolved the production CPython build gap without skipping security tests or using disk-backed plaintext files.
+
+```text
+PR: #68
+verified head: 4984088d5e9e5d1412d9a071480cf7dabe408c71
+merge/deployed application: fb1e7a2f70c4b24edbdff6dfd2889c34a63e2c75
+CI: #500
+production backend tests: 191 passed, 14 skipped, 0 failed
+```
+
 ### Slice E3 — Correction, Void and Erasure
 
 Status: `NEXT / NOT IMPLEMENTED / NOT DEPLOYED`.
@@ -249,7 +277,7 @@ Required implementation order:
 7. prove sole-provenance observations cannot be orphaned;
 8. run exact-head backend/frontend/full migration/PostgreSQL CI;
 9. perform independent E3 security review;
-10. keep production unchanged.
+10. keep production unchanged until a separate rollout decision.
 
 E3 stop conditions:
 
@@ -276,11 +304,44 @@ Status: `PLANNED AFTER E3 REVIEW`.
 
 ### Slice G — Controlled Production Rollout
 
-Status: `BLOCKED`.
+Status: `PHASE 1 COMPLETED / PHASE 2 BLOCKED`.
 
-No rollout is allowed until repository implementation, security review, host provisioning, backup/restore and hostile-file gates pass.
+Phase 1 deployed the application/schema foundation through E2 with upload disabled and workers stopped.
 
-## 7. HC-018 — Medication Reminders and Telegram Notifications
+Phase 2 may enable the document-processing pipeline only after infrastructure, security, backup/restore and hostile-file gates pass.
+
+## 7. HC-019 — Navigation and Empty-State UX Revision
+
+Status: `DEFINED / NOT IMPLEMENTED / NOT DEPLOYED`.
+
+Scheduling:
+
+```text
+AFTER HC-017 E3
+DO NOT MIX WITH E3 DATABASE/SECURITY CONTRACT
+```
+
+Binding scope:
+
+- mobile bottom navigation returns to no more than five items: `Главная · История · Добавить · Ассистент · Ещё`;
+- implementation/demo tabs leave primary navigation;
+- `Документы` becomes the user-task section `Анализы`;
+- the Analyses empty state explains what to upload, what happens next and that nothing becomes a medical fact without confirmation;
+- `Oura` is not a top-level tab; `Сон` is the health-data domain;
+- device vendors live inside Sources/integration settings;
+- `Подключить источник` is hidden until a real integration exists;
+- the primary empty-dashboard CTA is always executable;
+- storage-path and `карантин` developer language is removed from UI;
+- the upload button is `Загрузить` when upload is actually available.
+
+Canonical specification:
+
+```text
+docs/implementation/HC-019-NAVIGATION-AND-EMPTY-STATE-UX.md
+docs/PRODUCT-UX-BASELINE.md
+```
+
+## 8. HC-018 — Medication Reminders and Telegram Notifications
 
 Status: `PLANNED / NOT IMPLEMENTED / NOT DEPLOYED`.
 
@@ -327,9 +388,9 @@ Canonical contract:
 docs/implementation/HC-018-MEDICATION-REMINDERS-AND-TELEGRAM.md
 ```
 
-## 8. Remaining production blockers
+## 9. Remaining blockers before enabling Documents/OCR/Labs
 
-Before any Documents/OCR/Labs rollout:
+The schema and disabled application foundation are already deployed. Before setting `DOCUMENT_UPLOAD_ENABLED=true` or starting workers, all of the following remain mandatory:
 
 - production encryption credentials, recovery and rotation;
 - private encrypted storage and bounded spool directories;
@@ -341,28 +402,34 @@ Before any Documents/OCR/Labs rollout:
 - measured quotas and disk reserve;
 - hostile-file, timeout, memory and decompression-bomb probes;
 - database plus encrypted-object backup/restore validation;
-- no-sensitive-log verification;
+- no-sensitive-log verification under the running pipeline;
 - disposable document/OCR/Labs owner smoke;
-- explicit controlled rollout approval.
+- reviewed code/config change that permits controlled production enablement;
+- explicit owner approval.
 
-## 9. Deferred platform work
+## 10. Deferred platform work
 
 The following remains outside the current E3 target and must be rebased/reimplemented from current main when scheduled:
 
 - HC-013 session-management UI and rotation from stale PR `#25`;
 - operational frontend-symlink documentation from stale PR `#17`;
 - wearable ingestion and Oura;
+- Apple Health / Health Connect ingestion under a separate ADR;
 - AI safety foundation and evidence-grounded assistant;
 - reports and doctor-visit preparation;
 - family sharing expansion;
 - Pet Health MVP;
 - monetization and entitlements.
 
-## 10. Current next action
+HC-019 is no longer an untracked deferred note; it is a defined scheduled task in section 7.
+
+## 11. Current next action
 
 ```text
-START HC-017 E3 FROM MAIN 1d613311...
+START HC-017 E3 FROM CURRENT MAIN
+APPLICATION BASELINE: fb1e7a2f70c4b24edbdff6dfd2889c34a63e2c75
 DATABASE CONTRACT AND NEGATIVE TESTS FIRST
+HC-019 FOLLOWS E3
 HC-018 REMAINS PLANNED ONLY
-NO PRODUCTION CHANGE
+NO PRODUCTION CHANGE DURING E3 IMPLEMENTATION
 ```
