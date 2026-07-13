@@ -5,6 +5,7 @@ import {
   PRIMARY_NAVIGATION,
   SECURE_ANALYSES_COPY,
   getEmptyDashboardPrimaryAction,
+  isDemoDataSource,
 } from "./productUx";
 
 describe("HC-019 product UX contract", () => {
@@ -49,5 +50,12 @@ describe("HC-019 product UX contract", () => {
       label: "Загрузить анализы",
       description: "Добавьте PDF или фото результатов анализов, чтобы начать формировать показатели.",
     });
+  });
+
+  it("detects legacy demo and mock dashboard sources without hiding real labels", () => {
+    expect(isDemoDataSource("demo-bootstrap")).toBe(true);
+    expect(isDemoDataSource("legacy mock snapshot")).toBe(true);
+    expect(isDemoDataSource("profile-confirmed-data")).toBe(false);
+    expect(isDemoDataSource(null)).toBe(false);
   });
 });
