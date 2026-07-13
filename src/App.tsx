@@ -15,6 +15,7 @@ import Documents from "./pages/Documents";
 import DocumentOCRReview from "./pages/DocumentOCRReview";
 import LabDrafts from "./pages/LabDrafts";
 import LabObservationConfirm from "./pages/LabObservationConfirm";
+import LabObservations from "./pages/LabObservations";
 import Oura from "./pages/Oura";
 import Genetics from "./pages/Genetics";
 import ActionPlan from "./pages/ActionPlan";
@@ -59,6 +60,7 @@ const App = () => (
                 path="documents/:documentId/labs/:draftId/confirm"
                 element={<LabObservationConfirm />}
               />
+              <Route path="labs" element={<LabObservations />} />
               <Route path="oura" element={<Oura />} />
               <Route path="genetics" element={<Genetics />} />
               <Route path="plan" element={<ActionPlan />} />
