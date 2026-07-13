@@ -59,7 +59,9 @@ When upload is disabled, the same screen must clearly state that loading is temp
 
 User-facing secure-storage explanation:
 
-> Файл хранится в зашифрованном виде и виден только вам. После проверки файла мы распознаем текст — вы сможете просмотреть и подтвердить результат.
+> Файл хранится в зашифрованном виде и защищён от постороннего доступа. После проверки файла мы распознаем текст — вы сможете просмотреть и подтвердить результат.
+
+This wording intentionally avoids promising owner-only visibility because Health Compass supports explicit profile permissions. The UI must describe protection accurately without exposing internal storage mechanics.
 
 Required button label when upload is enabled:
 
