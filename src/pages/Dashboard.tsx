@@ -199,7 +199,6 @@ export default function Dashboard() {
     <div className="space-y-6">
       <DashboardHeader
         profileName={data.profile.display_name}
-        sourceLabel={data.dashboard.source_label}
         createdAt={data.dashboard.created_at}
       />
 
@@ -218,7 +217,7 @@ export default function Dashboard() {
               {summary.observationIndex}
             </div>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Это значение из источника сводки. Health Compass не добавляет к нему диагноз или
+              Это значение из сохранённой сводки. Health Compass не добавляет к нему диагноз или
               медицинский вывод на этом экране.
             </p>
           </div>
@@ -254,7 +253,7 @@ export default function Dashboard() {
             Приоритеты из сохранённой сводки
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Это записи источника сводки, а не диагноз или назначение Health Compass.
+            Это записи сохранённой сводки, а не диагноз или назначение Health Compass.
           </p>
           <ul className="mt-4 grid gap-3 md:grid-cols-2">
             {priorities.map((priority) => {
@@ -293,20 +292,18 @@ export default function Dashboard() {
 
 function DashboardHeader({
   profileName,
-  sourceLabel,
   createdAt,
 }: {
   profileName: string;
-  sourceLabel?: string;
   createdAt?: string;
 }) {
   return (
     <header>
       <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">Главная</h1>
       <p className="mt-1 text-sm text-muted-foreground">Профиль: {profileName}</p>
-      {sourceLabel && createdAt && (
+      {createdAt && (
         <p className="mt-1 text-xs text-muted-foreground">
-          Источник сводки: {sourceLabel} · обновлено {new Date(createdAt).toLocaleString("ru-RU")}
+          Сводка обновлена {new Date(createdAt).toLocaleString("ru-RU")}
         </p>
       )}
     </header>
