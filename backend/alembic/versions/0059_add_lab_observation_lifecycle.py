@@ -21,16 +21,12 @@ S = "health_compass"
 APP = "health_compass_app"
 DEFINER = "health_compass_rls_definer"
 
-VOID_SIG = (
-    f"{S}.app_void_lab_observation(uuid,integer,text,uuid,text)"
-)
+VOID_SIG = f"{S}.app_void_lab_observation(uuid,integer,text,uuid,text)"
 CORRECT_SIG = (
     f"{S}.app_correct_lab_observation("
     "uuid,uuid,integer,text,text,jsonb,uuid,text)"
 )
-ERASE_SIG = (
-    f"{S}.app_erase_lab_observation(uuid,integer,boolean,uuid,text)"
-)
+ERASE_SIG = f"{S}.app_erase_lab_observation(uuid,integer,boolean,uuid,text)"
 ERASE_DOCUMENT_LABS_SIG = (
     f"{S}.app_request_document_lab_erasure("
     "uuid,timestamp with time zone,boolean,uuid,text)"
@@ -80,7 +76,7 @@ def _replace_audit_constraint(*, include_e3: bool) -> None:
             f"{actions.rstrip()},\n"
             "            'lab.observation_corrected',\n"
             "            'lab.observation_voided',\n"
-            "            'lab.observation_erased',\n"
+            "            'lab.observation.erased',\n"
             "            'document.lab_erasure_requested'\n"
         )
     op.execute(
@@ -499,7 +495,7 @@ def _create_functions() -> None:
           ) VALUES (
             p_audit_event_id, target_observation.profile_id, actor_id,
             'lab_observation', p_observation_id,
-            'lab.observation_erased', '{{}}'::jsonb, p_request_id
+            'lab.observation.erased', '{{}}'::jsonb, p_request_id
           );
           RETURN deleted_count;
         END;
@@ -796,9 +792,7 @@ def upgrade() -> None:
         f"{S}.lab_observation_drafts, {S}.lab_observation_draft_sources "
         f"TO {DEFINER}"
     )
-    op.execute(
-        f"GRANT SELECT, UPDATE ON {S}.profile_documents TO {DEFINER}"
-    )
+    op.execute(f"GRANT SELECT, UPDATE ON {S}.profile_documents TO {DEFINER}")
     op.execute(
         f"GRANT SELECT, INSERT, DELETE ON {S}.profile_audit_events TO {DEFINER}"
     )
@@ -875,6 +869,7 @@ def downgrade() -> None:
     op.execute(
         f"""
         ALTER TABLE {S}.lab_observations
+          DROP CONSTRAINT ck_lab_observations_status,
           DROP CONSTRAINT ck_lab_observations_lifecycle_state,
           DROP CONSTRAINT ck_lab_observations_origin,
           DROP CONSTRAINT ck_lab_observations_no_self_link,
