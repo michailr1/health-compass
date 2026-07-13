@@ -29,6 +29,16 @@ const completion = {
   ],
 };
 
+const capabilities = {
+  upload_enabled: false,
+  accepted_media_types: ["application/pdf", "image/jpeg", "image/png"],
+  max_bytes: 20 * 1024 * 1024,
+  max_image_pixels: 40_000_000,
+  quarantine_only: true,
+  preview_available: false,
+  ocr_available: false,
+};
+
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -40,11 +50,12 @@ afterEach(() => {
 });
 
 describe("loadDashboard", () => {
-  it("loads profile completion even when the dashboard snapshot is missing", async () => {
+  it("loads profile completion and capabilities when the dashboard snapshot is missing", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse([profile]))
       .mockResolvedValueOnce(jsonResponse(completion))
+      .mockResolvedValueOnce(jsonResponse(capabilities))
       .mockResolvedValueOnce(jsonResponse({ detail: "Dashboard not found" }, 404));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -52,10 +63,28 @@ describe("loadDashboard", () => {
       profile,
       dashboard: null,
       completion,
+      uploadEnabled: false,
     });
   });
 
-  it("keeps the dashboard usable when only completion loading fails", async () => {
+  it("uses the upload action only when the live capability enables it", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([profile]))
+      .mockResolvedValueOnce(jsonResponse(completion))
+      .mockResolvedValueOnce(jsonResponse({ ...capabilities, upload_enabled: true }))
+      .mockResolvedValueOnce(jsonResponse({ detail: "Dashboard not found" }, 404));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(loadDashboard()).resolves.toEqual({
+      profile,
+      dashboard: null,
+      completion,
+      uploadEnabled: true,
+    });
+  });
+
+  it("keeps the dashboard usable when completion and capability loading fail", async () => {
     const dashboard = {
       id: "44444444-4444-4444-4444-444444444444",
       profile_id: profile.id,
@@ -74,6 +103,7 @@ describe("loadDashboard", () => {
       .fn()
       .mockResolvedValueOnce(jsonResponse([profile]))
       .mockResolvedValueOnce(jsonResponse({ detail: "Completion unavailable" }, 503))
+      .mockResolvedValueOnce(jsonResponse({ detail: "Capabilities unavailable" }, 503))
       .mockResolvedValueOnce(jsonResponse(dashboard));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -81,6 +111,7 @@ describe("loadDashboard", () => {
       profile,
       dashboard,
       completion: null,
+      uploadEnabled: false,
     });
   });
 
@@ -89,6 +120,7 @@ describe("loadDashboard", () => {
       .fn()
       .mockResolvedValueOnce(jsonResponse([profile]))
       .mockResolvedValueOnce(jsonResponse(completion))
+      .mockResolvedValueOnce(jsonResponse(capabilities))
       .mockResolvedValueOnce(jsonResponse({ detail: "Database unavailable" }, 503));
     vi.stubGlobal("fetch", fetchMock);
 

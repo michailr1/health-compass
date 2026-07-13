@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ClipboardCheck,
   FileText,
-  LockKeyhole,
   ShieldCheck,
   Upload,
 } from "lucide-react";
@@ -27,6 +26,7 @@ import {
   type ScannerStatus,
   uploadProfileDocument,
 } from "@/lib/documentApi";
+import { ANALYSES_EMPTY_STATE_COPY, SECURE_ANALYSES_COPY } from "@/lib/productUx";
 
 const statusTone: Record<DocumentStatus, string> = {
   uploading: "border-border bg-muted/40 text-muted-foreground",
@@ -73,20 +73,20 @@ const ocrTone: Record<OCRStatus, string> = {
 function uploadErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 409) {
-      return "Для загрузки медицинских документов нужно согласие на обработку данных.";
+      return "Для загрузки результатов анализов нужно согласие на обработку данных.";
     }
     if (error.status === 413) {
       return "Файл превышает безопасный лимит размера или разрешения.";
     }
     if (error.status === 507) {
-      return "Для безопасной загрузки документа временно недостаточно места.";
+      return "Для загрузки файла временно недостаточно места.";
     }
     if (error.status === 503) {
-      return "Загрузка документов пока отключена.";
+      return "Загрузка анализов пока отключена.";
     }
     return error.message;
   }
-  return "Не удалось загрузить документ.";
+  return "Не удалось загрузить файл.";
 }
 
 function mediaTypeLabel(mediaType: string): string {
@@ -171,7 +171,7 @@ export default function Documents() {
       await queryClient.invalidateQueries({
         queryKey: ["profile-documents", profile?.id],
       });
-      toast.success("Документ помещён в защищённый карантин");
+      toast.success("Файл загружен и передан на проверку");
     },
     onError: (error) => toast.error(uploadErrorMessage(error)),
   });
@@ -196,11 +196,10 @@ export default function Documents() {
     <div className="space-y-6">
       <header>
         <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
-          Медицинские документы
+          Анализы
         </h1>
-        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-          Безопасная загрузка анализов начинается с карантина. Распознанный текст остаётся
-          черновиком и не становится медицинским фактом без проверки человеком.
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+          {ANALYSES_EMPTY_STATE_COPY}
         </p>
       </header>
 
@@ -210,53 +209,51 @@ export default function Documents() {
             <ShieldCheck className="h-5 w-5 text-primary" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="font-display text-lg font-semibold">Защищённый приём документов</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              PDF, JPEG или PNG до {formatDocumentSize(capabilities?.max_bytes ?? 20 * 1024 * 1024)}.
-              Имя файла не используется как путь хранения, а исходник недоступен для
-              просмотра, пока находится в карантине.
+            <h2 className="font-display text-lg font-semibold">Загрузка результатов</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+              {SECURE_ANALYSES_COPY}
             </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Поддерживаются PDF, JPEG и PNG до {formatDocumentSize(capabilities?.max_bytes ?? 20 * 1024 * 1024)}.
+            </p>
+
+            {capabilitiesLoading && profile && (
+              <p className="mt-4 text-sm text-muted-foreground">Проверяю доступность загрузки…</p>
+            )}
 
             {!capabilitiesLoading && capabilities && !capabilities.upload_enabled && (
               <div className="mt-4 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  Загрузка для этого профиля сейчас недоступна. Зашифрованное хранилище,
-                  проверка, безопасная подготовка страниц и распознавание проходят отдельную
-                  подготовку к производственному запуску.
-                </span>
+                <span>Загрузка анализов временно недоступна.</span>
               </div>
             )}
 
-            <div className="mt-5 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
-              <label className="block">
-                <span className="mb-1.5 block text-sm font-medium">Выберите файл</span>
-                <input
-                  ref={inputRef}
-                  type="file"
-                  accept={DOCUMENT_ACCEPT}
-                  disabled={!capabilities?.upload_enabled || uploadMutation.isPending}
-                  onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-                  className="block w-full rounded-xl border border-border bg-background px-3 py-2 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={submitUpload}
-                disabled={
-                  !profile ||
-                  !selectedFile ||
-                  !capabilities?.upload_enabled ||
-                  uploadMutation.isPending
-                }
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Upload className="h-4 w-4" />
-                {uploadMutation.isPending ? "Загрузка…" : "Загрузить в карантин"}
-              </button>
-            </div>
+            {capabilities?.upload_enabled && (
+              <div className="mt-5 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium">Выберите файл</span>
+                  <input
+                    ref={inputRef}
+                    type="file"
+                    accept={DOCUMENT_ACCEPT}
+                    disabled={uploadMutation.isPending}
+                    onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                    className="block w-full rounded-xl border border-border bg-background px-3 py-2 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={submitUpload}
+                  disabled={!profile || !selectedFile || uploadMutation.isPending}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Upload className="h-4 w-4" />
+                  {uploadMutation.isPending ? "Загрузка…" : "Загрузить"}
+                </button>
+              </div>
+            )}
 
-            {selectedFile && (
+            {selectedFile && capabilities?.upload_enabled && (
               <p className="mt-2 text-xs text-muted-foreground">
                 Выбран: {selectedFile.name} · {formatDocumentSize(selectedFile.size)}
               </p>
@@ -266,15 +263,11 @@ export default function Documents() {
       </section>
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="font-display text-lg font-semibold">Загруженные документы</h2>
-            <p className="text-sm text-muted-foreground">
-              Отображаются только безопасные метаданные и этап обработки — без доступа к
-              исходнику, внутренним путям, TSV и техническим ответам workers.
-            </p>
-          </div>
-          <LockKeyhole className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+        <div>
+          <h2 className="font-display text-lg font-semibold">Добавленные анализы</h2>
+          <p className="text-sm text-muted-foreground">
+            Здесь видны файлы и понятные этапы их проверки и подтверждения.
+          </p>
         </div>
 
         {(profilesLoading || documentsLoading) && (
@@ -290,9 +283,11 @@ export default function Documents() {
         {!documentsLoading && profile && documents?.length === 0 && (
           <div className="hm-card p-6 text-center">
             <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
-            <p className="mt-3 font-medium">Документов пока нет</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              После включения тестовой загрузки файл появится здесь со статусом обработки.
+            <p className="mt-3 font-medium">Анализов пока нет</p>
+            <p className="mx-auto mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+              {capabilities?.upload_enabled
+                ? "Загрузите PDF или фото результатов анализов, затем проверьте и подтвердите распознанные значения."
+                : "Когда загрузка станет доступна, здесь появятся файлы, этапы проверки и подтверждённые результаты."}
             </p>
           </div>
         )}

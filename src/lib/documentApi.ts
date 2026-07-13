@@ -146,9 +146,9 @@ export function formatDocumentSize(bytes: number): string {
 export function documentStatusLabel(status: DocumentStatus): string {
   const labels: Record<DocumentStatus, string> = {
     uploading: "Загружается",
-    quarantined: "В карантине",
-    scanning: "Проверяется",
-    accepted: "Проверен",
+    quarantined: "Идёт проверка файла",
+    scanning: "Идёт проверка файла",
+    accepted: "Проверка завершена",
     ocr_queued: "В очереди на распознавание",
     processing: "Обрабатывается",
     review_required: "Нужно проверить",
@@ -164,23 +164,23 @@ export function documentStatusLabel(status: DocumentStatus): string {
 
 export function scannerStatusLabel(status: ScannerStatus): string {
   const labels: Record<ScannerStatus, string> = {
-    not_scanned: "Ожидает проверки",
-    scanning: "Проверяется",
-    clean: "Проверка пройдена",
+    not_scanned: "Ожидает проверки файла",
+    scanning: "Идёт проверка файла",
+    clean: "Проверка завершена",
     infected: "Отклонён как небезопасный",
     error: "Проверка временно не завершена",
-    stale: "Ожидает обновления проверки",
+    stale: "Ожидает повторной проверки",
   };
   return labels[status];
 }
 
 export function renderStatusLabel(status: RenderStatus): string {
   const labels: Record<RenderStatus, string> = {
-    not_started: "Ожидает подготовки",
-    queued: "В очереди на подготовку",
-    rendering: "Готовятся безопасные страницы",
-    ready: "Безопасные страницы готовы",
-    error: "Не удалось подготовить страницы",
+    not_started: "Ожидает обработки",
+    queued: "В очереди на обработку",
+    rendering: "Файл обрабатывается",
+    ready: "Файл подготовлен",
+    error: "Не удалось обработать файл",
   };
   return labels[status];
 }

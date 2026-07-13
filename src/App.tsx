@@ -21,6 +21,9 @@ import Genetics from "./pages/Genetics";
 import ActionPlan from "./pages/ActionPlan";
 import Sources from "./pages/Sources";
 import History from "./pages/History";
+import AddData from "./pages/AddData";
+import Assistant from "./pages/Assistant";
+import More from "./pages/More";
 import AppLayout from "./components/AppLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
@@ -48,6 +51,9 @@ const App = () => (
               }
             >
               <Route index element={<Dashboard />} />
+              <Route path="add" element={<AddData />} />
+              <Route path="assistant" element={<Assistant />} />
+              <Route path="more" element={<More />} />
               <Route path="profile" element={<ProfileQuestionnairePage />} />
               <Route path="sign-in-methods" element={<SignInMethodsPage />} />
               <Route path="documents" element={<Documents />} />
@@ -61,7 +67,8 @@ const App = () => (
                 element={<LabObservationConfirm />}
               />
               <Route path="labs" element={<LabObservations />} />
-              <Route path="oura" element={<Oura />} />
+              <Route path="sleep" element={<Oura />} />
+              <Route path="oura" element={<Navigate to="/app/sleep" replace />} />
               <Route path="genetics" element={<Genetics />} />
               <Route path="plan" element={<ActionPlan />} />
               <Route path="sources" element={<Sources />} />
