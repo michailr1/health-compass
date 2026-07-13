@@ -1,7 +1,9 @@
 # HC-019 — Navigation and Empty-State UX Revision
 
-Status: `DEFINED / NOT IMPLEMENTED / NOT DEPLOYED`  
+Status: `IMPLEMENTED IN DRAFT PR / CI REQUIRED / NOT MERGED / NOT DEPLOYED`  
 Decision date: `2026-07-13`  
+Implementation branch: `feat/hc-019-navigation-empty-state`  
+Draft PR: `#71`  
 Scheduling: after HC-017 E3; do not mix with the E3 database/security contract.
 
 ## 1. Goal
@@ -156,3 +158,31 @@ HC-019 does not:
 - implement metric dynamics;
 - change PostgreSQL or RLS;
 - change HC-017 E3 correction/void/erasure semantics.
+
+## 11. Draft implementation evidence
+
+Implementation code head before this documentation update:
+
+```text
+326b2a6b4537de7139398925eec27a8c23f4ca46
+```
+
+Implemented in draft PR `#71`:
+
+- one shared five-item primary navigation contract for desktop and mobile;
+- programmatic active-state handling through `aria-current="page"`;
+- secondary task/data/settings navigation under `Ещё`;
+- executable `Добавить` screen that exposes only current actions;
+- honest unavailable state for `Ассистент` instead of a fake chat;
+- `Документы` → `Анализы` product language and exact approved copy;
+- upload controls rendered only when the live capability reports `upload_enabled=true`;
+- capability-aware empty-dashboard CTA;
+- honest empty states for `Источники` and `Сон`;
+- legacy `/app/oura` redirect to `/app/sleep`;
+- replacement of mock report history with entry points to real profile data;
+- removal of hard-coded dashboard KPI values and suppression of legacy demo/mock snapshots;
+- frontend tests for navigation, active states, copy, upload capability, demo-source detection and user-facing processing labels.
+
+The branch changes frontend and documentation only. It does not change backend code, migrations, feature flags, worker services or production.
+
+Exact-head CI and independent review remain required before the PR may leave draft status. Production deployment remains separately prohibited until an explicit rollout decision.
