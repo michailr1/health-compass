@@ -161,16 +161,17 @@ HC-019 does not:
 
 ## 11. Draft implementation evidence
 
-Implementation code head before this documentation update:
+Implementation code head before the final documentation synchronization:
 
 ```text
-326b2a6b4537de7139398925eec27a8c23f4ca46
+e524a1dc0d47301a225472012f86f8b51e024185
 ```
 
 Implemented in draft PR `#71`:
 
 - one shared five-item primary navigation contract for desktop and mobile;
 - programmatic active-state handling through `aria-current="page"`;
+- exact route-boundary matching to avoid false active states;
 - secondary task/data/settings navigation under `Ещё`;
 - executable `Добавить` screen that exposes only current actions;
 - honest unavailable state for `Ассистент` instead of a fake chat;
@@ -181,6 +182,7 @@ Implemented in draft PR `#71`:
 - legacy `/app/oura` redirect to `/app/sleep`;
 - replacement of mock report history with entry points to real profile data;
 - removal of hard-coded dashboard KPI values and suppression of legacy demo/mock snapshots;
+- raw internal dashboard source labels retained only for control logic and not rendered in the UI;
 - frontend tests for navigation, active states, copy, upload capability, demo-source detection and user-facing processing labels.
 
 The branch changes frontend and documentation only. It does not change backend code, migrations, feature flags, worker services or production.
