@@ -1,7 +1,7 @@
 # HC-017 E3 — Correction, Void and Owner-only Erasure
 
 Status: `IMPLEMENTED IN BRANCH / REVIEW AND CI PENDING / NOT DEPLOYED`  
-Migration: `0059`  
+Migrations: `0059–0060`  
 Production remains: application `fb1e7a2f...`, Alembic `0058`.
 
 ## 1. Purpose
@@ -74,9 +74,10 @@ The owner-only document Lab erasure function:
 
 - requires explicit confirmation and current document `updated_at`;
 - marks the document `deletion_pending` immediately;
-- makes document-derived observations inaccessible through RLS immediately;
 - deletes all Lab observations, source snapshots, drafts and draft sources for that document atomically;
 - leaves external encrypted-object deletion to the separately controlled document storage lifecycle.
+
+Migration `0060` adds an independent `SECURITY DEFINER` document-state guard to every Lab read policy. Therefore active observations and OCR snapshots are hidden whenever their source document is `deletion_pending` or erased, even when the document state changed through another application path.
 
 This function does not claim that the encrypted source object has already been physically erased.
 
@@ -96,9 +97,9 @@ The E3 migration corrects an E2 over-broad source policy: `view` and `analyze` r
 
 ## 7. Database boundary
 
-Direct application-role `INSERT`, `UPDATE` and `DELETE` remain revoked.
+Direct application-role `INSERT`, `UPDATE` and `DELETE` on Lab observation/draft tables remain revoked. Existing document-intake and audit grants are preserved.
 
-Runtime mutations are limited to:
+Runtime lifecycle mutations are limited to:
 
 ```text
 app_correct_lab_observation(...)
@@ -107,17 +108,23 @@ app_erase_lab_observation(...)
 app_request_document_lab_erasure(...)
 ```
 
+Read-policy document state is checked through:
+
+```text
+app_lab_document_available(...)
+```
+
 Each function:
 
 - is `SECURITY DEFINER`;
 - is owned by `health_compass_rls_definer`;
 - uses empty `search_path` and `row_security=off`;
-- rejects non-application sessions;
+- rejects or returns false for non-application sessions;
 - has PUBLIC execute revoked;
 - is not executable by scanner/renderer/reconciler/OCR roles;
-- returns content-free errors and writes content-free audit entries.
+- returns content-free errors and writes content-free audit entries where applicable.
 
-## 8. API
+## 8. API and UI
 
 ```text
 GET    /profiles/{profile_id}/labs/observations/history
@@ -128,6 +135,21 @@ DELETE /profiles/{profile_id}/documents/{document_id}/lab-data
 ```
 
 The lifecycle-history endpoint is owner/edit-only. Normal E2 observation reads remain active-only.
+
+Frontend route:
+
+```text
+/app/labs
+```
+
+The UI:
+
+- displays active and historical versions;
+- creates corrections as new records;
+- requires a reason for correction and void;
+- makes permanent erasure owner-only;
+- requires typing `УДАЛИТЬ` before irreversible erasure;
+- does not add another primary mobile navigation tab.
 
 ## 9. Required verification
 
@@ -143,6 +165,7 @@ The lifecycle-history endpoint is owner/edit-only. Normal E2 observation reads r
 - owners can erase after consent withdrawal;
 - full chains and originating Lab drafts are removed atomically;
 - document erasure leaves no document-derived Lab observation or draft;
+- document state guard hides rows even when `deletion_pending` was set elsewhere;
 - functions have exact ownership/config/grants;
 - full migration, downgrade guard, PostgreSQL/RLS, backend and frontend CI pass.
 
