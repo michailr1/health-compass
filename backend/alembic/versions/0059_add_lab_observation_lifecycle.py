@@ -76,7 +76,7 @@ def _replace_audit_constraint(*, include_e3: bool) -> None:
             f"{actions.rstrip()},\n"
             "            'lab.observation_corrected',\n"
             "            'lab.observation_voided',\n"
-            "            'lab.observation.erased',\n"
+            "            'lab.observation_erased',\n"
             "            'document.lab_erasure_requested'\n"
         )
     op.execute(
@@ -495,7 +495,7 @@ def _create_functions() -> None:
           ) VALUES (
             p_audit_event_id, target_observation.profile_id, actor_id,
             'lab_observation', p_observation_id,
-            'lab.observation.erased', '{{}}'::jsonb, p_request_id
+            'lab.observation_erased', '{{}}'::jsonb, p_request_id
           );
           RETURN deleted_count;
         END;
@@ -740,11 +740,6 @@ def upgrade() -> None:
         USING (
           status = 'active'
           AND {S}.app_can_view_profile(profile_id)
-          AND EXISTS (
-            SELECT 1 FROM {S}.profile_documents d
-            WHERE d.id = document_id AND d.profile_id = profile_id
-              AND d.deletion_requested_at IS NULL AND d.erased_at IS NULL
-          )
         )
         """
     )
@@ -752,28 +747,14 @@ def upgrade() -> None:
         f"""
         CREATE POLICY lab_observations_select_lifecycle_edit
         ON {S}.lab_observations FOR SELECT
-        USING (
-          {S}.app_can_edit_profile(profile_id)
-          AND EXISTS (
-            SELECT 1 FROM {S}.profile_documents d
-            WHERE d.id = document_id AND d.profile_id = profile_id
-              AND d.deletion_requested_at IS NULL AND d.erased_at IS NULL
-          )
-        )
+        USING ({S}.app_can_edit_profile(profile_id))
         """
     )
     op.execute(
         f"""
         CREATE POLICY lab_observation_sources_select_edit
         ON {S}.lab_observation_sources FOR SELECT
-        USING (
-          {S}.app_can_edit_profile(profile_id)
-          AND EXISTS (
-            SELECT 1 FROM {S}.profile_documents d
-            WHERE d.id = document_id AND d.profile_id = profile_id
-              AND d.deletion_requested_at IS NULL AND d.erased_at IS NULL
-          )
-        )
+        USING ({S}.app_can_edit_profile(profile_id))
         """
     )
 
@@ -782,8 +763,6 @@ def upgrade() -> None:
         "lab_observation_sources",
         "lab_observation_drafts",
         "lab_observation_draft_sources",
-        "profile_documents",
-        "profile_audit_events",
     ):
         op.execute(f"REVOKE INSERT, UPDATE, DELETE ON {S}.{table} FROM {APP}")
     op.execute(
