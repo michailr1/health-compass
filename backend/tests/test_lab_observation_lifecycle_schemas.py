@@ -8,9 +8,11 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.lab_observation import (
-    CorrectLabObservationRequest,
     EraseLabObservationRequest,
     VoidLabObservationRequest,
+)
+from app.schemas.lab_observation_lifecycle import (
+    CorrectLabObservationLifecycleRequest,
 )
 
 
@@ -31,15 +33,28 @@ def _fields() -> dict[str, object]:
     }
 
 
-def test_correction_requires_new_snapshot_reason_version_and_idempotency() -> None:
-    payload = CorrectLabObservationRequest(
-        expected_lifecycle_version=1,
-        idempotency_key="correct:0123456789abcdef",
-        reason="Исправлена опечатка при переносе значения",
-        fields=_fields(),
+def _correction_values() -> dict[str, object]:
+    return {
+        "expected_lifecycle_version": 1,
+        "idempotency_key": "correct:0123456789abcdef",
+        "reason": "Исправлена опечатка при переносе значения",
+        "fields": _fields(),
+        "acknowledge_source_matches": True,
+        "acknowledge_unit_and_range": True,
+        "acknowledge_observed_at": True,
+        "acknowledge_profile": True,
+        "acknowledge_structured_record": True,
+        "acknowledge_not_present_assignment": False,
+    }
+
+
+def test_correction_requires_fresh_acknowledgements_and_snapshot_contract() -> None:
+    payload = CorrectLabObservationLifecycleRequest.model_validate(
+        _correction_values()
     )
     assert payload.fields.numeric_value == Decimal("5.6")
     assert payload.expected_lifecycle_version == 1
+    assert payload.acknowledge_structured_record is True
 
 
 @pytest.mark.parametrize(
@@ -49,18 +64,18 @@ def test_correction_requires_new_snapshot_reason_version_and_idempotency() -> No
         {"idempotency_key": "short"},
         {"reason": ""},
         {"reason": "x" * 1001},
+        {"acknowledge_source_matches": False},
+        {"acknowledge_unit_and_range": False},
+        {"acknowledge_observed_at": False},
+        {"acknowledge_profile": False},
+        {"acknowledge_structured_record": False},
     ],
 )
 def test_invalid_correction_contract_is_rejected(updates: dict[str, object]) -> None:
-    values: dict[str, object] = {
-        "expected_lifecycle_version": 1,
-        "idempotency_key": "correct:0123456789abcdef",
-        "reason": "Исправление",
-        "fields": _fields(),
-    }
+    values = _correction_values()
     values.update(updates)
     with pytest.raises(ValidationError):
-        CorrectLabObservationRequest.model_validate(values)
+        CorrectLabObservationLifecycleRequest.model_validate(values)
 
 
 def test_void_requires_reason_and_optimistic_version() -> None:
