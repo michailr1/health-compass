@@ -1,13 +1,13 @@
 # HC-017 B–E2 — controlled production rollout
 
-Status: `PHASE 1 DEPLOYED / AUTOMATED SMOKE VERIFIED / MANUAL UI SMOKE PENDING`  
+Status: `PHASE 1 DEPLOYED / AUTOMATED SMOKE VERIFIED / MANUALLY ACCEPTED`  
 Target environment: `https://health.funti.cc`  
 Target host: `funti.cc` / `172.245.108.154`  
 Repository: `/opt/health-compass/repo`
 
 ## 1. Result
 
-HC-017 B–E2 Phase 1 was deployed to the existing production host for owner testing.
+HC-017 B–E2 Phase 1 was deployed to the existing production host and manually accepted by the owner.
 
 ```text
 application: fb1e7a2f70c4b24edbdff6dfd2889c34a63e2c75
@@ -20,10 +20,11 @@ worker services: not created and not running
 
 The deployment installed the application code, frontend routes, schema and restricted PostgreSQL interfaces through E2. It did not enable the document-processing product capability.
 
-Canonical detailed evidence:
+Canonical evidence:
 
 ```text
 docs/changes/2026-07-13-hc-017-phase1-production-deployed.md
+docs/changes/2026-07-13-hc-017-phase1-manually-accepted.md
 ```
 
 ## 2. Responsibility boundary
@@ -61,7 +62,7 @@ Phase 1 did not:
 - enable document upload;
 - provision encryption credentials;
 - start scanner, renderer, reconciler or OCR workers;
-- install or accept ClamAV, Poppler, ImageMagick or Tesseract as production services;
+- accept ClamAV, Poppler, ImageMagick or Tesseract as production services;
 - create production document storage or spool directories;
 - perform upload → scan → render → OCR → review → Lab confirmation testing;
 - change OAuth, SMTP, DNS or Apache routing.
@@ -239,25 +240,33 @@ HTTP 5xx
 
 ## 9. Owner manual smoke
 
-Phase 1 is not fully accepted until the owner verifies in a browser:
+The owner confirmed that the deployed UI opens correctly and the new document/Lab routes do not break the existing product.
 
-- Google login;
-- Email Magic Link login;
-- logout and re-login;
-- dashboard/profile loading;
-- Clinical Context create/edit/remove flows;
-- HC-016 permanent deletion;
-- direct refresh on document/Lab routes;
-- disabled upload state is understandable and does not break navigation.
+Accepted browser scope:
 
-Current state:
+- authenticated application shell;
+- dashboard/profile access;
+- Clinical Context access;
+- HC-016 permanent-erasure UI access;
+- `/app/documents` navigation and direct refresh;
+- `/app/lab-drafts` navigation and direct refresh;
+- disabled document state does not break navigation.
+
+Acceptance state:
 
 ```text
 SERVER ROLLOUT: ACCEPTED
 AUTOMATED SMOKE: PASSED
 SECURITY CHECKS: PASSED
-MANUAL UI SMOKE: PENDING
+MANUAL UI SMOKE: PASSED
+PHASE 1: MANUALLY ACCEPTED
 FULL DOCUMENT/OCR PIPELINE: DISABLED / NOT ACCEPTED
+```
+
+UX findings from the manual review are tracked separately as HC-019:
+
+```text
+docs/implementation/HC-019-NAVIGATION-AND-EMPTY-STATE-UX.md
 ```
 
 ## 10. Phase 2 boundary
