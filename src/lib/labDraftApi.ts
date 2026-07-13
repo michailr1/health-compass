@@ -3,6 +3,7 @@ import type { OCRCandidate } from "./documentOcrReviewApi";
 
 export type LabValueKind = "numeric" | "text" | "qualitative";
 export type LabDraftStatus = "draft" | "ready" | "rejected" | "confirmed";
+export type LabObservationStatus = "active" | "superseded" | "voided";
 export type LabSourceRole =
   | "analyte"
   | "value"
@@ -84,8 +85,8 @@ export interface LabObservation extends LabDraftFields {
   document_id: string;
   ocr_run_id: string;
   patient_decision_id: string;
-  source_draft_id: string;
-  status: "active";
+  source_draft_id?: string | null;
+  status: LabObservationStatus;
   patient_decision: "match" | "not_present";
   sources: LabObservationSource[];
   source_draft_updated_at: string;
@@ -95,6 +96,16 @@ export interface LabObservation extends LabDraftFields {
   confirmed_by_user_id: string;
   confirmed_at: string;
   created_at: string;
+  lifecycle_version: number;
+  lifecycle_updated_at: string;
+  supersedes_observation_id?: string | null;
+  superseded_by_observation_id?: string | null;
+  superseded_at?: string | null;
+  superseded_by_user_id?: string | null;
+  correction_reason?: string | null;
+  voided_at?: string | null;
+  voided_by_user_id?: string | null;
+  void_reason?: string | null;
 }
 
 export interface LabConfirmationPreview {
@@ -138,8 +149,35 @@ async function apiPut<T>(path: string, body: unknown): Promise<T> {
   return response.json();
 }
 
+async function apiDelete<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`/api${path}`, {
+    method: "DELETE",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (response.status === 401) {
+    window.location.assign("/login");
+    throw new ApiError(401, "Authentication required");
+  }
+  if (!response.ok) {
+    let payload: unknown = null;
+    try {
+      payload = await response.json();
+    } catch {
+      // Keep the structured status fallback.
+    }
+    throw parseApiError(response.status, payload, response.headers.get("X-Request-ID"));
+  }
+  return response.json();
+}
+
 function basePath(profileId: string, documentId: string): string {
   return `/profiles/${profileId}/documents/${documentId}/lab-drafts`;
+}
+
+function lifecyclePath(profileId: string): string {
+  return `/profiles/${profileId}/labs/observations`;
 }
 
 function contextVersions(context: LabDraftContext) {
@@ -266,12 +304,88 @@ export function getLabObservation(
   );
 }
 
+export function listLabObservationHistory(
+  profileId: string,
+): Promise<LabObservation[]> {
+  return apiGet<LabObservation[]>(`${lifecyclePath(profileId)}/history`);
+}
+
+export function correctLabObservation(
+  profileId: string,
+  observation: LabObservation,
+  reason: string,
+  fields: LabDraftFields,
+  idempotencyKey: string,
+): Promise<LabObservation> {
+  return apiPost<LabObservation>(
+    `${lifecyclePath(profileId)}/${observation.id}/correct`,
+    {
+      expected_lifecycle_version: observation.lifecycle_version,
+      idempotency_key: idempotencyKey,
+      reason,
+      fields,
+    },
+  );
+}
+
+export function voidLabObservation(
+  profileId: string,
+  observation: LabObservation,
+  reason: string,
+): Promise<LabObservation> {
+  return apiPost<LabObservation>(
+    `${lifecyclePath(profileId)}/${observation.id}/void`,
+    {
+      expected_lifecycle_version: observation.lifecycle_version,
+      reason,
+    },
+  );
+}
+
+export function eraseLabObservation(
+  profileId: string,
+  observation: LabObservation,
+): Promise<{
+  deleted: true;
+  deleted_observation_count: number;
+  observation_id: string;
+}> {
+  return apiDelete(`${lifecyclePath(profileId)}/${observation.id}`, {
+    expected_lifecycle_version: observation.lifecycle_version,
+    confirm_permanent_deletion: true,
+  });
+}
+
+export function requestDocumentLabErasure(
+  profileId: string,
+  documentId: string,
+  expectedDocumentUpdatedAt: string,
+): Promise<{
+  deletion_requested: true;
+  deleted_observation_count: number;
+  document_id: string;
+}> {
+  return apiDelete(`/profiles/${profileId}/documents/${documentId}/lab-data`, {
+    expected_document_updated_at: expectedDocumentUpdatedAt,
+    confirm_permanent_deletion: true,
+  });
+}
+
 export function labDraftStatusLabel(status: LabDraftStatus): string {
   const labels: Record<LabDraftStatus, string> = {
     draft: "Черновик",
     ready: "Готово к отдельному подтверждению",
     rejected: "Исключено",
     confirmed: "Подтверждено",
+  };
+  return labels[status];
+}
+
+export function labObservationStatusLabel(status: LabObservationStatus): string {
+  const labels: Record<LabObservationStatus, string> = {
+    active: "Активно",
+    superseded: "Заменено исправлением",
+    voided: "Убрано из активных",
   };
   return labels[status];
 }
