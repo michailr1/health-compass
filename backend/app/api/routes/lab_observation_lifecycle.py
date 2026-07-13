@@ -11,13 +11,15 @@ from app.api.deps import get_current_user
 from app.db.session import get_session
 from app.models.user import User
 from app.schemas.lab_observation import (
-    CorrectLabObservationRequest,
     EraseLabObservationRequest,
     EraseLabObservationResponse,
     LabObservationResponse,
     RequestDocumentLabErasureRequest,
     RequestDocumentLabErasureResponse,
     VoidLabObservationRequest,
+)
+from app.schemas.lab_observation_lifecycle import (
+    CorrectLabObservationLifecycleRequest,
 )
 from app.services.lab_observation_lifecycle import (
     correct_lab_observation,
@@ -53,7 +55,7 @@ async def get_observation_history(
 async def post_correction(
     profile_id: uuid.UUID,
     observation_id: uuid.UUID,
-    payload: CorrectLabObservationRequest,
+    payload: CorrectLabObservationLifecycleRequest,
     request: Request,
     _: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
