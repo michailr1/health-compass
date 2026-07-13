@@ -91,7 +91,10 @@ def test_document_guard_is_definer_owned_and_not_worker_callable(
         row = connection.execute(
             """
             SELECT r.rolname, p.prosecdef,
-                   p.proconfig @> ARRAY['search_path='],
+                   EXISTS (
+                     SELECT 1 FROM unnest(p.proconfig) AS config
+                     WHERE config ~ '^search_path=(""|)$'
+                   ),
                    p.proconfig @> ARRAY['row_security=off'],
                    has_function_privilege('public', %s::regprocedure, 'EXECUTE'),
                    has_function_privilege('health_compass_app', %s::regprocedure, 'EXECUTE')
