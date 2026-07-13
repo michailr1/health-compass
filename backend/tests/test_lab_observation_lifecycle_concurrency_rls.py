@@ -64,7 +64,9 @@ def _correct(
             result = connection.execute(
                 """
                 SELECT health_compass.app_correct_lab_observation(
-                  %s,%s,1,%s,%s,%s::jsonb,%s,'concurrent-correction-test'
+                  %s,%s,1,%s,%s,%s::jsonb,
+                  true,true,true,true,true,false,%s,
+                  'concurrent-correction-test'
                 )
                 """,
                 (
