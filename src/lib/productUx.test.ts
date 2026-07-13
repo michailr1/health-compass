@@ -39,6 +39,7 @@ describe("HC-019 product UX contract", () => {
     expect(isPrimaryNavigationActive(more, "/app/documents/123/review")).toBe(true);
     expect(isPrimaryNavigationActive(more, "/app/sleep")).toBe(true);
     expect(isPrimaryNavigationActive(more, "/app/oura")).toBe(true);
+    expect(isPrimaryNavigationActive(more, "/app/profilex")).toBe(false);
     expect(isPrimaryNavigationActive(more, "/app/add")).toBe(false);
   });
 
