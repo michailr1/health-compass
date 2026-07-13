@@ -1,6 +1,12 @@
 # 2026-07-13 — HC-017 B–E2 Phase 1 deployed to production
 
-Status: `DEPLOYED / AUTOMATED SMOKE VERIFIED / MANUAL UI SMOKE PENDING`.
+Status: `DEPLOYED / AUTOMATED SMOKE VERIFIED / MANUALLY ACCEPTED`.
+
+Manual acceptance addendum:
+
+```text
+docs/changes/2026-07-13-hc-017-phase1-manually-accepted.md
+```
 
 ## Exact production state
 
@@ -22,11 +28,11 @@ running production application before restart: b8e868825f378195975e2729f3f36c21a
 server repository HEAD before resumed rollout: 80c7ec3f60ff6d74e2db15a8c6363c82d8cac4d8
 production application after restart: fb1e7a2f70c4b24edbdff6dfd2889c34a63e2c75
 alembic before: 0049
-alembic after:  0058
+alembic after: 0058
 frontend before: /opt/health-compass/releases/hc016-erasure-20260712T051208Z
-frontend after:  /opt/health-compass/releases/hc017-erasure-20260712T223445Z-fb1e7a2f
+frontend after: /opt/health-compass/releases/hc017-erasure-20260712T223445Z-fb1e7a2f
 bundle before: assets/index-DwM_RbXx.js
-bundle after:  assets/index-WPvMNLMb.js
+bundle after: assets/index-WPvMNLMb.js
 ```
 
 ## Verified backup
@@ -41,38 +47,31 @@ pg_restore --list: 341 entries / success
 
 ## Runtime compatibility incident resolved
 
-The first preflight stopped before migration because the self-contained CPython 3.12.13 runtime had been built with `HAVE_MEMFD_CREATE=0` and omitted the Python `os.memfd_create` and `fcntl` sealing wrappers.
+The first preflight stopped before migration because the self-contained CPython 3.12.13 runtime had been built with `HAVE_MEMFD_CREATE=0` and omitted Python's memfd/sealing wrappers.
 
-The host kernel, libc memfd call and file sealing were independently proven functional. PR #68 added a fail-closed compatibility layer using the same libc/kernel primitive, with no filesystem plaintext fallback and no skipped rendering/OCR security tests.
+The Linux kernel, libc memfd call and file sealing were independently proven functional. PR #68 added a fail-closed compatibility layer using the same libc/kernel primitive, with no filesystem plaintext fallback and no skipped rendering/OCR security tests.
 
 ```text
 PR: #68
 verified head: 4984088d5e9e5d1412d9a071480cf7dabe408c71
-merge: fb1e7a2f70c4b24edbdff6dfd2889c34a63e2c75
+merge/deployed application: fb1e7a2f70c4b24edbdff6dfd2889c34a63e2c75
 CI: #500 / success
 ```
 
 ## Build and test evidence
 
-Backend:
-
 ```text
-compileall: success
-Ruff: success
-pytest: 191 passed, 14 skipped, 0 failed
+backend compileall: success
+backend Ruff: success
+backend pytest: 191 passed, 14 skipped, 0 failed
+frontend npm ci: success
+frontend lint: 0 errors, 27 pre-existing warnings
+frontend typecheck: success
+frontend tests: 55 passed, 0 failed
+frontend build: 2496 modules, success
 ```
 
-Frontend:
-
-```text
-npm ci: success
-lint: 0 errors, 27 pre-existing warnings
-typecheck: success
-tests: 55 passed, 0 failed
-build: 2496 modules, success
-```
-
-All eight memfd-dependent rendering/OCR tests that failed during the first preflight passed after the compatibility fix. The three new compatibility regression tests also passed.
+All eight memfd-dependent rendering/OCR tests that failed during the first preflight passed after PR #68. The three new compatibility regression tests also passed.
 
 ## PostgreSQL security evidence
 
@@ -125,18 +124,12 @@ local /health: 200
 public /api/health: 200
 production JS asset: 200
 production CSS asset: 200
-```
-
-Smoke results:
-
-```text
-/                             200
-/login                        200
-/api/health                   200
-/api/auth/provider/google     307 to accounts.google.com
-/app                          200 SPA
-/app/documents                200 SPA
-/app/lab-drafts               200 SPA
+/ : 200
+/login : 200
+/api/auth/provider/google : 307 to accounts.google.com
+/app : 200 SPA
+/app/documents : 200 SPA
+/app/lab-drafts : 200 SPA
 ```
 
 Google redirect retained:
@@ -158,9 +151,18 @@ permission denied
 HTTP 5xx
 ```
 
-## Operational boundary
+## Acceptance boundary
 
-Phase 1 deployed the code, schema, frontend routes and restricted PostgreSQL interfaces through HC-017 E2. It did not enable the document processing product capability.
+```text
+SERVER ROLLOUT: ACCEPTED
+AUTOMATED SMOKE: PASSED
+SECURITY CHECKS: PASSED
+MANUAL UI SMOKE: PASSED
+PHASE 1: MANUALLY ACCEPTED
+FULL DOCUMENT/OCR PIPELINE: DISABLED / NOT ACCEPTED
+```
+
+Phase 1 deployed the code, schema, frontend routes and restricted PostgreSQL interfaces through HC-017 E2. It did not enable the document-processing product capability.
 
 Still disabled/not provisioned:
 
@@ -174,24 +176,10 @@ Still disabled/not provisioned:
 - document/object backup and restore validation;
 - disposable upload → scan → render → OCR → review → Lab confirmation smoke.
 
-## Acceptance boundary
+UX findings from owner review are tracked as HC-019:
 
 ```text
-SERVER ROLLOUT: ACCEPTED
-AUTOMATED SMOKE: PASSED
-SECURITY CHECKS: PASSED
-MANUAL UI SMOKE: PENDING
-FULL DOCUMENT/OCR PIPELINE: DISABLED / NOT ACCEPTED
+docs/implementation/HC-019-NAVIGATION-AND-EMPTY-STATE-UX.md
 ```
-
-Required owner browser checks:
-
-- Google login and logout;
-- Email Magic Link login;
-- profile/dashboard loading;
-- Clinical Context regression;
-- HC-016 permanent deletion;
-- `/app/documents` and Lab route navigation/direct refresh;
-- clear disabled-upload state.
 
 No production code or GitHub changes were performed by the VPS deployment agent.
