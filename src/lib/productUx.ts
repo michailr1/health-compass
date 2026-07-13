@@ -56,6 +56,10 @@ export const MORE_NAVIGATION: SecondaryNavigationItem[] = [
 
 const LEGACY_SECONDARY_ROUTES = ["/app/genetics", "/app/plan", "/app/oura"];
 
+function matchesRoute(basePath: string, pathname: string): boolean {
+  return pathname === basePath || pathname.startsWith(`${basePath}/`);
+}
+
 export function isPrimaryNavigationActive(
   item: ProductNavigationItem,
   pathname: string,
@@ -63,12 +67,12 @@ export function isPrimaryNavigationActive(
   if (item.id === "home") return pathname === "/app" || pathname === "/app/";
   if (item.id === "more") {
     return (
-      pathname === item.to ||
-      MORE_NAVIGATION.some((secondary) => pathname.startsWith(secondary.to)) ||
-      LEGACY_SECONDARY_ROUTES.some((route) => pathname.startsWith(route))
+      matchesRoute(item.to, pathname) ||
+      MORE_NAVIGATION.some((secondary) => matchesRoute(secondary.to, pathname)) ||
+      LEGACY_SECONDARY_ROUTES.some((route) => matchesRoute(route, pathname))
     );
   }
-  return pathname === item.to || pathname.startsWith(`${item.to}/`);
+  return matchesRoute(item.to, pathname);
 }
 
 export const ANALYSES_EMPTY_STATE_COPY =
