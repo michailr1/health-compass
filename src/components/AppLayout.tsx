@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   Activity,
+  Beaker,
   ChevronRight,
   Database,
   Dna,
@@ -104,6 +105,12 @@ export default function AppLayout() {
                 </div>
               </Link>
               <Link
+                to="/app/labs"
+                className="mt-1 flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+              >
+                <Beaker className="h-3.5 w-3.5" /> Подтверждённые показатели
+              </Link>
+              <Link
                 to="/app/sign-in-methods"
                 className="mt-1 flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
               >
@@ -128,6 +135,13 @@ export default function AppLayout() {
               <span className="font-display text-sm font-semibold">Health Compass</span>
             </div>
             <div className="flex items-center gap-3">
+              <Link
+                to="/app/labs"
+                aria-label="Подтверждённые показатели"
+                className="text-muted-foreground"
+              >
+                <Beaker className="h-4 w-4" />
+              </Link>
               <Link to="/app/sign-in-methods" aria-label="Способы входа" className="text-muted-foreground">
                 <KeyRound className="h-4 w-4" />
               </Link>
