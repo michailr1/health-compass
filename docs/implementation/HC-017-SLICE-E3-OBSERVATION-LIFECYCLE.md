@@ -1,8 +1,13 @@
 # HC-017 E3 — Correction, Void and Owner-only Erasure
 
-Status: `IMPLEMENTED IN BRANCH / REVIEW AND CI PENDING / NOT DEPLOYED`  
+Status: `IMPLEMENTED / MERGED / CI VERIFIED / NOT DEPLOYED`  
 Migrations: `0059–0062`  
-Production remains: application `fb1e7a2f...`, Alembic `0058`.
+PR: `#70`  
+Verified head: `0b7b72b87c0f046385eb12849dc37cab8d558c02`  
+Merge: `c7dcae4da3860f6f73224f639be78424c6f3fa63`  
+CI: `#544 / success`
+
+Production remains application `fb1e7a2f...`, Alembic `0058`, upload disabled and workers stopped.
 
 ## 1. Purpose
 
@@ -16,7 +21,7 @@ E3 distinguishes three user intentions:
 
 ## 2. Immutable replacement contract
 
-Correction never updates these fields on the confirmed observation:
+Correction never updates these fields on an existing confirmed observation:
 
 - source analyte wording;
 - source value wording;
@@ -40,7 +45,7 @@ A correction:
 - changes only lifecycle metadata on the old row;
 - preserves the complete predecessor/replacement chain.
 
-The old correction SQL signature remains in migration history but application-role execute is revoked. Runtime correction uses only the hardened acknowledgement-bearing signature.
+The older acknowledgement-free correction SQL signature remains in migration history but is not executable by `health_compass_app`.
 
 ## 3. Void contract
 
@@ -72,7 +77,7 @@ Permanent observation erasure:
 - leaves only a generic content-free `lab.observation.erased` tombstone;
 - never stores medical values or erasure reasons in the tombstone.
 
-Erasing one member removes the whole chain. This avoids dangling predecessor/successor links and unsupported provenance.
+Erasing one member removes the whole chain so no dangling predecessor/successor or unsupported provenance remains.
 
 ## 5. Document-linked Lab erasure
 
@@ -81,13 +86,13 @@ The owner-only document Lab erasure function:
 - requires explicit confirmation and current document `updated_at`;
 - marks the document `deletion_pending` immediately;
 - deletes all Lab observations, source snapshots, drafts and draft sources for that document atomically;
-- leaves external encrypted-object deletion to the separately controlled document storage lifecycle.
+- leaves external encrypted-object deletion to the separate document-storage lifecycle.
 
-Migration `0060` adds an independent `SECURITY DEFINER` document-state guard to every Lab read policy. Active observations and OCR snapshots are hidden whenever the source document is `deletion_pending` or erased, even when document state changed through another application path.
+Migration `0060` adds an independent `SECURITY DEFINER` document-state guard to every Lab read policy. Lab rows are hidden whenever their source document is `deletion_pending` or erased, even if another application path changed the document.
 
-Migration `0061` adds a protected transition trigger. Before any document enters deletion/erasure, related Lab drafts and observations are locked in deterministic order with `NOWAIT`. Concurrent correction/confirmation returns controlled `HC409`; it cannot create a post-erasure orphan or PostgreSQL deadlock.
+Migration `0061` adds a protected transition trigger. Before a document enters deletion/erasure, related Lab drafts and observations are locked in deterministic order with `NOWAIT`. Concurrent correction/confirmation returns controlled `HC409`; it cannot create a post-erasure orphan or PostgreSQL deadlock.
 
-This function does not claim that the encrypted source object has already been physically erased.
+This contract does not claim that the encrypted source object has already been physically erased.
 
 ## 6. Access matrix
 
@@ -101,7 +106,7 @@ This function does not claim that the encrypted source object has already been p
 | Permanently erase observation chain | yes | no | no | no |
 | Request document-linked Lab erasure | yes | no | no | no |
 
-The E3 migration corrects an E2 over-broad source policy: `view` and `analyze` retain active structured-observation access but no longer receive OCR text snapshots.
+E3 fixes an over-broad E2 source policy: `view` and `analyze` retain active structured-observation access but no longer receive OCR text snapshots.
 
 ## 7. Database boundary
 
@@ -133,7 +138,7 @@ Each function:
 - is not executable by scanner/renderer/reconciler/OCR roles;
 - returns content-free errors and writes content-free audit entries where applicable.
 
-Migration `0062` extends the closed audit action vocabulary for the hardened correction/erasure action names without permitting arbitrary actions.
+Migration `0062` extends the closed audit action vocabulary for hardened correction/erasure action names without permitting arbitrary actions.
 
 ## 8. API and UI
 
@@ -164,12 +169,22 @@ The UI:
 - requires typing `УДАЛИТЬ` before irreversible erasure;
 - does not add another primary mobile navigation tab.
 
-## 9. Required verification
+## 9. Verification evidence
+
+Exact-head CI #544 passed:
+
+- backend compile, Ruff and unit tests;
+- frontend lint, typecheck, tests and build;
+- migration boundary tests;
+- full `head → base → head` migration cycle;
+- PostgreSQL integration and RLS tests.
+
+Negative coverage proves:
 
 - direct source/value updates remain denied;
 - correction creates a replacement and does not alter the old snapshot;
 - correction requires fresh acknowledgements;
-- old correction signature is not executable by the application role;
+- the old correction signature is not executable by the app role;
 - idempotent correction returns the same replacement;
 - stale lifecycle versions fail without partial writes;
 - two concurrent corrections produce exactly one successor;
@@ -178,18 +193,28 @@ The UI:
 - view/analyze see only active structured observations;
 - view/analyze cannot read source OCR snapshots;
 - void remains available after consent withdrawal;
-- voided observations disappear from active reads;
 - editors cannot permanently erase;
 - owners can erase after consent withdrawal;
 - full chains and originating Lab drafts are removed atomically;
-- document erasure leaves no document-derived Lab observation or draft;
 - document-state guard hides rows even when `deletion_pending` was set elsewhere;
 - functions/triggers have exact ownership, configuration and grants;
-- full migration, downgrade, PostgreSQL/RLS, backend and frontend CI pass.
+- frontend cancellation sends no correction request.
+
+Independent review verdict:
+
+```text
+ACCEPT / NO UNRESOLVED CRITICAL OR HIGH FINDING
+```
+
+Canonical merge evidence:
+
+```text
+docs/changes/2026-07-13-hc-017-e3-merged.md
+```
 
 ## 10. Stop conditions
 
-Do not merge or deploy if:
+Do not deploy if:
 
 - a confirmed source/value field can be edited in place;
 - a correction can bypass fresh acknowledgements;
@@ -209,6 +234,9 @@ Do not merge or deploy if:
 ```text
 NO PRODUCTION CHANGE
 DOCUMENT_UPLOAD_ENABLED=false
+PRODUCTION APPLICATION=fb1e7a2f70c4b24edbdff6dfd2889c34a63e2c75
 PRODUCTION ALEMBIC=0058
-E3 REQUIRES INDEPENDENT REVIEW AND EXACT-HEAD CI BEFORE ANY ROLLOUT DECISION
+E3 MERGED / CI VERIFIED / NOT DEPLOYED
 ```
+
+Any E3 production rollout requires a separate backup-first exact-SHA decision and VPS deployment instruction.
