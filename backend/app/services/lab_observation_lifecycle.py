@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lab_observation import LabObservation, LabObservationSource
 from app.schemas.lab_observation import (
-    CorrectLabObservationRequest,
     EraseLabObservationRequest,
     EraseLabObservationResponse,
     LabObservationResponse,
@@ -21,6 +20,9 @@ from app.schemas.lab_observation import (
     RequestDocumentLabErasureRequest,
     RequestDocumentLabErasureResponse,
     VoidLabObservationRequest,
+)
+from app.schemas.lab_observation_lifecycle import (
+    CorrectLabObservationLifecycleRequest,
 )
 from app.services.documents import get_document
 from app.services.health_profile import require_profile_edit_access
@@ -112,19 +114,23 @@ async def list_lab_observation_history(
         )
     )
     observations = list(result.scalars().all())
-    source_result = await session.execute(
-        select(LabObservationSource)
-        .where(
-            LabObservationSource.observation_id.in_(
-                [observation.id for observation in observations]
+    source_result = (
+        await session.execute(
+            select(LabObservationSource)
+            .where(
+                LabObservationSource.observation_id.in_(
+                    [observation.id for observation in observations]
+                )
+            )
+            .order_by(
+                LabObservationSource.page_number,
+                LabObservationSource.candidate_id,
+                LabObservationSource.source_role,
             )
         )
-        .order_by(
-            LabObservationSource.page_number,
-            LabObservationSource.candidate_id,
-            LabObservationSource.source_role,
-        )
-    ) if observations else None
+        if observations
+        else None
+    )
     grouped: dict[uuid.UUID, list[LabObservationSourceResponse]] = {}
     if source_result is not None:
         for item in source_result.scalars().all():
@@ -143,7 +149,7 @@ async def correct_lab_observation(
     session: AsyncSession,
     profile_id: uuid.UUID,
     observation_id: uuid.UUID,
-    payload: CorrectLabObservationRequest,
+    payload: CorrectLabObservationLifecycleRequest,
     request_id: str | None,
 ) -> LabObservationResponse:
     await _lifecycle_response(session, profile_id, observation_id)
@@ -155,7 +161,14 @@ async def correct_lab_observation(
             SELECT health_compass.app_correct_lab_observation(
               :new_observation_id, :observation_id,
               :expected_lifecycle_version, :idempotency_key, :reason,
-              CAST(:payload AS jsonb), :audit_event_id, :request_id
+              CAST(:payload AS jsonb),
+              :acknowledge_source_matches,
+              :acknowledge_unit_and_range,
+              :acknowledge_observed_at,
+              :acknowledge_profile,
+              :acknowledge_structured_record,
+              :acknowledge_not_present_assignment,
+              :audit_event_id, :request_id
             )
             """
         ),
@@ -167,6 +180,14 @@ async def correct_lab_observation(
             "reason": payload.reason,
             "payload": json.dumps(
                 payload.fields.model_dump(mode="json", exclude_none=True)
+            ),
+            "acknowledge_source_matches": payload.acknowledge_source_matches,
+            "acknowledge_unit_and_range": payload.acknowledge_unit_and_range,
+            "acknowledge_observed_at": payload.acknowledge_observed_at,
+            "acknowledge_profile": payload.acknowledge_profile,
+            "acknowledge_structured_record": payload.acknowledge_structured_record,
+            "acknowledge_not_present_assignment": (
+                payload.acknowledge_not_present_assignment
             ),
             "audit_event_id": uuid.uuid4(),
             "request_id": request_id,
