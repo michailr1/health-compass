@@ -10,6 +10,8 @@ import {
   type HealthProfile,
   type ProfileCompletionSummary,
 } from "@/lib/api";
+import { getDocumentIntakeCapabilities } from "@/lib/documentApi";
+import { getEmptyDashboardPrimaryAction } from "@/lib/productUx";
 
 const fmt = new Intl.NumberFormat("ru-RU");
 
@@ -41,17 +43,30 @@ const priorityIcon: Record<string, React.ComponentType<{ className?: string }>> 
 export async function loadDashboard() {
   const profiles = await apiGet<HealthProfile[]>("/profiles");
   const profile = profiles[0];
-  if (!profile) return { profile: null, dashboard: null, completion: null };
+  if (!profile) return { profile: null, dashboard: null, completion: null, uploadEnabled: false };
 
   const completionPromise = apiGet<ProfileCompletionSummary>(`/profiles/${profile.id}/completion`)
     .catch(() => null);
+  const uploadEnabledPromise = getDocumentIntakeCapabilities(profile.id)
+    .then((capabilities) => capabilities.upload_enabled)
+    .catch(() => false);
 
   try {
     const dashboard = await apiGet<DashboardSnapshot>(`/profiles/${profile.id}/dashboard`);
-    return { profile, dashboard, completion: await completionPromise };
+    return {
+      profile,
+      dashboard,
+      completion: await completionPromise,
+      uploadEnabled: await uploadEnabledPromise,
+    };
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
-      return { profile, dashboard: null, completion: await completionPromise };
+      return {
+        profile,
+        dashboard: null,
+        completion: await completionPromise,
+        uploadEnabled: await uploadEnabledPromise,
+      };
     }
     throw error;
   }
@@ -71,47 +86,46 @@ export default function Dashboard() {
   if (error) {
     return (
       <div className="hm-card border-destructive/40 bg-destructive/10 p-6 text-sm text-destructive">
-        Не удалось загрузить дашборд: {error instanceof Error ? error.message : "неизвестная ошибка"}
+        Не удалось загрузить главную: {error instanceof Error ? error.message : "неизвестная ошибка"}
       </div>
     );
   }
 
   if (!data?.profile) {
     return (
-      <div className="hm-card p-6">
-        <h1 className="font-display text-2xl font-semibold tracking-tight">Дашборд</h1>
+      <div className="hm-card p-6 md:p-8">
+        <h1 className="font-display text-2xl font-semibold tracking-tight">Главная</h1>
         <p className="mt-2 text-sm text-muted-foreground">Профиль здоровья пока не создан.</p>
+        <Link
+          to="/app/profile"
+          className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-elegant hover:opacity-90"
+        >
+          Создать профиль здоровья <ArrowRight className="h-4 w-4" />
+        </Link>
       </div>
     );
   }
 
   if (!data.dashboard) {
+    const primaryAction = getEmptyDashboardPrimaryAction(data.uploadEnabled);
     return (
       <div className="space-y-6">
         <header>
-          <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">Дашборд</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">Главная</h1>
           <p className="mt-1 text-sm text-muted-foreground">Профиль: {data.profile.display_name}</p>
         </header>
         {data.completion && <DashboardProfileContextCard completion={data.completion} />}
         <div className="hm-card p-6 md:p-8">
-          <h2 className="font-display text-xl font-semibold">Профиль создан</h2>
+          <h2 className="font-display text-xl font-semibold">Пока нет данных для сводки</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Данных для дашборда пока нет. Подключите источник или добавьте измерения — показатели появятся после первой обработки данных. Анкету можно заполнять постепенно.
+            {primaryAction.description} Анкету можно заполнять постепенно.
           </p>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link
-              to="/app/sources"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-elegant hover:opacity-90"
-            >
-              Подключить источник <ArrowRight className="h-4 w-4" />
-            </Link>
-            <Link
-              to="/app/profile"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-muted/40"
-            >
-              Открыть профиль
-            </Link>
-          </div>
+          <Link
+            to={primaryAction.to}
+            className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-elegant hover:opacity-90"
+          >
+            {primaryAction.label} <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
       </div>
     );
@@ -125,7 +139,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       <header className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
         <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">Дашборд</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">Главная</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Профиль: {data.profile.display_name}. Показатели и контекст профиля учитываются отдельно.
           </p>
@@ -212,10 +226,10 @@ export default function Dashboard() {
           </div>
         </div>
         <Link
-          to="/app/oura"
+          to="/app/sleep"
           className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-elegant hover:opacity-90"
         >
-          Открыть Oura <ArrowRight className="h-4 w-4" />
+          Открыть сон <ArrowRight className="h-4 w-4" />
         </Link>
       </section>
     </div>
