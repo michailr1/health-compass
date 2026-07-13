@@ -142,15 +142,29 @@ def test_two_concurrent_corrections_create_exactly_one_successor(
             (observation_id,),
         ).fetchall()
         assert successors == [(original[2], "active", observation_id)]
+
+
+def test_sequential_correction_writes_one_content_free_audit_event(
+    lab_fixture: dict[str, object],
+) -> None:
+    ids = lab_fixture
+    with psycopg.connect(_sync_url(APP_ENV)) as connection:
+        observation_id = _create_confirmed(connection, ids)
+
+    result = _correct(ids, observation_id, "5.6")
+    assert result[0] == "ok"
+    replacement_id = result[1]
+    assert isinstance(replacement_id, uuid.UUID)
+
+    with psycopg.connect(_sync_url(ADMIN_ENV)) as connection:
         assert connection.execute(
             """
-            SELECT count(*)
+            SELECT action, changed_fields
             FROM health_compass.profile_audit_events
-            WHERE action='lab.observation.corrected'
-              AND entity_id=%s
+            WHERE entity_type='lab_observation' AND entity_id=%s
             """,
-            (original[2],),
-        ).fetchone() == (1,)
+            (replacement_id,),
+        ).fetchall() == [("lab.observation.corrected", {})]
 
 
 def test_concurrent_correction_and_void_have_one_atomic_winner(
@@ -201,6 +215,8 @@ def test_stale_void_and_erase_versions_fail_without_partial_changes(
     ids = lab_fixture
     with psycopg.connect(_sync_url(APP_ENV)) as connection:
         observation_id = _create_confirmed(connection, ids)
+
+    with psycopg.connect(_sync_url(APP_ENV)) as connection:
         _set_user(connection, ids["owner"])
         with pytest.raises(psycopg.DatabaseError) as stale_void:
             connection.execute(
