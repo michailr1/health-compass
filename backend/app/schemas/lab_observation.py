@@ -1,4 +1,4 @@
-"""API schemas for HC-017 E1 drafts and E2 confirmed observations."""
+"""API schemas for HC-017 E1-E3 laboratory observations."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.document_ocr import DocumentOCRCandidateResponse
 
 LabDraftStatus = Literal["draft", "ready", "rejected", "confirmed"]
-LabObservationStatus = Literal["active"]
+LabObservationStatus = Literal["active", "superseded", "voided"]
 LabValueKind = Literal["numeric", "text", "qualitative"]
 LabComparator = Literal["<", "<=", "=", ">=", ">"]
 ObservedPrecision = Literal["unknown", "date", "datetime"]
@@ -254,7 +254,7 @@ class LabObservationResponse(LabDraftFields):
     document_id: uuid.UUID
     ocr_run_id: uuid.UUID
     patient_decision_id: uuid.UUID
-    source_draft_id: uuid.UUID
+    source_draft_id: uuid.UUID | None
     status: LabObservationStatus
     patient_decision: Literal["match", "not_present"]
     sources: list[LabObservationSourceResponse] = Field(default_factory=list)
@@ -265,3 +265,51 @@ class LabObservationResponse(LabDraftFields):
     confirmed_by_user_id: uuid.UUID
     confirmed_at: datetime.datetime
     created_at: datetime.datetime
+    lifecycle_version: int
+    lifecycle_updated_at: datetime.datetime
+    supersedes_observation_id: uuid.UUID | None = None
+    superseded_by_observation_id: uuid.UUID | None = None
+    superseded_at: datetime.datetime | None = None
+    superseded_by_user_id: uuid.UUID | None = None
+    correction_reason: str | None = None
+    voided_at: datetime.datetime | None = None
+    voided_by_user_id: uuid.UUID | None = None
+    void_reason: str | None = None
+
+
+class CorrectLabObservationRequest(BaseModel):
+    expected_lifecycle_version: int = Field(ge=1)
+    idempotency_key: str = Field(
+        min_length=16,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
+    reason: str = Field(min_length=1, max_length=1000)
+    fields: LabDraftFields
+
+
+class VoidLabObservationRequest(BaseModel):
+    expected_lifecycle_version: int = Field(ge=1)
+    reason: str = Field(min_length=1, max_length=1000)
+
+
+class EraseLabObservationRequest(BaseModel):
+    expected_lifecycle_version: int = Field(ge=1)
+    confirm_permanent_deletion: Literal[True]
+
+
+class EraseLabObservationResponse(BaseModel):
+    deleted: Literal[True]
+    deleted_observation_count: int = Field(ge=1)
+    observation_id: uuid.UUID
+
+
+class RequestDocumentLabErasureRequest(BaseModel):
+    expected_document_updated_at: datetime.datetime
+    confirm_permanent_deletion: Literal[True]
+
+
+class RequestDocumentLabErasureResponse(BaseModel):
+    deletion_requested: Literal[True]
+    deleted_observation_count: int = Field(ge=0)
+    document_id: uuid.UUID

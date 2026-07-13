@@ -1,4 +1,4 @@
-"""HC-017 E1 drafts and E2 immutable confirmed laboratory observations."""
+"""HC-017 E1-E3 laboratory draft, observation and lifecycle models."""
 
 from __future__ import annotations
 
@@ -171,6 +171,13 @@ class LabObservation(Base):
             name="uq_lab_observations_profile_idempotency",
         ),
         UniqueConstraint("source_draft_id", name="uq_lab_observations_source_draft"),
+        UniqueConstraint(
+            "supersedes_observation_id", name="uq_lab_observations_supersedes"
+        ),
+        UniqueConstraint(
+            "superseded_by_observation_id",
+            name="uq_lab_observations_superseded_by",
+        ),
         ForeignKeyConstraint(
             ["document_id", "profile_id"],
             [
@@ -196,10 +203,10 @@ class LabObservation(Base):
         ForeignKey(f"{SCHEMA}.document_ocr_patient_decisions.id"),
         nullable=False,
     )
-    source_draft_id: Mapped[uuid.UUID] = mapped_column(
+    source_draft_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey(f"{SCHEMA}.lab_observation_drafts.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     patient_decision: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -260,6 +267,42 @@ class LabObservation(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    lifecycle_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    lifecycle_updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    supersedes_observation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            f"{SCHEMA}.lab_observations.id",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        nullable=True,
+    )
+    superseded_by_observation_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            f"{SCHEMA}.lab_observations.id",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        nullable=True,
+    )
+    superseded_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    superseded_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey(f"{SCHEMA}.users.id"), nullable=True
+    )
+    correction_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    voided_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    voided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey(f"{SCHEMA}.users.id"), nullable=True
+    )
+    void_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
 class LabObservationSource(Base):
@@ -279,7 +322,7 @@ class LabObservationSource(Base):
 
     observation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey(f"{SCHEMA}.lab_observations.id", ondelete="RESTRICT"),
+        ForeignKey(f"{SCHEMA}.lab_observations.id", ondelete="CASCADE"),
         primary_key=True,
     )
     candidate_id: Mapped[uuid.UUID] = mapped_column(

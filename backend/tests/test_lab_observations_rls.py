@@ -123,12 +123,12 @@ def test_confirmation_is_atomic_immutable_and_visible_only_when_confirmed(
                 (observation_id,),
             )
 
-    for role, expected in (
-        ("owner", 1),
-        ("editor", 1),
-        ("viewer", 1),
-        ("analyzer", 1),
-        ("outsider", 0),
+    for role, observation_expected, source_expected in (
+        ("owner", 1, 2),
+        ("editor", 1, 2),
+        ("viewer", 1, 0),
+        ("analyzer", 1, 0),
+        ("outsider", 0, 0),
     ):
         with psycopg.connect(_sync_url(APP_ENV)) as connection:
             _set_user(connection, ids[role])
@@ -139,7 +139,7 @@ def test_confirmation_is_atomic_immutable_and_visible_only_when_confirmed(
                 """,
                 (observation_id,),
             ).fetchone()[0]
-            assert count == expected, role
+            assert count == observation_expected, role
             source_count = connection.execute(
                 """
                 SELECT count(*) FROM health_compass.lab_observation_sources
@@ -147,7 +147,7 @@ def test_confirmation_is_atomic_immutable_and_visible_only_when_confirmed(
                 """,
                 (observation_id,),
             ).fetchone()[0]
-            assert source_count == expected * 2, role
+            assert source_count == source_expected, role
 
     with psycopg.connect(_sync_url(APP_ENV)) as connection:
         assert connection.execute(
