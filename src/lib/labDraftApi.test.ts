@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError } from "./api";
 import {
   correctLabObservation,
   labDraftStatusLabel,
@@ -60,6 +59,13 @@ function successfulFetch() {
   );
 }
 
+function requestBody(fetchMock: ReturnType<typeof successfulFetch>): Record<string, unknown> {
+  const firstCall = fetchMock.mock.calls.at(0);
+  if (!firstCall) throw new Error("Expected one fetch call");
+  const init = firstCall[1] as RequestInit | undefined;
+  return JSON.parse(String(init?.body)) as Record<string, unknown>;
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -101,7 +107,7 @@ describe("correctLabObservation acknowledgement boundary", () => {
         fields,
         "correct:0123456789abcdef",
       ),
-    ).rejects.toMatchObject<ApiError>({ status: 422 });
+    ).rejects.toMatchObject({ status: 422 });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -120,10 +126,9 @@ describe("correctLabObservation acknowledgement boundary", () => {
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain("/correct");
-    const body = JSON.parse(String(init.body));
-    expect(body).toMatchObject({
+    const firstCall = fetchMock.mock.calls.at(0);
+    expect(String(firstCall?.[0])).toContain("/correct");
+    expect(requestBody(fetchMock)).toMatchObject({
       acknowledge_source_matches: true,
       acknowledge_unit_and_range: true,
       acknowledge_observed_at: true,
@@ -148,7 +153,7 @@ describe("correctLabObservation acknowledgement boundary", () => {
         fields,
         "correct:0123456789abcdef",
       ),
-    ).rejects.toMatchObject<ApiError>({ status: 422 });
+    ).rejects.toMatchObject({ status: 422 });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -166,8 +171,6 @@ describe("correctLabObservation acknowledgement boundary", () => {
     );
 
     expect(confirmMock).toHaveBeenCalledTimes(2);
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(String(init.body));
-    expect(body.acknowledge_not_present_assignment).toBe(true);
+    expect(requestBody(fetchMock).acknowledge_not_present_assignment).toBe(true);
   });
 });
