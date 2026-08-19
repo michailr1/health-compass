@@ -81,6 +81,19 @@
 
 Статус `IMPLEMENTED / NOT MERGED` означает: код и тесты написаны в branch `claude/hc-015-code-review-remediation-noaeve` и зелёные локально; merge, CI на exact PR SHA и production rollout ещё не выполнены.
 
+## Ревизия 2026-08-19 — findings
+
+Источник: `docs/reviews/FABLE-5-CODE-REVISION-2026-08-19.md`. Вердикт: `HEALTHY / CONTINUE PLAN`, блокирующих findings нет.
+
+| Finding | Статус | Реализация / решение |
+|---|---|---|
+| REV-01: удалить/закрыть legacy-таблицы `0001` без RLS (`audit_events`, `processing_jobs`, `service_metadata`) | PLANNED | cleanup-миграция при следующем backend-изменении |
+| REV-02: выровнять `search_path=''` для двух magic-link функций из `0019` | PLANNED | та же hardening-миграция |
+| REV-03: `PUBLIC EXECUTE` на trigger-функциях | ACCEPTED | безвредно; отозвать опционально для единообразия |
+| REV-04: CI на exact head PR `#71` до review/merge | PLANNED | обязательный шаг HC-019 |
+| REV-05: закрыть устаревшие PR `#25` и `#17` | PLANNED | HC-013 реализуется заново с актуального main |
+| REV-06: тупиковый CTA «Подключить источник» | IN PROGRESS | закрывается HC-019 (PR `#71`) |
+
 ## Правило обработки новых ревью
 
 После каждого нового ревью:
