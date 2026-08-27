@@ -104,9 +104,14 @@ def downgrade() -> None:
         ),
         schema=S,
     )
-    op.create_index("ix_audit_events_event_type", "audit_events", ["event_type"], schema=S)
     op.create_index(
-        "ix_audit_events_actor_user_id",
+        "ix_health_compass_audit_events_event_type",
+        "audit_events",
+        ["event_type"],
+        schema=S,
+    )
+    op.create_index(
+        "ix_health_compass_audit_events_actor_user_id",
         "audit_events",
         ["actor_user_id"],
         schema=S,
@@ -131,8 +136,18 @@ def downgrade() -> None:
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         schema=S,
     )
-    op.create_index("ix_processing_jobs_job_type", "processing_jobs", ["job_type"], schema=S)
-    op.create_index("ix_processing_jobs_status", "processing_jobs", ["status"], schema=S)
+    op.create_index(
+        "ix_health_compass_processing_jobs_job_type",
+        "processing_jobs",
+        ["job_type"],
+        schema=S,
+    )
+    op.create_index(
+        "ix_health_compass_processing_jobs_status",
+        "processing_jobs",
+        ["status"],
+        schema=S,
+    )
 
     op.execute(
         f"""
