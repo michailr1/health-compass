@@ -90,7 +90,7 @@
 | REV-01: удалить/закрыть legacy-таблицы `0001` без RLS (`audit_events`, `processing_jobs`, `service_metadata`) | PLANNED | cleanup-миграция при следующем backend-изменении |
 | REV-02: выровнять `search_path=''` для двух magic-link функций из `0019` | PLANNED | та же hardening-миграция |
 | REV-03: `PUBLIC EXECUTE` на trigger-функциях | ACCEPTED | безвредно; отозвать опционально для единообразия |
-| REV-04: CI на exact head PR `#71` до review/merge | PLANNED | обязательный шаг HC-019 |
+| REV-04: CI на exact head PR `#71` до review/merge | WITHDRAWN | ошибка ревизии: CI уже зелёный на head `e7aaedf` (run `29243892485`); проверялся неверный API |
 | REV-05: закрыть устаревшие PR `#25` и `#17` | PLANNED | HC-013 реализуется заново с актуального main |
 | REV-06: тупиковый CTA «Подключить источник» | IN PROGRESS | закрывается HC-019 (PR `#71`) |
 

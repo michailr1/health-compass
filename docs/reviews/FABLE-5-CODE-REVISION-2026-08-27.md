@@ -73,7 +73,7 @@ CI-эквивалентных наборов.
 | REV-01 | Low | Legacy-таблицы `0001` `audit_events`, `processing_jobs`, `service_metadata`: без RLS, с полным CRUD grant для app-роли, **нигде не используются кодом** (модели мертвы) | Отдельная cleanup-миграция: удалить таблицы и модели либо отозвать grants; негативный тест |
 | REV-02 | Low | `app_issue_email_login_token` и `app_consume_email_login_token` (из `0019`) сохраняют `search_path=health_compass, pg_temp` вместо инвариантного `search_path=''` | Выровнять в следующей hardening-миграции; практической эксплуатации нет (фиксированная схема, `pg_temp` последним) |
 | REV-03 | Info | Trigger-функции `sync_clinical_dictionary_concept`, `sync_clinical_review_legacy_flag` формально имеют `PUBLIC EXECUTE` | Безвредно (trigger-функции невызываемы напрямую); можно отозвать для единообразия |
-| REV-04 | Process | Draft PR `#71` (HC-019): на финальном head `e7aaedf` **нет ни одного CI check** | Перед review/merge прогнать CI на exact head — это же требование стоит в самом плане |
+| REV-04 | ~~Process~~ **ОТОЗВАН** | Первоначально зафиксировано, что на финальном head PR `#71` нет CI checks. **Это ошибка ревизии**: проверялся legacy statuses API, который для этого репозитория пуст. Фактически CI прошёл на exact head `e7aaedf` — run `29243892485`, все три job (`Backend lint and unit tests`, `Frontend lint, tests and build`, `PostgreSQL migration and RLS cycle`) завершились `success` | Действий не требуется. Методическая поправка: состояние CI проверять через check-runs API, а не через statuses |
 | REV-05 | Process | Открытые устаревшие PR `#25` (HC-013, база до HC-015 — код невозможно мержить, в плане уже помечен как «reimplement from main») и `#17` (docs) | Закрыть оба с комментарием; HC-013 реализовывать заново с актуального main, когда дойдёт очередь |
 | REV-06 | Info | На главной `Dashboard` при пустом профиле CTA «Подключить источник» ведёт в тупик (интеграций нет) | Уже закрывается HC-019 (PR #71) по принятым решениям от 2026-07-13 |
 
@@ -93,8 +93,9 @@ HC-018 reminders, HC-019 UI (draft).
 ## 7. Рекомендуемый порядок дальнейших шагов
 
 1. **HC-019** (навигация ≤5 пунктов, «Анализы», «Сон», empty states) —
-   draft PR `#71` уже реализует принятые решения: прогнать CI на exact head,
-   review, merge. Малый риск, видимая ценность.
+   draft PR `#71` уже реализует принятые решения и **зелёный на exact head**
+   `e7aaedf` (CI run `29243892485`). Остались independent diff review, ручной
+   browser smoke, снятие draft и merge. Малый риск, видимая ценность.
 2. **Решение о rollout E3** (`0059–0062`) — отдельное backup-first
    развёртывание, чтобы репозиторий и production снова совпали.
 3. **Операционный запуск конвейера документов** — самый крупный кусок

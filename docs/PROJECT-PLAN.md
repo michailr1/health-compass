@@ -393,14 +393,16 @@ Before setting `DOCUMENT_UPLOAD_ENABLED=true` or starting workers:
 FINISH HC-019 FROM DRAFT PR #71
 APPLICATION BASELINE: c7dcae4da3860f6f73224f639be78424c6f3fa63
 FRONTEND / PRODUCT LANGUAGE ONLY
-CI MUST RUN ON THE EXACT PR HEAD SHA BEFORE REVIEW
+CI ALREADY GREEN ON EXACT HEAD e7aaedf (RUN 29243892485)
+RE-RUN CI ONLY IF THE HEAD CHANGES
 DO NOT ENABLE DOCUMENT UPLOAD
 DO NOT START WORKERS
 DO NOT DEPLOY E3 WITHOUT A SEPARATE ROLLOUT DECISION
 ```
 
-HC-019 уже реализован в draft PR `#71`. Оставшиеся шаги: прогнать полный CI на
-exact head, снять draft, independent diff review, merge. Только после этого
+HC-019 уже реализован в draft PR `#71` и зелёный на exact head `e7aaedf`.
+Оставшиеся шаги: independent diff review, ручной browser smoke, снятие draft,
+merge. Только после этого
 принимается отдельное решение о rollout E3 (`0059–0062`), чтобы repository и
 production снова совпали.
 
