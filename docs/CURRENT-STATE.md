@@ -1,12 +1,39 @@
 # Health Compass — текущее состояние
 
-Дата: 2026-07-13  
+Дата: 2026-08-27  
 Основная ветка: `main`  
 Repository application baseline: `c7dcae4da3860f6f73224f639be78424c6f3fa63`  
 Repository Alembic head: `0062`  
 Production URL: `https://health.funti.cc`  
 Production application: `fb1e7a2f70c4b24edbdff6dfd2889c34a63e2c75`  
 Production Alembic: `0058`
+
+## Независимая ревизия кода 2026-08-27
+
+После паузы в работе проведена полная независимая ревизия текущего `main`
+(HC-016 и весь контур HC-017 B–E3, миграции `0049–0062`).
+
+```text
+REVISION VERDICT: HEALTHY / CONTINUE PLAN
+NO BLOCKING FINDINGS
+```
+
+Подтверждено локальным прогоном CI-эквивалентных наборов: backend unit
+203 passed, PostgreSQL integration/RLS 121 passed, migration boundary и
+полный цикл `head → base → head` passed, frontend lint/typecheck/59 tests/build
+passed. SQL-аудит живой БД на head `0062` подтвердил владельцев и конфигурацию
+всех `SECURITY DEFINER` функций, отсутствие `PUBLIC EXECUTE`, отсутствие прямых
+табличных grants у worker-ролей и `FORCE RLS` на всех tenant-таблицах.
+
+Канонический документ:
+
+```text
+docs/reviews/FABLE-5-CODE-REVISION-2026-08-27.md
+```
+
+Findings `REV-01`…`REV-06` — Low/процессные, зарегистрированы в
+`docs/reviews/FABLE-RECOMMENDATIONS.md`. Они не блокируют HC-019 и не меняют
+production.
 
 ## Current verdict
 

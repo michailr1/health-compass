@@ -1,8 +1,11 @@
 # Health Compass — канонический план проекта
 
-Версия: 2.9  
-Дата: 2026-07-13  
+Версия: 3.0  
+Дата: 2026-08-27  
 Основная ветка: `main`
+
+Последняя независимая ревизия кода: `docs/reviews/FABLE-5-CODE-REVISION-2026-08-27.md`
+(вердикт `HEALTHY / CONTINUE PLAN`, блокирующих findings нет).
 
 ## 1. Product goal
 
@@ -369,7 +372,13 @@ Before setting `DOCUMENT_UPLOAD_ENABLED=true` or starting workers:
 
 ## 10. Deferred platform work
 
-- HC-013 session-management UI/rotation from stale PR `#25`;
+- `REV-01`/`REV-02` hardening from the 2026-08-27 revision, delivered as one
+  small migration together with the next backend change: drop or fully revoke
+  the unused `0001` legacy tables (`audit_events`, `processing_jobs`,
+  `service_metadata`) which have no RLS but keep application CRUD grants, and
+  align the two `0019` magic-link functions to `search_path=''`;
+- HC-013 session-management UI/rotation reimplemented from current main;
+  stale PR `#25` predates HC-015 and is closed rather than rebased;
 - wearable ingestion and Oura;
 - Apple Health / Health Connect ingestion under a separate ADR;
 - AI safety foundation and evidence-grounded assistant;
@@ -381,10 +390,25 @@ Before setting `DOCUMENT_UPLOAD_ENABLED=true` or starting workers:
 ## 11. Current next action
 
 ```text
-START HC-019 FROM CURRENT MAIN
+FINISH HC-019 FROM DRAFT PR #71
 APPLICATION BASELINE: c7dcae4da3860f6f73224f639be78424c6f3fa63
 FRONTEND / PRODUCT LANGUAGE ONLY
+CI MUST RUN ON THE EXACT PR HEAD SHA BEFORE REVIEW
 DO NOT ENABLE DOCUMENT UPLOAD
 DO NOT START WORKERS
 DO NOT DEPLOY E3 WITHOUT A SEPARATE ROLLOUT DECISION
 ```
+
+HC-019 уже реализован в draft PR `#71`. Оставшиеся шаги: прогнать полный CI на
+exact head, снять draft, independent diff review, merge. Только после этого
+принимается отдельное решение о rollout E3 (`0059–0062`), чтобы repository и
+production снова совпали.
+
+Порядок после HC-019 (из ревизии 2026-08-27):
+
+1. решение о controlled backup-first rollout E3;
+2. операционная приёмка конвейера документов (§9) и включение upload
+   отдельным reviewed change;
+3. Slice F Metric Dynamics;
+4. HC-018 medication reminders;
+5. `REV-01`/`REV-02` hardening вместе с ближайшим backend-изменением.

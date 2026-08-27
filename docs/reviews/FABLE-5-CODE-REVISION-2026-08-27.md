@@ -1,6 +1,6 @@
 # Fable 5 — ревизия кода Health Compass после паузы
 
-Дата: 2026-08-19  
+Дата: 2026-08-27  
 Проверенный repository HEAD: `a9634a2` (main; application baseline `c7dcae4da3860f6f73224f639be78424c6f3fa63`)  
 Repository Alembic head: `0062` (один head, линейный)  
 Production (по каноническим docs): `fb1e7a2f70c4b24edbdff6dfd2889c34a63e2c75`, Alembic `0058`, upload выключен, workers не запущены  

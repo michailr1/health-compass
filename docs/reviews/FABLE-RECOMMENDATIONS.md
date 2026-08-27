@@ -81,9 +81,9 @@
 
 Статус `IMPLEMENTED / NOT MERGED` означает: код и тесты написаны в branch `claude/hc-015-code-review-remediation-noaeve` и зелёные локально; merge, CI на exact PR SHA и production rollout ещё не выполнены.
 
-## Ревизия 2026-08-19 — findings
+## Ревизия 2026-08-27 — findings
 
-Источник: `docs/reviews/FABLE-5-CODE-REVISION-2026-08-19.md`. Вердикт: `HEALTHY / CONTINUE PLAN`, блокирующих findings нет.
+Источник: `docs/reviews/FABLE-5-CODE-REVISION-2026-08-27.md`. Вердикт: `HEALTHY / CONTINUE PLAN`, блокирующих findings нет.
 
 | Finding | Статус | Реализация / решение |
 |---|---|---|
