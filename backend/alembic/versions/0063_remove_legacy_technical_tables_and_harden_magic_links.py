@@ -28,6 +28,22 @@ ISSUE_MAGIC_LINK = f"{S}.app_issue_email_login_token(text, text, timestamptz, te
 CONSUME_MAGIC_LINK = f"{S}.app_consume_email_login_token(text)"
 
 
+def _assert_legacy_tables_empty() -> None:
+    op.execute(
+        f"""
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM {S}.service_metadata LIMIT 1)
+             OR EXISTS (SELECT 1 FROM {S}.audit_events LIMIT 1)
+             OR EXISTS (SELECT 1 FROM {S}.processing_jobs LIMIT 1) THEN
+            RAISE EXCEPTION
+              'HC-020 refuses to drop non-empty legacy technical tables; inspect and migrate data first';
+          END IF;
+        END $$;
+        """
+    )
+
+
 def _set_magic_link_search_path_empty() -> None:
     for signature in (ISSUE_MAGIC_LINK, CONSUME_MAGIC_LINK):
         op.execute(f"ALTER FUNCTION {signature} SET search_path = ''")
@@ -39,6 +55,9 @@ def _restore_magic_link_search_path() -> None:
 
 
 def upgrade() -> None:
+    # Code usage was removed, but the migration must not assume production data
+    # is empty. Unexpected rows are an explicit stop condition, not data loss.
+    _assert_legacy_tables_empty()
     _set_magic_link_search_path_empty()
 
     # No CASCADE: an unexpected dependency must stop the migration rather than
