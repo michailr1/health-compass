@@ -10,9 +10,16 @@ from alembic.command import downgrade, upgrade
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import DBAPIError
 
 TEST_DATABASE_ENV = "TEST_DATABASE_MIGRATOR_URL"
 LEGACY_TABLES = {"audit_events", "processing_jobs", "service_metadata"}
+LEGACY_SECONDARY_INDEXES = {
+    "ix_health_compass_audit_events_actor_user_id",
+    "ix_health_compass_audit_events_event_type",
+    "ix_health_compass_processing_jobs_job_type",
+    "ix_health_compass_processing_jobs_status",
+}
 MAGIC_LINK_SIGNATURES = (
     "health_compass.app_issue_email_login_token(text,text,timestamp with time zone,text,text)",
     "health_compass.app_consume_email_login_token(text)",
@@ -262,6 +269,19 @@ def _assert_revision_0062_legacy_boundary(engine) -> None:
         ).all()
         assert len(grants) == 12
 
+        secondary_indexes = set(
+            connection.execute(
+                text(
+                    "SELECT indexname FROM pg_indexes "
+                    "WHERE schemaname = 'health_compass' "
+                    "AND tablename = ANY(:tables) "
+                    "AND indexname LIKE 'ix_health_compass_%'"
+                ),
+                {"tables": sorted(LEGACY_TABLES)},
+            ).scalars()
+        )
+        assert secondary_indexes == LEGACY_SECONDARY_INDEXES
+
         for signature in MAGIC_LINK_SIGNATURES:
             config = connection.execute(
                 text(
@@ -278,7 +298,7 @@ def test_migration_0021_0022_cycle_and_current_head() -> None:
     config = _get_alembic_config()
     engine = create_engine(_get_migrator_url())
     expected_head = ScriptDirectory.from_config(config).get_current_head()
-    assert expected_head is not None
+    assert expected_head == "0063"
 
     try:
         upgrade(config, "0022")
@@ -292,12 +312,14 @@ def test_migration_0021_0022_cycle_and_current_head() -> None:
 
         upgrade(config, "head")
         _assert_clinical_context_head(engine, expected_head)
+        _assert_revision_0063_hardening(engine)
 
         downgrade(config, "-1")
-        assert _current_database_revision(engine) != expected_head
+        assert _current_database_revision(engine) == "0062"
 
         upgrade(config, "head")
         _assert_clinical_context_head(engine, expected_head)
+        _assert_revision_0063_hardening(engine)
     finally:
         engine.dispose()
 
@@ -317,6 +339,51 @@ def test_hc020_0062_0063_boundary_is_reversible() -> None:
         upgrade(config, "0063")
         _assert_revision_0063_hardening(engine)
 
+        upgrade(config, "head")
+    finally:
+        engine.dispose()
+
+
+def test_hc020_refuses_to_drop_nonempty_legacy_tables() -> None:
+    """Unexpected legacy data must stop 0063 without data loss or revision drift."""
+    config = _get_alembic_config()
+    engine = create_engine(_get_migrator_url())
+
+    try:
+        downgrade(config, "0062")
+        _assert_revision_0062_legacy_boundary(engine)
+
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO health_compass.service_metadata (key, value) "
+                    "VALUES ('hc020-stop-condition', 'must-survive')"
+                )
+            )
+
+        with pytest.raises(DBAPIError):
+            upgrade(config, "0063")
+
+        assert _current_database_revision(engine) == "0062"
+        with engine.connect() as connection:
+            value = connection.execute(
+                text(
+                    "SELECT value FROM health_compass.service_metadata "
+                    "WHERE key = 'hc020-stop-condition'"
+                )
+            ).scalar_one()
+            assert value == "must-survive"
+
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "DELETE FROM health_compass.service_metadata "
+                    "WHERE key = 'hc020-stop-condition'"
+                )
+            )
+
+        upgrade(config, "0063")
+        _assert_revision_0063_hardening(engine)
         upgrade(config, "head")
     finally:
         engine.dispose()
